@@ -1063,32 +1063,34 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     }
 }
 
+/* ========== AJUSTES PARA TABLET ========== */
 @media (max-width: 768px) {
     header {
-        min-height: 70px;
-        background-size: 100% 100%;
+        min-height: 60px;
+        background-size: cover;
     }
     
     nav {
-        padding: 0.8rem 1rem;
-        min-height: 70px;
+        padding: 0.5rem 1rem;
+        min-height: 60px;
+        flex-wrap: wrap;
     }
     
     .logo {
-        margin-right: 0;
+        gap: 0.5rem;
     }
     
     .logo-full {
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
     
     .logo-text {
-        width: 40px;
-        height: 40px;
-        font-size: 1.1rem;
+        width: 35px;
+        height: 35px;
+        font-size: 1rem;
     }
     
-    /* Menu toggle aparece no mobile */
+    /* Menu toggle */
     .menu-toggle {
         display: flex;
     }
@@ -1098,8 +1100,8 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
         width: 100%;
         flex-direction: column;
         align-items: center;
-        gap: 1rem;
-        padding: 1rem 0 0.5rem;
+        gap: 0.5rem;
+        padding: 1rem 0;
         margin-left: 0;
         padding-left: 0;
         background: rgba(0, 0, 0, 0.95);
@@ -1119,147 +1121,463 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     
     nav ul li a {
         display: block;
-        padding: 0.8rem;
+        padding: 0.6rem;
+        font-size: 0.9rem;
+    }
+    
+    /* Hero Section */
+    .hero-cinematic {
+        padding: 1rem 1rem 4rem 1rem;
     }
     
     .hero-title {
-        font-size: 2.8rem;
+        font-size: 2.2rem;
+    }
+    
+    .hero-description {
+        font-size: 0.95rem;
+        margin-bottom: 2rem;
     }
     
     .hero-cta-group {
         flex-direction: column;
         align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
     }
     
     .cta-primary, .cta-secondary {
         width: 100%;
         text-align: center;
         justify-content: center;
+        padding: 0.8rem 1.5rem;
+        font-size: 0.9rem;
     }
     
+    /* Trust Indicators */
     .trust-indicators {
-        gap: 2rem;
+        gap: 1.5rem;
         flex-wrap: wrap;
+        justify-content: center;
     }
     
+    .trust-item {
+        text-align: center;
+    }
+    
+    .trust-number {
+        font-size: 1.8rem;
+    }
+    
+    .trust-label {
+        font-size: 0.7rem;
+        white-space: normal;
+    }
+    
+    /* Profile Container - AJUSTE PRINCIPAL */
     .profile-container {
+        position: relative;
         width: 100%;
-        height: 500px;
+        height: auto;
+        min-height: 500px;
+        margin: 2rem auto 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
     
     .profile-image {
-        width: 250px;
-        height: 250px;
+        position: relative;
+        top: auto;
+        left: auto;
+        transform: none;
+        width: 220px;
+        height: 220px;
+        margin: 0 auto;
+        z-index: 2;
     }
     
     .profile-ring {
-        width: 300px;
-        height: 300px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 260px;
+        height: 260px;
+        z-index: 1;
     }
     
     .profile-ring-outer {
-        width: 340px;
-        height: 340px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 300px;
+        height: 300px;
+        z-index: 1;
     }
     
+    /* Floating Elements - Reposicionados */
+    .floating-element {
+        width: 45px;
+        height: 45px;
+        font-size: 1.2rem;
+        z-index: 3;
+    }
+    
+    .element-1 { 
+        top: 5%; 
+        left: 10%; 
+    }
+    .element-2 { 
+        top: 15%; 
+        right: 5%; 
+    }
+    .element-3 { 
+        bottom: 20%; 
+        left: 15%; 
+    }
+    .element-4 { 
+        bottom: 25%; 
+        right: 10%; 
+    }
+    
+    .element-tooltip {
+        font-size: 0.6rem;
+        padding: 0.3rem 0.6rem;
+        bottom: -35px;
+    }
+    
+    /* Testimonials Carousel - REPOSICIONADO PARA NÃO TAPAR A FOTO */
     .testimonials-carousel {
-        max-width: 240px;
-        left: 5%;
+        position: relative;
+        bottom: auto;
+        left: auto;
+        width: 90%;
+        max-width: 280px;
+        margin: 1rem auto 0;
+        z-index: 4;
     }
     
-    .stats-card {
-        right: 5%;
+    .testimonial-card {
         padding: 1rem;
+        margin: 0 auto;
+    }
+    
+    .testimonial-quote {
+        font-size: 2.5rem;
+    }
+    
+    .testimonial-text {
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+    
+    .testimonial-author {
+        font-size: 0.75rem;
+    }
+    
+    .carousel-dots {
+        margin-top: 0.5rem;
+    }
+    
+    /* Stats Card - REPOSICIONADO */
+    .stats-card {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 0.6rem 1rem;
+        z-index: 5;
+    }
+    
+    .stats-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 1rem;
+    }
+    
+    .stats-value {
+        font-size: 1.3rem;
+    }
+    
+    .stats-label {
+        font-size: 0.55rem;
+        line-height: 1.2;
+    }
+    
+    /* Featured Logos */
+    .featured-logos {
+        padding: 1.5rem 0;
+        margin-top: 2rem;
+    }
+    
+    .logo-track {
+        gap: 2rem;
+    }
+    
+    .logo-track span {
+        font-size: 0.8rem;
+    }
+    
+    /* Página de Imóveis */
+    .filters {
+        padding: 1.5rem;
+    }
+    
+    .filters h2 {
+        font-size: 1.5rem;
     }
     
     .filter-container {
         flex-direction: column;
         align-items: center;
+        gap: 1rem;
     }
     
     .filter-group {
         width: 100%;
+        min-width: auto;
     }
     
     .filter-group select {
         width: 100%;
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
     }
     
     .gallery {
         grid-template-columns: 1fr;
+        gap: 1.5rem;
     }
     
+    .imovel {
+        max-width: 100%;
+    }
+    
+    .imovel img {
+        height: 180px;
+    }
+    
+    .imovel-content {
+        padding: 1rem;
+    }
+    
+    .imovel-content h3 {
+        font-size: 1.1rem;
+    }
+    
+    .imovel-content p {
+        font-size: 0.85rem;
+    }
+    
+    /* Página de Contato */
     .contact {
         padding: 2rem 1rem;
     }
     
     .contact h1 {
-        font-size: 2rem;
+        font-size: 1.8rem;
     }
     
     .profile-photo {
-        width: 150px;
-        height: 150px;
+        width: 120px;
+        height: 120px;
+    }
+    
+    .profile-section h2 {
+        font-size: 1.4rem;
+    }
+    
+    .contact-info p {
+        font-size: 0.9rem;
+        padding: 0.6rem;
+        flex-wrap: wrap;
+    }
+    
+    /* Footer */
+    footer {
+        padding: 1.5rem;
+        font-size: 0.9rem;
     }
 }
 
+/* ========== AJUSTES PARA CELULARES PEQUENOS ========== */
 @media (max-width: 480px) {
     .hero-title {
-        font-size: 2.2rem;
+        font-size: 1.8rem;
     }
     
     .badge {
-        font-size: 0.8rem;
-        padding: 0.4rem 1.2rem;
+        font-size: 0.7rem;
+        padding: 0.3rem 1rem;
     }
     
     .trust-number {
-        font-size: 2rem;
+        font-size: 1.5rem;
     }
     
     .trust-label {
-        font-size: 0.7rem;
+        font-size: 0.6rem;
+    }
+    
+    /* Profile Container - Ajustes finos */
+    .profile-container {
+        min-height: 450px;
     }
     
     .profile-image {
+        width: 160px;
+        height: 160px;
+    }
+    
+    .profile-ring {
         width: 200px;
         height: 200px;
     }
     
-    .profile-ring {
+    .profile-ring-outer {
         width: 240px;
         height: 240px;
     }
     
+    /* Floating Elements ainda menores */
+    .floating-element {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    
+    .element-1 { top: 0; left: 5%; }
+    .element-2 { top: 10%; right: 2%; }
+    .element-3 { bottom: 25%; left: 10%; }
+    .element-4 { bottom: 30%; right: 5%; }
+    
+    /* Testimonials Carousel */
+    .testimonials-carousel {
+        max-width: 260px;
+    }
+    
+    .testimonial-card {
+        padding: 0.8rem;
+    }
+    
+    .testimonial-quote {
+        font-size: 2rem;
+        margin-bottom: 0.3rem;
+    }
+    
+    .testimonial-text {
+        font-size: 0.7rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Stats Card */
+    .stats-card {
+        padding: 0.5rem 0.8rem;
+    }
+    
+    .stats-icon {
+        width: 25px;
+        height: 25px;
+        font-size: 0.8rem;
+    }
+    
+    .stats-value {
+        font-size: 1.1rem;
+    }
+    
+    .stats-label {
+        font-size: 0.5rem;
+    }
+    
+    .carousel-dots {
+        gap: 0.3rem;
+    }
+    
+    .dot {
+        width: 5px;
+        height: 5px;
+    }
+    
+    .filters h2 {
+        font-size: 1.3rem;
+    }
+    
+    .filter-group label {
+        font-size: 0.8rem;
+    }
+    
+    .contact h1 {
+        font-size: 1.5rem;
+    }
+    
+    .profile-photo {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .profile-section h2 {
+        font-size: 1.2rem;
+    }
+    
+    .contact-info p {
+        font-size: 0.8rem;
+        padding: 0.5rem;
+    }
+}
+
+/* ========== AJUSTES PARA CELULARES MUITO PEQUENOS ========== */
+@media (max-width: 360px) {
+    .hero-title {
+        font-size: 1.5rem;
+    }
+    
+    .trust-number {
+        font-size: 1.3rem;
+    }
+    
+    .trust-label {
+        font-size: 0.55rem;
+    }
+    
+    .profile-container {
+        min-height: 400px;
+    }
+    
+    .profile-image {
+        width: 140px;
+        height: 140px;
+    }
+    
+    .profile-ring {
+        width: 170px;
+        height: 170px;
+    }
+    
     .profile-ring-outer {
-        width: 280px;
-        height: 280px;
+        width: 200px;
+        height: 200px;
     }
     
     .floating-element {
-        width: 45px;
-        height: 45px;
-        font-size: 1.2rem;
+        width: 30px;
+        height: 30px;
+        font-size: 0.8rem;
     }
     
     .testimonials-carousel {
         max-width: 220px;
     }
     
-    .testimonial-card {
-        padding: 1rem;
-    }
-    
     .testimonial-text {
-        font-size: 0.8rem;
+        font-size: 0.65rem;
     }
     
     .stats-card {
-        padding: 0.8rem;
-        top: 20px;
+        padding: 0.4rem 0.6rem;
     }
     
     .stats-value {
-        font-size: 1.5rem;
+        font-size: 1rem;
     }
 }
