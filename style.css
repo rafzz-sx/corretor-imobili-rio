@@ -2229,10 +2229,15 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     .element-3 { bottom: 15%; left: 5%; }
     .element-4 { bottom: 15%; right: 5%; }
     
+    /* Correção principal: balão stats movido para baixo à direita */
     .stats-card {
-        top: 5px;
-        right: 5px;
+        top: auto;
+        bottom: 10px;           /* Posicionado abaixo da foto */
+        right: 10px;            /* Canto direito */
+        left: auto;
         padding: 0.5rem 0.8rem;
+        font-size: 0.8rem;      /* Pequeno ajuste para caber melhor */
+        z-index: 4;             /* Garante que fique acima de outros elementos */
     }
     
     .stats-icon {
@@ -2436,6 +2441,17 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     .testimonial-text {
         font-size: 0.75rem;
     }
+    
+    /* Ajuste extra no stats-card para telas menores */
+    .stats-card {
+        bottom: 8px;
+        right: 8px;
+        padding: 0.4rem 0.7rem;
+    }
+    
+    .stats-value {
+        font-size: 1rem;
+    }
 }
 
 /* Celulares muito pequenos */
@@ -2472,5 +2488,11 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     
     .testimonials-carousel {
         max-width: 220px;
+    }
+    
+    .stats-card {
+        bottom: 5px;
+        right: 5px;
+        padding: 0.4rem 0.6rem;
     }
 }
