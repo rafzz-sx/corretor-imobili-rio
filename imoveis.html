@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Imóveis - Imóveis com Leandro</title>
+    <title>Imóveis - Leandro Bomfim</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body class="imoveis-page">
@@ -30,15 +30,17 @@
 
     <main>
         <section class="filters fade-in">
-            <h2 class="fade-in">Filtrar Imóveis</h2>
+            <h2>Filtrar Imóveis</h2>
             <div class="filter-container">
                 <div class="filter-group fade-in delay-1">
                     <label for="bairro">Bairro:</label>
                     <select id="bairro">
                         <option value="">Todos</option>
-                        <option value="Centro">Centro</option>
-                        <option value="Jardins">Jardins</option>
-                        <option value="Vila Nova">Vila Nova</option>
+                        <option value="Ipanema">Ipanema</option>
+                        <option value="Leblon">Leblon</option>
+                        <option value="Barra da Tijuca">Barra da Tijuca</option>
+                        <option value="Barra Olímpica">Barra Olímpica</option>
+                        <option value="Recreio dos Bandeirantes">Recreio dos Bandeirantes</option>
                     </select>
                 </div>
                 <div class="filter-group fade-in delay-2">
@@ -54,21 +56,59 @@
                     <label for="preco">Faixa de Preço (R$):</label>
                     <select id="preco">
                         <option value="">Todos</option>
-                        <option value="0-300000">Até 300.000</option>
-                        <option value="300001-500000">300.001 - 500.000</option>
-                        <option value="500001+">Acima de 500.000</option>
+                        <option value="0-600000">Até 600.000</option>
+                        <option value="600001-1000000">600.001 - 1.000.000</option>
+                        <option value="1000001+">Acima de 1.000.000</option>
                     </select>
                 </div>
             </div>
         </section>
 
         <section class="gallery" id="gallery">
-            <!-- Galeria será populada pelo JS -->
+            <!-- Galeria populada pelo JS -->
         </section>
     </main>
 
+    <!-- MODAL SAIBA MAIS -->
+    <div class="modal-overlay" id="imovel-modal">
+        <div class="modal-container">
+            <button class="modal-close" onclick="closeModal()">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="modal-gallery">
+                <div class="modal-main-photo-wrap">
+                    <img id="modal-main-photo" src="" alt="Foto principal do imóvel">
+                    <button class="modal-nav modal-prev" onclick="prevPhoto()">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="modal-nav modal-next" onclick="nextPhoto()">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <div class="modal-photo-counter" id="modal-photo-counter">1 / 4</div>
+                </div>
+                <div class="modal-thumbs" id="modal-thumbs"></div>
+            </div>
+
+            <div class="modal-info">
+                <h2 id="modal-title"></h2>
+                <div class="modal-tags">
+                    <span class="modal-tag"><i class="fas fa-map-marker-alt"></i> <span id="modal-bairro"></span></span>
+                    <span class="modal-tag"><i class="fas fa-bed"></i> <span id="modal-quartos"></span> quartos</span>
+                    <span class="modal-tag"><i class="fas fa-ruler-combined"></i> <span id="modal-area"></span></span>
+                </div>
+                <p class="modal-preco" id="modal-preco"></p>
+                <p class="modal-descricao" id="modal-descricao"></p>
+                <a href="contato.html" class="modal-cta">
+                    <i class="fab fa-whatsapp"></i>
+                    <span>Tenho Interesse</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
     <footer>
-        <p>&copy; 2026 Imóveis com Leandro. Todos os direitos reservados.</p>
+        <p>&copy; 2026 Leandro Imóveis. Todos os direitos reservados.</p>
     </footer>
 
     <script src="script.js"></script>
