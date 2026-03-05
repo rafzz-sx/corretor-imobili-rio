@@ -2017,514 +2017,102 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     cursor: pointer;
 }
 
+
 /* ========== RESPONSIVIDADE ========== */
 @media (max-width: 1100px) {
-    .hero-grid {
-        gap: 2rem;
-    }
-    
-    .hero-title {
-        font-size: 3.5rem;
-    }
-    
-    .profile-container {
-        width: 450px;
-    }
-    
-    .profile-image {
-        width: 300px;
-        height: 300px;
-    }
+    .hero-grid { gap: 2rem; }
+    .hero-title { font-size: 3.5rem; }
+    .profile-container { width: 450px; }
+    .profile-image { width: 300px; height: 300px; }
 }
 
 @media (max-width: 968px) {
     .hero-grid {
         grid-template-columns: 1fr;
         text-align: center;
-    }
-    
-    .hero-content {
-        padding-right: 0;
-    }
-    
-    .hero-description {
-        margin-left: auto;
-        margin-right: auto;
-    }
-    
-    .hero-cta-group {
-        justify-content: center;
-    }
-    
-    .trust-indicators {
-        justify-content: center;
-    }
-    
-    .profile-container {
-        margin: 0 auto;
-    }
-}
-
-/* ========== MOBILE FIX - CORREÇÃO DEFINITIVA ========== */
-@media (max-width: 768px) {
-    /* Header */
-    header {
-        min-height: 60px;
-    }
-    
-    nav {
-        padding: 0.5rem 1rem;
-        min-height: 60px;
-        flex-wrap: wrap;
-    }
-    
-    .logo-full {
-        font-size: 1rem;
-    }
-    
-    .logo-text {
-        width: 35px;
-        height: 35px;
-        font-size: 1rem;
-    }
-    
-    .menu-toggle {
-        display: flex;
-    }
-    
-    nav ul {
-        display: none;
-        width: 100%;
-        flex-direction: column;
-        background: rgba(0, 0, 0, 0.95);
-        border-radius: 10px;
-        padding: 1rem 0;
-        margin-top: 0.5rem;
-        border: 1px solid rgba(52, 152, 219, 0.3);
-    }
-    
-    nav ul.active {
-        display: flex;
-    }
-    
-    nav ul li {
-        width: 100%;
-        text-align: center;
-    }
-    
-    nav ul li a {
-        display: block;
-        padding: 0.6rem;
-        font-size: 0.9rem;
-    }
-    
-    /* Hero Section - Reorganizada */
-    .hero-cinematic {
-        min-height: auto;
-        padding: 1rem 1rem 2rem;
-    }
-    
-    .hero-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-    
-    .hero-content {
-        order: 1;
-        padding: 0;
-        width: 100%;
-    }
-    
-    .badge {
-        font-size: 0.7rem;
-        padding: 0.4rem 1rem;
-        margin-bottom: 0.8rem;
-    }
-    
-    .hero-title {
-        font-size: 2rem;
-        margin-bottom: 0.8rem;
-    }
-    
-    .hero-description {
-        font-size: 0.9rem;
-        margin: 0 auto 1.2rem;
-        max-width: 100%;
-    }
-    
-    .trust-indicators {
-        gap: 1rem;
-        margin: 1rem 0;
-        justify-content: center;
-    }
-    
-    .trust-item {
-        min-width: 80px;
-    }
-    
-    .trust-number {
-        font-size: 1.5rem;
-    }
-    
-    .trust-label {
-        font-size: 0.6rem;
-    }
-    
-    .hero-cta-group {
-        flex-direction: column;
-        gap: 0.8rem;
-        margin: 1rem 0;
-        max-width: 280px;
-        margin-left: auto;
-        margin-right: auto;
-    }
-    
-    .cta-primary, .cta-secondary {
-        width: 100%;
-        padding: 0.8rem 1.2rem;
-        font-size: 0.85rem;
-    }
-    
-    /* Profile Visual - Reposicionado */
-    .hero-visual {
-        order: 2;
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        margin: 1rem 0;
-    }
-    
-    .profile-container {
-        position: relative;
-        width: 100%;
-        max-width: 320px;
-        height: 380px;
-        margin: 0 auto;
-    }
-    
-    .profile-image {
-        width: 160px;
-        height: 160px;
-    }
-    
-    .profile-ring {
-        width: 200px;
-        height: 200px;
-    }
-    
-    .profile-ring-outer {
-        width: 240px;
-        height: 240px;
-    }
-    
-    .floating-element {
-        width: 40px;
-        height: 40px;
-        font-size: 1.1rem;
-    }
-    
-    .element-1 { top: 5%; left: 5%; }
-    .element-2 { top: 5%; right: 5%; }
-    .element-3 { bottom: 15%; left: 5%; }
-    .element-4 { bottom: 15%; right: 5%; }
-    
-    /* Correção principal: balão stats movido para baixo à direita */
-    .stats-card {
-        top: auto;
-        bottom: 10px;           /* Posicionado abaixo da foto */
-        right: 10px;            /* Canto direito */
-        left: auto;
-        padding: 0.5rem 0.8rem;
-        font-size: 0.8rem;      /* Pequeno ajuste para caber melhor */
-        z-index: 4;             /* Garante que fique acima de outros elementos */
-    }
-    
-    .stats-icon {
-        width: 25px;
-        height: 25px;
-        font-size: 0.9rem;
-    }
-    
-    .stats-value {
-        font-size: 1.1rem;
-    }
-    
-    .stats-label {
-        font-size: 0.5rem;
-    }
-    
-    /* Testimonials - Agora abaixo da foto */
-    .testimonials-carousel {
-        position: relative;
-        bottom: auto;
-        left: auto;
-        width: 90%;
-        max-width: 280px;
-        margin: 1.5rem auto 0;
-        order: 3;
-    }
-    
-    .testimonial-card {
-        padding: 1rem;
-    }
-    
-    .testimonial-quote {
-        font-size: 2rem;
-    }
-    
-    .testimonial-text {
-        font-size: 0.8rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .carousel-dots {
-        margin-top: 0.5rem;
-    }
-    
-    .dot {
-        width: 6px;
-        height: 6px;
-    }
-    
-    /* Scroll Indicator */
-    .scroll-indicator {
-        position: relative;
-        bottom: auto;
-        left: auto;
-        transform: none;
-        margin: 1.5rem auto 0;
-        order: 4;
-    }
-    
-    .scroll-line {
-        height: 35px;
-    }
-    
-    /* Featured Logos */
-    .featured-logos {
-        padding: 1rem 0;
-        margin-top: 1.5rem;
-    }
-    
-    .logo-track {
-        gap: 1.5rem;
-    }
-    
-    .logo-track span {
-        font-size: 0.7rem;
-    }
-    
-    /* Imóveis */
-    .filters {
-        padding: 1.2rem;
-    }
-    
-    .filters h2 {
-        font-size: 1.3rem;
-    }
-    
-    .filter-container {
-        flex-direction: column;
-        gap: 0.8rem;
-    }
-    
-    .filter-group {
-        width: 100%;
-    }
-    
-    .filter-group select {
-        width: 100%;
-        padding: 0.6rem;
-        font-size: 0.85rem;
-    }
-    
-    .gallery {
-        gap: 1rem;
-    }
-    
-    .imovel img {
-        height: 180px;
-    }
-    
-    .imovel-content {
-        padding: 1rem;
-    }
-    
-    .imovel-content h3 {
-        font-size: 1.1rem;
-    }
-    
-    .imovel-content p {
-        font-size: 0.8rem;
-    }
-    
-    /* Contato */
-    .contact {
-        padding: 2rem 1rem;
-    }
-    
-    .contact h1 {
-        font-size: 1.6rem;
-    }
-    
-    .profile-photo {
-        width: 120px;
-        height: 120px;
-    }
-    
-    .profile-section h2 {
-        font-size: 1.3rem;
-    }
-    
-    .contact-info p {
-        font-size: 0.85rem;
-        padding: 0.6rem;
-    }
-    
-    /* Footer */
-    footer {
-        padding: 1.2rem;
-        font-size: 0.8rem;
-        margin-top: 2rem;
-    }
-}
-
-/* Celulares pequenos */
-@media (max-width: 480px) {
-    .hero-title {
-        font-size: 1.8rem;
-    }
-    
-    .hero-description {
-        font-size: 0.8rem;
-    }
-    
-    .trust-number {
-        font-size: 1.3rem;
-    }
-    
-    .trust-label {
-        font-size: 0.55rem;
-    }
-    
-    .profile-container {
-        max-width: 280px;
-        height: 340px;
-    }
-    
-    .profile-image {
-        width: 140px;
-        height: 140px;
-    }
-    
-    .profile-ring {
-        width: 170px;
-        height: 170px;
-    }
-    
-    .profile-ring-outer {
-        width: 200px;
-        height: 200px;
-    }
-    
-    .floating-element {
-        width: 35px;
-        height: 35px;
-        font-size: 1rem;
-    }
-    
-    .testimonials-carousel {
-        max-width: 250px;
-    }
-    
-    .testimonial-text {
-        font-size: 0.75rem;
-    }
-    
-    /* Ajuste extra no stats-card para telas menores */
-    .stats-card {
-        bottom: 8px;
-        right: 8px;
-        padding: 0.4rem 0.7rem;
-    }
-    
-    .stats-value {
-        font-size: 1rem;
-    }
-}
-
-/* Celulares muito pequenos */
-@media (max-width: 360px) {
-    .hero-title {
-        font-size: 1.5rem;
-    }
-    
-    .profile-container {
-        max-width: 250px;
-        height: 300px;
-    }
-    
-    .profile-image {
-        width: 120px;
-        height: 120px;
-    }
-    
-    .profile-ring {
-        width: 150px;
-        height: 150px;
-    }
-    
-    .profile-ring-outer {
-        width: 180px;
-        height: 180px;
-    }
-    
-    .floating-element {
-        width: 30px;
-        height: 30px;
-        font-size: 0.8rem;
-    }
-    
-    .testimonials-carousel {
-        max-width: 220px;
-    }
-    
-    .stats-card {
-        bottom: 5px;
-        right: 5px;
-        padding: 0.4rem 0.6rem;
-    }
-}
-/* ========== CORREÇÃO MOBILE: HERO VISUAL ========== */
-/* Reescreve completamente o layout mobile do hero-visual */
-@media (max-width: 968px) {
-    .hero-grid {
-        grid-template-columns: 1fr;
-        text-align: center;
         gap: 2rem;
     }
-    .hero-content { padding-right: 0; order: 1; }
-    .hero-visual { order: 2; width: 100%; }
+    .hero-content { padding-right: 0; }
     .hero-description { margin-left: auto; margin-right: auto; }
     .hero-cta-group { justify-content: center; }
     .trust-indicators { justify-content: center; }
     .profile-container { margin: 0 auto; }
 }
 
+/* ========== MOBILE ========== */
 @media (max-width: 768px) {
-    /* Reorganiza hero-visual em coluna empilhada */
+
+    /* --- Header --- */
+    header { min-height: 60px; }
+    nav { padding: 0.5rem 1rem; min-height: 60px; flex-wrap: wrap; }
+    .logo-full { font-size: 1rem; }
+    .logo-text { width: 35px; height: 35px; font-size: 1rem; }
+    .menu-toggle { display: flex; }
+    nav ul {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        background: rgba(0,0,0,0.95);
+        border-radius: 10px;
+        padding: 1rem 0;
+        margin-top: 0.5rem;
+        border: 1px solid rgba(52,152,219,0.3);
+    }
+    nav ul.active { display: flex; }
+    nav ul li { width: 100%; text-align: center; }
+    nav ul li a { display: block; padding: 0.6rem; font-size: 0.9rem; }
+
+    /* --- Main --- */
+    main { padding: 1rem; }
+
+    /* --- Hero geral --- */
+    .hero-cinematic {
+        min-height: auto;
+        padding: 1rem 1rem 2rem;
+        overflow: hidden;
+    }
+    .hero-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .hero-content { order: 1; padding: 0; width: 100%; }
+    .hero-visual { order: 2; width: 100%; }
+
+    .badge { font-size: 0.7rem; padding: 0.4rem 1rem; }
+    .hero-title { font-size: 2rem; margin-bottom: 0.8rem; }
+    .hero-description { font-size: 0.9rem; max-width: 100%; margin: 0 auto 1.2rem; }
+
+    .hero-cta-group {
+        flex-direction: column;
+        gap: 0.8rem;
+        max-width: 280px;
+        margin: 0 auto 1.5rem;
+    }
+    .cta-primary, .cta-secondary {
+        width: 100%;
+        padding: 0.85rem 1.2rem;
+        font-size: 0.85rem;
+        justify-content: center;
+    }
+
+    .trust-indicators { gap: 1.5rem; margin: 0.5rem 0 1.5rem; justify-content: center; }
+    .trust-number { font-size: 1.6rem; }
+    .trust-label { font-size: 0.6rem; }
+
+    /* --- Hero Visual: layout empilhado limpo --- */
     .hero-visual {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1.5rem;
+        gap: 1.2rem;
     }
 
+    /* Profile container: tamanho fixo, apenas para a foto e rings */
     .profile-container {
         position: relative;
-        width: 260px;
-        height: 260px;
+        width: 220px;
+        height: 220px;
         margin: 0 auto;
         flex-shrink: 0;
     }
@@ -2533,83 +2121,89 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
         position: absolute;
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 180px;
-        height: 180px;
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        z-index: 2;
     }
 
     .profile-ring {
-        width: 210px;
-        height: 210px;
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 190px;
+        height: 190px;
     }
-
     .profile-ring-outer {
-        width: 248px;
-        height: 248px;
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 218px;
+        height: 218px;
     }
 
-    /* Floating elements ao redor da foto pequena */
-    .floating-elements { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
-    .floating-element { width: 36px; height: 36px; font-size: 0.95rem; }
-    .element-1 { top: 2%; left: 2%; }
-    .element-2 { top: 2%; right: 2%; }
-    .element-3 { bottom: 2%; left: 2%; }
-    .element-4 { bottom: 2%; right: 2%; }
+    /* Floating elements dentro do container da foto */
+    .floating-elements {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0; left: 0;
+        pointer-events: none;
+    }
+    .floating-element {
+        width: 34px;
+        height: 34px;
+        font-size: 0.85rem;
+        pointer-events: all;
+    }
+    .element-1 { top: 0; left: 0; }
+    .element-2 { top: 0; right: 0; }
+    .element-3 { bottom: 0; left: 0; }
+    .element-4 { bottom: 0; right: 0; }
 
-    /* Stats card: abaixo da foto, estático, não sobreposto */
+    /* Stats card: fora do profile-container, estático */
     .stats-card {
         position: static !important;
-        top: auto !important;
-        right: auto !important;
-        bottom: auto !important;
-        left: auto !important;
         display: inline-flex;
         margin: 0 auto;
-        align-self: center;
-        padding: 0.6rem 1rem;
+        padding: 0.6rem 1.1rem;
         border-radius: 16px;
-        width: auto;
+        gap: 0.6rem;
+        animation: none;
     }
-
+    .stats-icon { width: 32px; height: 32px; font-size: 0.95rem; }
     .stats-value { font-size: 1.3rem; }
-    .stats-label { font-size: 0.6rem; }
-    .stats-icon { width: 32px; height: 32px; font-size: 1rem; }
+    .stats-label { font-size: 0.58rem; }
 
-    /* Testimonials: estático abaixo do stats */
+    /* Testimonials: fora do profile-container, estático */
     .testimonials-carousel {
         position: static !important;
-        bottom: auto !important;
-        left: auto !important;
         width: 92%;
         max-width: 320px;
         margin: 0 auto;
-        order: unset;
     }
+    .testimonial-card { padding: 1rem; }
+    .testimonial-quote { font-size: 2rem; }
+    .testimonial-text { font-size: 0.8rem; margin-bottom: 0.5rem; }
+    .carousel-dots { margin-top: 0.5rem; }
+    .dot { width: 6px; height: 6px; }
 
     /* Scroll indicator */
     .scroll-indicator {
         position: static;
-        bottom: auto;
-        left: auto;
+        bottom: auto; left: auto;
         transform: none;
-        margin: 1rem auto 0;
+        margin: 0.5rem auto 0;
         display: flex;
     }
+    .scroll-line { height: 35px; }
 
-    /* Ajustes gerais */
-    .hero-cinematic { padding: 1rem 1rem 2rem; min-height: auto; }
-    .hero-title { font-size: 2rem; }
-    .hero-description { font-size: 0.9rem; max-width: 100%; }
-    .hero-cta-group { flex-direction: column; max-width: 260px; margin: 0 auto 1.5rem; gap: 0.8rem; }
-    .cta-primary, .cta-secondary { width: 100%; padding: 0.85rem 1.2rem; font-size: 0.85rem; justify-content: center; }
-    .trust-indicators { gap: 1.5rem; margin: 1rem 0; }
-    .trust-number { font-size: 1.6rem; }
-    .trust-label { font-size: 0.6rem; }
-    .badge { font-size: 0.7rem; padding: 0.4rem 1rem; }
-
+    /* Featured logos */
     .featured-logos { padding: 1rem 0; margin-top: 1rem; }
-    .logo-track span { font-size: 0.7rem; }
     .logo-track { gap: 1.5rem; }
+    .logo-track span { font-size: 0.7rem; }
 
+    /* --- Imóveis --- */
     .filters { padding: 1.2rem; }
     .filters h2 { font-size: 1.3rem; }
     .filter-container { flex-direction: column; gap: 0.8rem; }
@@ -2618,26 +2212,40 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     .gallery { gap: 1rem; }
     .imovel img { height: 180px; }
     .imovel-content { padding: 1rem; }
+    .imovel-content h3 { font-size: 1.1rem; }
+    .imovel-content p { font-size: 0.8rem; }
 
+    /* --- Contato --- */
     .contact { padding: 2rem 1rem; }
     .contact h1 { font-size: 1.6rem; }
     .profile-photo { width: 130px; height: 130px; }
     .profile-section h2 { font-size: 1.3rem; }
     .contact-info p { font-size: 0.85rem; }
 
+    /* --- Footer --- */
     footer { padding: 1.2rem; font-size: 0.8rem; margin-top: 2rem; }
-    main { padding: 1rem; }
 }
 
 @media (max-width: 480px) {
     .hero-title { font-size: 1.8rem; }
-    .profile-container { width: 220px; height: 220px; }
-    .profile-image { width: 150px; height: 150px; }
-    .profile-ring { width: 180px; height: 180px; }
-    .profile-ring-outer { width: 215px; height: 215px; }
-    .floating-element { width: 30px; height: 30px; font-size: 0.8rem; }
+    .profile-container { width: 200px; height: 200px; }
+    .profile-image { width: 140px; height: 140px; }
+    .profile-ring { width: 168px; height: 168px; }
+    .profile-ring-outer { width: 198px; height: 198px; }
     .testimonials-carousel { max-width: 280px; }
-    .testimonial-text { font-size: 0.78rem; }
+    .testimonial-text { font-size: 0.75rem; }
+    .trust-indicators { gap: 1rem; }
+    .trust-number { font-size: 1.4rem; }
+}
+
+@media (max-width: 360px) {
+    .hero-title { font-size: 1.5rem; }
+    .profile-container { width: 180px; height: 180px; }
+    .profile-image { width: 120px; height: 120px; }
+    .profile-ring { width: 148px; height: 148px; }
+    .profile-ring-outer { width: 176px; height: 176px; }
+    .floating-element { width: 28px; height: 28px; font-size: 0.75rem; }
+    .testimonials-carousel { max-width: 240px; }
 }
 
 /* ========== CARDS DE IMÓVEIS MELHORADOS ========== */
@@ -2648,8 +2256,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .imovel-badge {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: 12px; left: 12px;
     background: linear-gradient(135deg, #3498db, #2980b9);
     color: white;
     padding: 0.3rem 0.8rem;
@@ -2662,8 +2269,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .imovel-fotos-count {
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: 10px; right: 10px;
     background: rgba(0,0,0,0.7);
     color: white;
     padding: 0.25rem 0.7rem;
@@ -2685,13 +2291,13 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .detail-tag {
-    background: rgba(52, 152, 219, 0.1);
+    background: rgba(52,152,219,0.1);
     color: #3498db;
     padding: 0.3rem 0.8rem;
     border-radius: 20px;
     font-size: 0.78rem;
     font-weight: 600;
-    border: 1px solid rgba(52, 152, 219, 0.2);
+    border: 1px solid rgba(52,152,219,0.2);
     display: flex;
     align-items: center;
     gap: 0.3rem;
@@ -2733,7 +2339,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .btn-saiba-mais:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(52, 152, 219, 0.35);
+    box-shadow: 0 10px 25px rgba(52,152,219,0.35);
 }
 
 .btn-saiba-mais i { transition: transform 0.3s ease; }
@@ -2743,7 +2349,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0,0,0,0.85);
     backdrop-filter: blur(8px);
     z-index: 1000;
     display: flex;
@@ -2762,7 +2368,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-container {
     background: #111;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 24px;
     max-width: 860px;
     width: 100%;
@@ -2786,10 +2392,8 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-close {
     position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 38px;
-    height: 38px;
+    top: 1rem; right: 1rem;
+    width: 38px; height: 38px;
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 50%;
@@ -2804,15 +2408,12 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .modal-close:hover {
-    background: rgba(231, 76, 60, 0.3);
-    border-color: rgba(231, 76, 60, 0.5);
+    background: rgba(231,76,60,0.3);
+    border-color: rgba(231,76,60,0.5);
     transform: rotate(90deg);
 }
 
-/* Galeria do modal */
-.modal-gallery {
-    padding: 1.5rem 1.5rem 0;
-}
+.modal-gallery { padding: 1.5rem 1.5rem 0; }
 
 .modal-main-photo-wrap {
     position: relative;
@@ -2824,8 +2425,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .modal-main-photo-wrap img {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     object-fit: cover;
     display: block;
     transition: opacity 0.3s ease;
@@ -2837,8 +2437,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    width: 44px;
-    height: 44px;
+    width: 44px; height: 44px;
     background: rgba(0,0,0,0.6);
     backdrop-filter: blur(4px);
     border: 1px solid rgba(255,255,255,0.15);
@@ -2859,8 +2458,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-photo-counter {
     position: absolute;
-    bottom: 10px;
-    right: 12px;
+    bottom: 10px; right: 12px;
     background: rgba(0,0,0,0.65);
     color: white;
     padding: 0.25rem 0.7rem;
@@ -2885,8 +2483,7 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-thumb {
     flex-shrink: 0;
-    width: 90px;
-    height: 62px;
+    width: 90px; height: 62px;
     border-radius: 10px;
     overflow: hidden;
     cursor: pointer;
@@ -2896,7 +2493,6 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .modal-thumb:hover { opacity: 0.9; }
-
 .modal-thumb.active {
     border-color: #3498db;
     opacity: 1;
@@ -2904,17 +2500,13 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .modal-thumb img {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     object-fit: cover;
     display: block;
     pointer-events: none;
 }
 
-/* Info do modal */
-.modal-info {
-    padding: 1.5rem;
-}
+.modal-info { padding: 1.5rem; }
 
 .modal-info h2 {
     font-family: 'Playfair Display', serif;
@@ -2981,7 +2573,6 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-cta i { font-size: 1.3rem; }
 
-/* Mobile modal */
 @media (max-width: 600px) {
     .modal-container { border-radius: 16px; }
     .modal-gallery { padding: 1rem 1rem 0; }
@@ -2990,4 +2581,37 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     .modal-preco { font-size: 1.5rem; }
     .modal-thumb { width: 70px; height: 50px; }
     .modal-nav { width: 36px; height: 36px; font-size: 0.85rem; }
+}
+
+/* ========== STATS CARD: DESKTOP vs MOBILE ========== */
+/* Desktop: o stats-card fica dentro do profile-container com position absolute */
+.stats-card-desktop {
+    display: flex;
+}
+.stats-card-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    /* No mobile, esconde o de dentro e mostra o externo estático */
+    .stats-card-desktop {
+        display: none !important;
+    }
+    .stats-card-mobile {
+        display: inline-flex !important;
+        position: static !important;
+        margin: 0 auto;
+        padding: 0.6rem 1.1rem;
+        border-radius: 16px;
+        gap: 0.6rem;
+        animation: bounceIn 1s ease-out;
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        box-shadow: 0 20px 30px rgba(52,152,219,0.3);
+        color: white;
+        align-items: center;
+    }
+    .stats-card-mobile .stats-icon { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; }
+    .stats-card-mobile .stats-value { font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 900; line-height: 1; margin-bottom: 0.2rem; }
+    .stats-card-mobile .stats-label { font-size: 0.58rem; opacity: 0.9; line-height: 1.2; }
+    .stats-card-mobile .stats-content { display: flex; flex-direction: column; }
 }
