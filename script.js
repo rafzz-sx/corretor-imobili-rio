@@ -1,69 +1,103 @@
 const imoveis = [
     {
         id: 1,
-        bairro: 'Centro',
+        bairro: 'Ipanema',
         quartos: 2,
-        preco: 250000,
+        preco: 850000,
         area: 80,
-        titulo: 'Apartamento Confortável no Centro',
-        descricao: 'Um belo apartamento com 2 quartos no coração da cidade. Totalmente mobiliado e com vista para o parque.',
-        imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg'
+        titulo: 'Apartamento Moderno em Ipanema',
+        descricao: 'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.',
+        imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+        fotos: [
+            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+            'https://files.catbox.moe/ihe3p5.png',
+            'https://files.catbox.moe/ta8pp6.png',
+            'https://files.catbox.moe/0tg1le.png'
+        ]
     },
     {
         id: 2,
-        bairro: 'Jardins',
+        bairro: 'Barra da Tijuca',
         quartos: 3,
-        preco: 450000,
-        area: 120,
-        titulo: 'Cobertura nos Jardins',
-        descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de alto padrão.',
-        imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg'
+        preco: 1200000,
+        area: 140,
+        titulo: 'Cobertura na Barra da Tijuca',
+        descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.',
+        imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+        fotos: [
+            'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+            'https://files.catbox.moe/o4xhj9.png',
+            'https://files.catbox.moe/ta8pp6.png',
+            'https://files.catbox.moe/ihe3p5.png'
+        ]
     },
     {
         id: 3,
-        bairro: 'Vila Nova',
-        quartos: 1,
-        preco: 180000,
-        area: 50,
-        titulo: 'Studio Moderno em Vila Nova',
-        descricao: 'Studio compacto e moderno, ideal para solteiros ou casais jovens. Próximo a comércios.',
-        imagem: 'https://files.catbox.moe/ihe3p5.png'
+        bairro: 'Recreio dos Bandeirantes',
+        quartos: 2,
+        preco: 520000,
+        area: 70,
+        titulo: 'Apartamento Moderno no Recreio',
+        descricao: 'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.',
+        imagem: 'https://files.catbox.moe/ihe3p5.png',
+        fotos: [
+            'https://files.catbox.moe/ihe3p5.png',
+            'https://files.catbox.moe/0tg1le.png',
+            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+            'https://files.catbox.moe/ta8pp6.png'
+        ]
     },
     {
         id: 4,
-        bairro: 'Centro',
+        bairro: 'Leblon',
         quartos: 3,
-        preco: 350000,
-        area: 100,
-        titulo: 'Apartamento Familiar no Centro',
-        descricao: 'Espaçoso apartamento familiar com 3 quartos e garagem coberta.',
-        imagem: 'https://files.catbox.moe/o4xhj9.png'
+        preco: 1500000,
+        area: 110,
+        titulo: 'Apartamento Familiar no Leblon',
+        descricao: 'Espaçoso apartamento familiar com 3 quartos em um dos bairros mais valorizados do Rio de Janeiro.',
+        imagem: 'https://files.catbox.moe/o4xhj9.png',
+        fotos: [
+            'https://files.catbox.moe/o4xhj9.png',
+            'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+            'https://files.catbox.moe/ta8pp6.png',
+            'https://files.catbox.moe/0tg1le.png'
+        ]
     },
     {
         id: 5,
-        bairro: 'Jardins',
+        bairro: 'Barra Olímpica',
         quartos: 2,
-        preco: 520000,
+        preco: 680000,
         area: 90,
-        titulo: 'Apartamento Elegante nos Jardins',
-        descricao: 'Apartamento elegante com 2 suítes e varanda gourmet.',
-        imagem: 'https://files.catbox.moe/ta8pp6.png'
+        titulo: 'Apartamento Elegante na Barra Olímpica',
+        descricao: 'Apartamento elegante em condomínio fechado com 2 suítes, varanda gourmet e infraestrutura completa de lazer.',
+        imagem: 'https://files.catbox.moe/ta8pp6.png',
+        fotos: [
+            'https://files.catbox.moe/ta8pp6.png',
+            'https://files.catbox.moe/ihe3p5.png',
+            'https://files.catbox.moe/o4xhj9.png',
+            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg'
+        ]
     },
     {
         id: 6,
-        bairro: 'Vila Nova',
+        bairro: 'Recreio dos Bandeirantes',
         quartos: 2,
-        preco: 220000,
-        area: 70,
-        titulo: 'Apartamento Renovado em Vila Nova',
-        descricao: 'Apartamento recentemente renovado com cozinha americana e área de serviço.',
-        imagem: 'https://files.catbox.moe/0tg1le.png'
+        preco: 450000,
+        area: 72,
+        titulo: 'Apartamento Renovado no Recreio',
+        descricao: 'Apartamento recentemente renovado com cozinha americana, área de serviço e ótima localização.',
+        imagem: 'https://files.catbox.moe/0tg1le.png',
+        fotos: [
+            'https://files.catbox.moe/0tg1le.png',
+            'https://files.catbox.moe/ta8pp6.png',
+            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+            'https://files.catbox.moe/ihe3p5.png'
+        ]
     }
 ];
 
 // Contador animado
-const counters = document.querySelectorAll('.trust-number');
-
 const animateCounter = (counter) => {
     const target = parseInt(counter.getAttribute('data-target'));
     let current = 0;
@@ -80,7 +114,6 @@ const animateCounter = (counter) => {
     updateCounter();
 };
 
-// Intersection Observer para iniciar animações quando visível
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -98,12 +131,11 @@ document.querySelectorAll('.trust-number, .fade-in, .testimonial-card, .stats-ca
 
 // Menu mobile
 const menuToggle = document.querySelector('.menu-toggle');
-const nav = document.querySelector('nav ul');
+const navUl = document.querySelector('nav ul');
 
 menuToggle?.addEventListener('click', () => {
     menuToggle.classList.toggle('active');
-    nav?.classList.toggle('active');
-    
+    navUl?.classList.toggle('active');
     const spans = menuToggle.querySelectorAll('span');
     if (menuToggle.classList.contains('active')) {
         spans[0].style.transform = 'rotate(45deg) translate(8px, 8px)';
@@ -120,42 +152,120 @@ menuToggle?.addEventListener('click', () => {
 document.addEventListener('mousemove', (e) => {
     const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
     const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
-    
     const sphere = document.querySelector('.gradient-sphere');
     if (sphere) {
         sphere.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px)) scale(1.2)`;
     }
 });
 
-// ========== FUNÇÕES DA GALERIA DE IMÓVEIS ==========
+// ========== MODAL SAIBA MAIS ==========
+let currentPhotoIndex = 0;
+let currentImovelFotos = [];
+
+function openModal(imovelId) {
+    const imo = imoveis.find(i => i.id === imovelId);
+    if (!imo) return;
+
+    currentImovelFotos = imo.fotos && imo.fotos.length ? imo.fotos : [imo.imagem];
+    currentPhotoIndex = 0;
+
+    document.getElementById('modal-title').textContent = imo.titulo;
+    document.getElementById('modal-bairro').textContent = imo.bairro;
+    document.getElementById('modal-quartos').textContent = imo.quartos;
+    document.getElementById('modal-area').textContent = imo.area + ' m²';
+    document.getElementById('modal-preco').textContent = 'R$ ' + imo.preco.toLocaleString('pt-BR');
+    document.getElementById('modal-descricao').textContent = imo.descricao;
+
+    renderModalPhotos();
+
+    const modal = document.getElementById('imovel-modal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+    document.getElementById('imovel-modal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function renderModalPhotos() {
+    const mainImg = document.getElementById('modal-main-photo');
+    const thumbsContainer = document.getElementById('modal-thumbs');
+    const counter = document.getElementById('modal-photo-counter');
+
+    mainImg.src = currentImovelFotos[currentPhotoIndex];
+    mainImg.onerror = function() { this.src = 'https://via.placeholder.com/800x500/1a1a2e/fff?text=Imóvel'; };
+
+    if (counter) counter.textContent = (currentPhotoIndex + 1) + ' / ' + currentImovelFotos.length;
+
+    thumbsContainer.innerHTML = '';
+    currentImovelFotos.forEach((foto, idx) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'modal-thumb' + (idx === currentPhotoIndex ? ' active' : '');
+        const img = document.createElement('img');
+        img.src = foto;
+        img.alt = 'Foto ' + (idx + 1);
+        img.onerror = function() { this.src = 'https://via.placeholder.com/150x100/1a1a2e/fff?text=Foto'; };
+        thumb.appendChild(img);
+        thumb.addEventListener('click', () => {
+            currentPhotoIndex = idx;
+            renderModalPhotos();
+        });
+        thumbsContainer.appendChild(thumb);
+    });
+}
+
+function prevPhoto() {
+    if (!currentImovelFotos.length) return;
+    currentPhotoIndex = (currentPhotoIndex - 1 + currentImovelFotos.length) % currentImovelFotos.length;
+    renderModalPhotos();
+}
+
+function nextPhoto() {
+    if (!currentImovelFotos.length) return;
+    currentPhotoIndex = (currentPhotoIndex + 1) % currentImovelFotos.length;
+    renderModalPhotos();
+}
+
+// ========== GALERIA ==========
 function renderGallery(imoveisList) {
     const gallery = document.getElementById('gallery');
     if (!gallery) return;
-    
+
+    if (imoveisList.length === 0) {
+        gallery.innerHTML = '<p style="text-align:center;color:#888;padding:3rem;grid-column:1/-1;">Nenhum imóvel encontrado para os filtros selecionados.</p>';
+        return;
+    }
+
     let html = '';
     imoveisList.forEach(imo => {
         html += `
             <div class="imovel">
-                <img src="${imo.imagem}" alt="${imo.titulo}" onerror="this.src='https://via.placeholder.com/400x300/2c3e50/fff?text=Imóvel'">
+                <div class="imovel-img-wrap">
+                    <img src="${imo.imagem}" alt="${imo.titulo}" onerror="this.src='https://via.placeholder.com/400x300/1a1a2e/fff?text=Imóvel'">
+                    <div class="imovel-badge">${imo.bairro}</div>
+                    <div class="imovel-fotos-count"><i class="fas fa-images"></i> ${imo.fotos ? imo.fotos.length : 1} fotos</div>
+                </div>
                 <div class="imovel-content">
                     <h3>${imo.titulo}</h3>
-                    <p><strong>Área:</strong> ${imo.area} m²</p>
-                    <p><strong>Preço:</strong> R$ ${imo.preco.toLocaleString('pt-BR')}</p>
-                    <p><strong>Bairro:</strong> ${imo.bairro}</p>
-                    <p><strong>Quartos:</strong> ${imo.quartos}</p>
-                    <p>${imo.descricao}</p>
+                    <div class="imovel-details-row">
+                        <span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>
+                        <span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} quarto${imo.quartos > 1 ? 's' : ''}</span>
+                    </div>
+                    <p class="imovel-preco">R$ ${imo.preco.toLocaleString('pt-BR')}</p>
+                    <p class="imovel-desc">${imo.descricao}</p>
+                    <button class="btn-saiba-mais" onclick="openModal(${imo.id})">
+                        <span>Saiba Mais</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
                 </div>
             </div>
         `;
     });
     gallery.innerHTML = html;
 
-    // Animação stagger para itens da galeria
-    const imovelEls = gallery.querySelectorAll('.imovel');
-    imovelEls.forEach((el, i) => {
-        setTimeout(() => {
-            el.classList.add('animate');
-        }, i * 100);
+    gallery.querySelectorAll('.imovel').forEach((el, i) => {
+        setTimeout(() => el.classList.add('animate'), i * 100);
     });
 }
 
@@ -169,13 +279,9 @@ function filtrar() {
         const matchQuartos = !quartos || imo.quartos.toString() === quartos;
         let matchPreco = true;
         if (preco) {
-            if (preco === '0-300000') {
-                matchPreco = imo.preco <= 300000;
-            } else if (preco === '300001-500000') {
-                matchPreco = imo.preco > 300000 && imo.preco <= 500000;
-            } else if (preco === '500001+') {
-                matchPreco = imo.preco > 500000;
-            }
+            if (preco === '0-600000') matchPreco = imo.preco <= 600000;
+            else if (preco === '600001-1000000') matchPreco = imo.preco > 600000 && imo.preco <= 1000000;
+            else if (preco === '1000001+') matchPreco = imo.preco > 1000000;
         }
         return matchBairro && matchQuartos && matchPreco;
     });
@@ -183,7 +289,7 @@ function filtrar() {
     renderGallery(filtrados);
 }
 
-// ========== CARROSSEL DE DEPOIMENTOS ==========
+// ========== CARROSSEL ==========
 class TestimonialsCarousel {
     constructor() {
         this.currentIndex = 0;
@@ -191,20 +297,15 @@ class TestimonialsCarousel {
         this.autoPlayInterval = null;
         this.init();
     }
-
     init() {
         this.track = document.querySelector('.testimonial-track');
         this.dots = document.querySelectorAll('.dot');
-        
         if (!this.track || !this.dots.length) return;
-        
         this.setupEventListeners();
         this.startAutoPlay();
         this.updateDots();
     }
-
     setupEventListeners() {
-        // Clique nos dots
         this.dots.forEach((dot, index) => {
             dot.addEventListener('click', () => {
                 this.stopAutoPlay();
@@ -212,108 +313,76 @@ class TestimonialsCarousel {
                 this.startAutoPlay();
             });
         });
-
-        // Pausar ao passar o mouse
         const carousel = document.querySelector('.testimonials-carousel');
         if (carousel) {
             carousel.addEventListener('mouseenter', () => this.stopAutoPlay());
             carousel.addEventListener('mouseleave', () => this.startAutoPlay());
         }
-
-        // Touch events para mobile
         let touchStartX = 0;
-        let touchEndX = 0;
-        
         carousel?.addEventListener('touchstart', (e) => {
             touchStartX = e.changedTouches[0].screenX;
             this.stopAutoPlay();
         }, { passive: true });
-        
         carousel?.addEventListener('touchend', (e) => {
-            touchEndX = e.changedTouches[0].screenX;
-            if (touchStartX - touchEndX > 50) {
-                // Swipe left
-                this.goToSlide((this.currentIndex + 1) % this.totalSlides);
-            } else if (touchEndX - touchStartX > 50) {
-                // Swipe right
-                this.goToSlide((this.currentIndex - 1 + this.totalSlides) % this.totalSlides);
+            const diff = touchStartX - e.changedTouches[0].screenX;
+            if (Math.abs(diff) > 50) {
+                this.goToSlide(diff > 0
+                    ? (this.currentIndex + 1) % this.totalSlides
+                    : (this.currentIndex - 1 + this.totalSlides) % this.totalSlides);
             }
             this.startAutoPlay();
         }, { passive: true });
     }
-
     goToSlide(index) {
         this.currentIndex = index;
         this.track.style.transform = `translateX(-${index * 100}%)`;
         this.updateDots();
     }
-
     updateDots() {
-        this.dots.forEach((dot, index) => {
-            if (index === this.currentIndex) {
-                dot.classList.add('active');
-            } else {
-                dot.classList.remove('active');
-            }
-        });
+        this.dots.forEach((dot, i) => dot.classList.toggle('active', i === this.currentIndex));
     }
-
     startAutoPlay() {
         if (this.autoPlayInterval) return;
-        
         this.autoPlayInterval = setInterval(() => {
             this.currentIndex = (this.currentIndex + 1) % this.totalSlides;
             this.track.style.transform = `translateX(-${this.currentIndex * 100}%)`;
             this.updateDots();
         }, 5000);
     }
-
     stopAutoPlay() {
-        if (this.autoPlayInterval) {
-            clearInterval(this.autoPlayInterval);
-            this.autoPlayInterval = null;
-        }
+        clearInterval(this.autoPlayInterval);
+        this.autoPlayInterval = null;
     }
 }
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    // Iniciar carrossel de depoimentos se estiver na página inicial
     if (document.querySelector('.testimonials-carousel')) {
         new TestimonialsCarousel();
     }
 
-    // Animação de entrada da página
-    const fadeElements = document.querySelectorAll('.fade-in');
-    fadeElements.forEach((el, i) => {
-        setTimeout(() => {
-            el.style.animationPlayState = 'running';
-        }, i * 150);
+    document.querySelectorAll('.fade-in').forEach((el, i) => {
+        setTimeout(() => { el.style.animationPlayState = 'running'; }, i * 150);
     });
 
-    // Inicializar galeria de imóveis se estiver na página de imóveis
     if (document.getElementById('gallery')) {
-        // Renderizar todos os imóveis inicialmente
         renderGallery(imoveis);
-        
-        // Adicionar event listeners para os filtros
-        const bairroSelect = document.getElementById('bairro');
-        const quartosSelect = document.getElementById('quartos');
-        const precoSelect = document.getElementById('preco');
-        
-        if (bairroSelect) {
-            bairroSelect.addEventListener('change', filtrar);
-        }
-        if (quartosSelect) {
-            quartosSelect.addEventListener('change', filtrar);
-        }
-        if (precoSelect) {
-            precoSelect.addEventListener('change', filtrar);
-        }
+        document.getElementById('bairro')?.addEventListener('change', filtrar);
+        document.getElementById('quartos')?.addEventListener('change', filtrar);
+        document.getElementById('preco')?.addEventListener('change', filtrar);
     }
+
+    const modal = document.getElementById('imovel-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (!document.getElementById('imovel-modal')?.classList.contains('active')) return;
+        if (e.key === 'Escape') closeModal();
+        if (e.key === 'ArrowLeft') prevPhoto();
+        if (e.key === 'ArrowRight') nextPhoto();
+    });
 });
 
-// Pré-carregamento suave
-window.addEventListener('load', () => {
-    document.body.classList.add('loaded');
-});
+window.addEventListener('load', () => { document.body.classList.add('loaded'); });
