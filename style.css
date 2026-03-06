@@ -65,19 +65,19 @@ nav {
     width: 45px;
     height: 45px;
     background: linear-gradient(135deg, #3498db, #2c3e50);
-    border-radius: 12px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 900;
     font-size: 1.3rem;
     color: white;
-    transform: rotate(-35deg);
+    transform: rotate(-45deg);
     box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
 }
 
 .logo-text span {
-    transform: rotate(35deg);
+    transform: rotate(45deg);
 }
 
 .logo-full {
@@ -1281,15 +1281,21 @@ footer::before {
 .hero-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4rem;
+    gap: 3rem; /* Reduzido para aproximar as colunas */
     max-width: 1200px;
     margin: 0 auto;
     width: 100%;
     align-items: center;
 }
 
+
 .hero-content {
-    padding-right: 2rem;
+    padding-right: 10rem;
+    padding-left: 1rem;
+    max-width: 600px;
+    justify-self: start;
+    position: relative;
+    left: -280px; /* Move 20px para esquerda */
 }
 
 .badge-wrapper {
@@ -1334,7 +1340,7 @@ footer::before {
 }
 
 .hero-description {
-    font-size: 1.1rem;
+    font-size: 1.3rem;
     line-height: 1.8;
     color: #a0a0a0;
     margin-bottom: 3rem;
@@ -1343,7 +1349,7 @@ footer::before {
 
 .hero-cta-group {
     display: flex;
-    gap: 1.5rem;
+    gap: 1.1rem;
     margin-bottom: 4rem;
 }
 
@@ -1555,10 +1561,10 @@ footer::before {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.element-1 { top: 15%; left: 5%; animation-delay: 0s; }
-.element-2 { top: 45%; right: 0; animation-delay: 1s; }
-.element-3 { bottom: 15%; left: 10%; animation-delay: 2s; }
-.element-4 { bottom: 35%; right: 10%; animation-delay: 3s; }
+.element-1 { top: 13%; left: 5%; animation-delay: 0s; }
+.element-2 { top: 25%; right: -8%; animation-delay: 1s; }
+.element-3 { bottom: 65%; left: -1%; animation-delay: 2s; }
+.element-4 { bottom: 45%; right: -6%; animation-delay: 3s; }
 
 @keyframes float {
     0%, 100% { transform: translateY(0); }
@@ -1568,9 +1574,9 @@ footer::before {
 /* ========== CARROSSEL DE DEPOIMENTOS ========== */
 .testimonials-carousel {
     position: absolute;
-    bottom: 30px;
-    left: -10px;
-    width: 280px;
+    bottom: 300px;
+    left: 550px;
+    width: 300px;
     overflow: hidden;
     z-index: 3;
 }
@@ -2572,6 +2578,30 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 }
 
 .modal-cta i { font-size: 1.3rem; }
+
+.modal-cta-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.modal-cta-contato {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    box-shadow: 0 8px 20px rgba(52,152,219,0.3);
+}
+
+.modal-cta-contato:hover {
+    box-shadow: 0 14px 30px rgba(52,152,219,0.4);
+}
+
+@media (max-width: 600px) {
+    .modal-cta-group {
+        flex-direction: column;
+    }
+    .modal-cta {
+        justify-content: center;
+    }
+}
 
 @media (max-width: 600px) {
     .modal-container { border-radius: 16px; }
