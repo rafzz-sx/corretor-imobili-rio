@@ -1290,12 +1290,10 @@ footer::before {
 
 
 .hero-content {
-    padding-right: 10rem;
+    padding-right: 2rem;
     padding-left: 1rem;
     max-width: 600px;
     justify-self: start;
-    position: relative;
-    left: -280px; /* Move 20px para esquerda */
 }
 
 .badge-wrapper {
