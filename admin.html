@@ -6,20 +6,20 @@
     <title>Painel Administrativo - Leandro Imóveis</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="admin.css">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-<base target="_blank">
 </head>
 <body class="admin-page">
-    <!-- TELA DE LOGIN -->
+
+    <!-- LOGIN -->
     <div id="login-screen" class="login-screen">
         <div class="login-container">
             <div class="login-logo">
                 <span class="logo-text">LB</span>
-                <h1>Painel Administrativo</h1>
+                <h1>Painel Admin</h1>
                 <p>Leandro Imóveis</p>
             </div>
-            <form id="login-form" class="login-form">
+            <form id="login-form" class="login-form" onsubmit="return false;">
                 <div class="form-group">
                     <label for="login-email">Email</label>
                     <input type="email" id="login-email" placeholder="seu@email.com" required>
@@ -34,40 +34,49 @@
                     </div>
                 </div>
                 <button type="submit" class="btn-login">
-                    <i class="fas fa-sign-in-alt"></i>
-                    <span>Entrar</span>
+                    <i class="fas fa-sign-in-alt"></i><span>Entrar</span>
                 </button>
                 <div id="login-error" class="login-error"></div>
             </form>
             <div class="login-footer">
-                <a href="index.html" class="back-link">
-                    <i class="fas fa-arrow-left"></i>
-                    Voltar para o site
-                </a>
+                <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Voltar para o site</a>
             </div>
         </div>
     </div>
 
-    <!-- PAINEL ADMINISTRATIVO -->
-    <div id="admin-panel" class="admin-panel" style="display: none;">
-        <!-- Sidebar -->
+    <!-- PAINEL -->
+    <div id="admin-panel" class="admin-panel" style="display:none;">
         <aside class="admin-sidebar">
             <div class="sidebar-header">
                 <span class="logo-text">LB</span>
-                <span class="sidebar-title">Admin</span>
+                <span class="sidebar-title">Leandro Admin</span>
             </div>
             <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-item active" data-section="dashboard">
-                    <i class="fas fa-home"></i>
-                    <span>Dashboard</span>
+                <div class="sidebar-section-label">Principal</div>
+                <a href="#" class="nav-item active" data-section="dashboard">
+                    <i class="fas fa-chart-pie"></i><span>Dashboard</span>
                 </a>
-                <a href="#imoveis" class="nav-item" data-section="imoveis">
-                    <i class="fas fa-building"></i>
-                    <span>Imóveis</span>
+                <a href="#" class="nav-item" data-section="imoveis">
+                    <i class="fas fa-building"></i><span>Imóveis</span>
+                    <span class="nav-badge" id="badge-imoveis">0</span>
                 </a>
-                <a href="#adicionar" class="nav-item" data-section="adicionar">
-                    <i class="fas fa-plus-circle"></i>
-                    <span>Adicionar Imóvel</span>
+                <a href="#" class="nav-item" data-section="adicionar">
+                    <i class="fas fa-plus-circle"></i><span>Adicionar Imóvel</span>
+                </a>
+                <a href="#" class="nav-item" data-section="lixeira">
+                    <i class="fas fa-trash-alt"></i><span>Lixeira</span>
+                    <span class="nav-badge nav-badge-red" id="badge-lixeira" style="display:none;background:var(--red)">0</span>
+                </a>
+                <div class="sidebar-section-label" style="margin-top:.5rem;">Relatórios</div>
+                <a href="#" class="nav-item" data-section="analytics">
+                    <i class="fas fa-chart-bar"></i><span>Analytics</span>
+                </a>
+                <a href="#" class="nav-item" data-section="visitas">
+                    <i class="fas fa-eye"></i><span>Visitas ao Site</span>
+                </a>
+                <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
+                <a href="#" class="nav-item" data-section="configuracoes">
+                    <i class="fas fa-cog"></i><span>Configurações</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
@@ -76,132 +85,105 @@
                     <span id="user-email">Administrador</span>
                 </div>
                 <button onclick="logout()" class="btn-logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Sair</span>
+                    <i class="fas fa-sign-out-alt"></i><span>Sair</span>
                 </button>
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="admin-main">
-            <!-- Header -->
             <header class="admin-header">
                 <h2 id="page-title">Dashboard</h2>
                 <div class="header-actions">
                     <a href="index.html" target="_blank" class="btn-view-site">
-                        <i class="fas fa-external-link-alt"></i>
-                        Ver Site
+                        <i class="fas fa-external-link-alt"></i> Ver Site
                     </a>
                 </div>
             </header>
 
-            <!-- Dashboard Section -->
+            <!-- DASHBOARD -->
             <section id="section-dashboard" class="admin-section active">
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-icon blue">
-                            <i class="fas fa-building"></i>
-                        </div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="total-imoveis">0</span>
-                            <span class="stat-label">Total de Imóveis</span>
-                        </div>
+                        <div class="stat-icon blue"><i class="fas fa-building"></i></div>
+                        <div class="stat-info"><span class="stat-value" id="total-imoveis">0</span><span class="stat-label">Total de Imóveis</span></div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon green">
-                            <i class="fas fa-map-marker-alt"></i>
-                        </div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="total-bairros">0</span>
-                            <span class="stat-label">Bairros Atendidos</span>
-                        </div>
+                        <div class="stat-icon green"><i class="fas fa-map-marker-alt"></i></div>
+                        <div class="stat-info"><span class="stat-value" id="total-bairros">0</span><span class="stat-label">Bairros Atendidos</span></div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon purple">
-                            <i class="fas fa-bed"></i>
-                        </div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="media-quartos">0</span>
-                            <span class="stat-label">Média de Quartos</span>
-                        </div>
+                        <div class="stat-icon purple"><i class="fas fa-bed"></i></div>
+                        <div class="stat-info"><span class="stat-value" id="media-quartos">0</span><span class="stat-label">Média de Quartos</span></div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon orange">
-                            <i class="fas fa-dollar-sign"></i>
+                        <div class="stat-icon amber"><i class="fas fa-dollar-sign"></i></div>
+                        <div class="stat-info"><span class="stat-value" id="preco-medio">R$ 0</span><span class="stat-label">Preço Médio</span></div>
+                    </div>
+                </div>
+
+                <!-- Cards de visitas no dashboard -->
+                <div class="dash-visitas-row">
+                    <div class="dash-visitas-card">
+                        <div class="dash-visitas-icon"><i class="fas fa-eye"></i></div>
+                        <div class="dash-visitas-info">
+                            <span class="dash-visitas-value" id="dash-visitas-total">—</span>
+                            <span class="dash-visitas-label">Visitas ao site</span>
                         </div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="preco-medio">R$ 0</span>
-                            <span class="stat-label">Preço Médio</span>
+                        <a href="#" onclick="showSection('visitas');return false;" class="dash-visitas-link">Ver relatório <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <div class="dash-visitas-card">
+                        <div class="dash-visitas-icon" style="background:var(--green-soft);color:var(--green)"><i class="fas fa-users"></i></div>
+                        <div class="dash-visitas-info">
+                            <span class="dash-visitas-value" id="dash-visitas-unique">—</span>
+                            <span class="dash-visitas-label">Visitantes únicos</span>
                         </div>
+                        <a href="#" onclick="showSection('visitas');return false;" class="dash-visitas-link">Ver relatório <i class="fas fa-arrow-right"></i></a>
                     </div>
                 </div>
 
                 <div class="dashboard-grid">
                     <div class="dashboard-card">
-                        <h3>Imóveis por Bairro</h3>
-                        <div id="bairros-chart" class="chart-container">
-                            <!-- Gráfico será preenchido via JS -->
-                        </div>
+                        <h3><i class="fas fa-map-marker-alt"></i> Imóveis por Bairro</h3>
+                        <div id="bairros-chart" class="chart-container"></div>
                     </div>
                     <div class="dashboard-card">
-                        <h3>Últimos Imóveis Adicionados</h3>
-                        <div id="ultimos-imoveis" class="recent-list">
-                            <!-- Lista será preenchida via JS -->
-                        </div>
+                        <h3><i class="fas fa-clock"></i> Últimos Adicionados</h3>
+                        <div id="ultimos-imoveis" class="recent-list"></div>
                     </div>
                 </div>
             </section>
 
-            <!-- Lista de Imóveis Section -->
+            <!-- IMÓVEIS -->
             <section id="section-imoveis" class="admin-section">
                 <div class="section-header">
                     <div class="search-box">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="search-imoveis" placeholder="Buscar imóveis...">
+                        <input type="text" id="search-imoveis" placeholder="Buscar por título, bairro...">
                     </div>
                     <div class="filter-actions">
-                        <select id="filter-bairro">
-                            <option value="">Todos os bairros</option>
-                        </select>
-                        <button onclick="showSection('adicionar')" class="btn-primary">
-                            <i class="fas fa-plus"></i>
-                            Novo Imóvel
-                        </button>
+                        <select id="filter-bairro"><option value="">Todos os bairros</option></select>
+                        <button onclick="showSection('adicionar')" class="btn-primary"><i class="fas fa-plus"></i> Novo Imóvel</button>
                     </div>
                 </div>
                 <div class="table-container">
                     <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Foto</th>
-                                <th>Título</th>
-                                <th>Bairro</th>
-                                <th>Quartos</th>
-                                <th>Área</th>
-                                <th>Preço</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="imoveis-table-body">
-                            <!-- Dados serão preenchidos via JS -->
-                        </tbody>
+                        <thead><tr><th>Foto</th><th>Título</th><th>Bairro</th><th>Quartos</th><th>Área</th><th>Preço</th><th>Ações</th></tr></thead>
+                        <tbody id="imoveis-table-body"></tbody>
                     </table>
                 </div>
             </section>
 
-            <!-- Adicionar/Editar Imóvel Section -->
+            <!-- ADICIONAR / EDITAR -->
             <section id="section-adicionar" class="admin-section">
                 <div class="form-container">
                     <form id="imovel-form" class="imovel-form">
                         <input type="hidden" id="imovel-id">
-                        
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="imovel-titulo">Título do Imóvel *</label>
                                 <input type="text" id="imovel-titulo" placeholder="Ex: Apartamento Moderno em Ipanema" required>
                             </div>
                         </div>
-
                         <div class="form-row two-columns">
                             <div class="form-group">
                                 <label for="imovel-bairro">Bairro *</label>
@@ -222,7 +204,6 @@
                                 <input type="number" id="imovel-quartos" min="1" max="10" placeholder="2" required>
                             </div>
                         </div>
-
                         <div class="form-row two-columns">
                             <div class="form-group">
                                 <label for="imovel-area">Área (m²) *</label>
@@ -230,85 +211,142 @@
                             </div>
                             <div class="form-group">
                                 <label for="imovel-preco">Preço (R$) *</label>
-                                <input type="text" id="imovel-preco" placeholder="850000" required>
+                                <input type="text" id="imovel-preco" placeholder="850.000" required>
                             </div>
                         </div>
-
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="imovel-descricao">Descrição *</label>
                                 <textarea id="imovel-descricao" rows="4" placeholder="Descreva o imóvel..." required></textarea>
                             </div>
                         </div>
-
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="imovel-imagem">URL da Imagem Principal *</label>
                                 <input type="url" id="imovel-imagem" placeholder="https://exemplo.com/imagem.jpg" required>
-                                <small>URL da foto principal que aparece na listagem</small>
+                                <small>Foto principal que aparece na listagem</small>
                             </div>
                         </div>
-
                         <div class="form-row">
                             <div class="form-group">
-                                <label>URLs das Fotos Adicionais (até 4 fotos)</label>
+                                <label>URLs das Fotos Adicionais (até 4)</label>
                                 <div class="fotos-inputs">
-                                    <input type="url" class="foto-input" placeholder="Foto 1 - URL">
-                                    <input type="url" class="foto-input" placeholder="Foto 2 - URL">
-                                    <input type="url" class="foto-input" placeholder="Foto 3 - URL">
-                                    <input type="url" class="foto-input" placeholder="Foto 4 - URL">
+                                    <input type="url" class="foto-input" placeholder="Foto 1 — URL">
+                                    <input type="url" class="foto-input" placeholder="Foto 2 — URL">
+                                    <input type="url" class="foto-input" placeholder="Foto 3 — URL">
+                                    <input type="url" class="foto-input" placeholder="Foto 4 — URL">
                                 </div>
-                                <small>Essas fotos aparecerão no modal de detalhes</small>
+                                <small>Fotos que aparecem no modal de detalhes</small>
                             </div>
                         </div>
-
                         <div class="form-actions">
                             <button type="button" onclick="showSection('imoveis')" class="btn-secondary">
-                                <i class="fas fa-times"></i>
-                                Cancelar
+                                <i class="fas fa-times"></i> Cancelar
                             </button>
                             <button type="submit" class="btn-primary">
-                                <i class="fas fa-save"></i>
-                                <span id="btn-submit-text">Salvar Imóvel</span>
+                                <i class="fas fa-save"></i><span id="btn-submit-text">Salvar Imóvel</span>
                             </button>
                         </div>
                     </form>
                 </div>
             </section>
+
+            <!-- LIXEIRA -->
+            <section id="section-lixeira" class="admin-section">
+                <div class="lixeira-header">
+                    <div class="lixeira-info">
+                        <i class="fas fa-info-circle"></i>
+                        Imóveis na lixeira não aparecem no site. Restaure para reativá-los ou exclua permanentemente.
+                    </div>
+                </div>
+                <div id="lixeira-container"></div>
+            </section>
+
+            <!-- ANALYTICS -->
+            <section id="section-analytics" class="admin-section">
+                <div class="stats-grid" style="margin-bottom:1.5rem;">
+                    <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value" id="analytics-total">0</span><span class="stat-label">Imóveis Ativos</span></div></div>
+                    <div class="stat-card"><div class="stat-icon green"><i class="fas fa-arrow-up"></i></div><div class="stat-info"><span class="stat-value" id="analytics-maior-preco">—</span><span class="stat-label">Maior Preço</span></div></div>
+                    <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-arrow-down"></i></div><div class="stat-info"><span class="stat-value" id="analytics-menor-preco">—</span><span class="stat-label">Menor Preço</span></div></div>
+                    <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-ruler-combined"></i></div><div class="stat-info"><span class="stat-value" id="analytics-media-area">—</span><span class="stat-label">Área Média</span></div></div>
+                </div>
+                <div class="analytics-grid">
+                    <div class="analytics-card"><h3>Distribuição por Bairro</h3><div id="analytics-bairros-chart"></div></div>
+                    <div class="analytics-card"><h3>Preço Médio por Quartos</h3><div id="analytics-quartos-list"></div></div>
+                </div>
+                <div class="analytics-grid" style="grid-template-columns:1fr 1fr;margin-top:1.2rem;">
+                    <div class="analytics-card"><h3>Top 3 — Mais Caros</h3><div id="analytics-top-caros" class="recent-list"></div></div>
+                    <div class="analytics-card"><h3>Top 3 — Maiores Áreas</h3><div id="analytics-top-area" class="recent-list"></div></div>
+                </div>
+            </section>
+
+            <!-- VISITAS AO SITE -->
+            <section id="section-visitas" class="admin-section">
+                <div id="visitas-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando dados...
+                </div>
+                <div id="visitas-content"></div>
+            </section>
+
+            <!-- CONFIGURAÇÕES -->
+            <section id="section-configuracoes" class="admin-section">
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <div class="settings-card-header"><i class="fas fa-user-shield"></i><h4>Conta do Administrador</h4></div>
+                        <div class="settings-row"><span class="settings-label">Email</span><span class="settings-value" id="settings-email">—</span></div>
+                        <div class="settings-row"><span class="settings-label">UID</span><span class="settings-value" id="settings-uid" style="font-size:.72rem;">—</span></div>
+                        <div class="settings-row"><span class="settings-label">Login em</span><span class="settings-value" id="settings-login-time">—</span></div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-card-header"><i class="fas fa-database"></i><h4>Banco de Dados</h4></div>
+                        <div class="settings-row"><span class="settings-label">Projeto Firebase</span><span class="settings-value">corretor-imoveis-3dab8</span></div>
+                        <div class="settings-row"><span class="settings-label">Coleções</span><span class="settings-value">imoveis, lixeira, visitas</span></div>
+                        <div class="settings-row"><span class="settings-label">Status</span><span class="settings-value" style="color:var(--green);"><i class="fas fa-circle" style="font-size:.55rem;"></i> Conectado</span></div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-card-header"><i class="fas fa-tools"></i><h4>Ações de Manutenção</h4></div>
+                        <div style="display:flex;flex-direction:column;gap:.7rem;margin-top:.5rem;">
+                            <button class="btn-secondary" onclick="exportarDados()" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar imóveis como JSON</button>
+                            <button class="btn-secondary" onclick="loadDashboard();showToast('Dashboard atualizado!')" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-sync-alt" style="color:var(--green)"></i> Atualizar dashboard</button>
+                            <button class="btn-secondary" onclick="showSection('lixeira')" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-trash-alt" style="color:var(--red)"></i> Ver lixeira</button>
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-card-header"><i class="fas fa-info-circle"></i><h4>Informações</h4></div>
+                        <div class="settings-row"><span class="settings-label">Versão do painel</span><span class="settings-value">3.0.0</span></div>
+                        <div class="settings-row"><span class="settings-label">Firebase SDK</span><span class="settings-value">9.22.0 (compat)</span></div>
+                        <div class="settings-row"><span class="settings-label">Data atual</span><span class="settings-value" id="settings-date">—</span></div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
-    <!-- Modal de Confirmação de Exclusão -->
+    <!-- Modal Confirmação -->
     <div id="delete-modal" class="modal-overlay">
         <div class="modal-confirm">
-            <div class="modal-icon">
-                <i class="fas fa-exclamation-triangle"></i>
-            </div>
-            <h3>Confirmar Exclusão</h3>
-            <p>Tem certeza que deseja excluir este imóvel? Esta ação não pode ser desfeita.</p>
+            <div class="modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h3>Confirmar Ação</h3>
+            <p>Tem certeza? Esta ação não pode ser desfeita.</p>
             <div class="modal-actions">
                 <button onclick="closeDeleteModal()" class="btn-secondary">Cancelar</button>
-                <button onclick="confirmDelete()" class="btn-danger">
-                    <i class="fas fa-trash"></i>
-                    Excluir
+                <button id="confirm-delete-fn" onclick="confirmDelete()" class="btn-danger" data-mode="perma">
+                    <i class="fas fa-trash"></i> Confirmar
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notification -->
+    <!-- Toast -->
     <div id="toast" class="toast">
         <i class="fas fa-check-circle"></i>
-        <span id="toast-message">Operação realizada com sucesso!</span>
+        <span id="toast-message">Operação realizada!</span>
     </div>
 
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    
-    <!-- Configuração do Firebase -->
     <script src="firebase-config.js"></script>
-    
     <script src="admin.js"></script>
 </body>
+</html>
