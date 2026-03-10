@@ -478,112 +478,137 @@ class TestimonialsCarousel {
 // ========== CONFIG DO SITE (Firestore) ==========
 function waitForFirebaseScript(cb, attempts) {
     attempts = attempts || 0;
-    if (attempts > 40) return;
-    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) { cb(); }
-    else { setTimeout(function(){ waitForFirebaseScript(cb, attempts + 1); }, 100); }
+    if (attempts > 40) { console.error('[Config] Firebase não carregou após 4s'); return; }
+    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+        console.log('[Config] Firebase pronto, carregando config...');
+        cb();
+    } else {
+        setTimeout(function(){ waitForFirebaseScript(cb, attempts + 1); }, 100);
+    }
 }
 
 function loadSiteConfig() {
-    // Só roda na index.html (tem o hero)
     if (!document.getElementById('cfg-hero-title') && !document.getElementById('cfg-anos')) return;
     waitForFirebaseScript(function() {
-        try {
-            firebase.firestore().collection('config').doc('site').get().then(function(doc) {
-                if (!doc.exists) return;
-                var cfg = doc.data();
+        firebase.firestore().collection('config').doc('site').get().then(function(doc) {
+            if (!doc.exists) { console.warn('[Config] Documento config/site não existe no Firestore'); return; }
+            var cfg = doc.data();
+            console.log('[Config] Carregado do Firestore:', cfg);
 
-                // Foto de perfil
-                if (cfg.fotoPerfil) {
-                    var img = document.getElementById('cfg-foto');
-                    if (img) img.src = cfg.fotoPerfil;
-                }
+            // Foto de perfil
+            if (cfg.fotoPerfil) {
+                var img = document.getElementById('cfg-foto');
+                if (img) img.src = cfg.fotoPerfil;
+            }
 
-                // Título hero
-                if (cfg.heroTitulo) {
-                    var titleEl = document.getElementById('cfg-hero-title');
-                    if (titleEl) {
-                        var words = cfg.heroTitulo.split(' ');
-                        var n = words.length;
-                        var l1 = words.slice(0, Math.floor(n/3)).join(' ');
-                        var l2 = words.slice(Math.floor(n/3), Math.ceil(n*2/3)).join(' ');
-                        var l3 = words.slice(Math.ceil(n*2/3)).join(' ');
-                        titleEl.innerHTML =
-                            '<span class="title-line">' + l1 + '</span>' +
-                            '<span class="title-line gradient-text">' + l2 + '</span>' +
-                            '<span class="title-line">' + l3 + '</span>';
+            // Título hero
+            if (cfg.heroTitulo) {
+                var titleEl = document.getElementById('cfg-hero-title');
+                if (titleEl) {
+                    var words = cfg.heroTitulo.trim().split(' ');
+                    var html = '';
+                    if (words.length <= 2) {
+                        html = '<span class="title-line">' + words[0] + '</span>' +
+                               '<span class="title-line gradient-text">' + (words[1]||'') + '</span>';
+                    } else if (words.length === 3) {
+                        html = '<span class="title-line">' + words[0] + '</span>' +
+                               '<span class="title-line gradient-text">' + words[1] + '</span>' +
+                               '<span class="title-line">' + words[2] + '</span>';
+                    } else if (words.length === 4) {
+                        html = '<span class="title-line">' + words[0] + '</span>' +
+                               '<span class="title-line gradient-text">' + words[1] + ' ' + words[2] + '</span>' +
+                               '<span class="title-line">' + words[3] + '</span>';
+                    } else {
+                        var a = Math.floor(words.length / 3);
+                        var b = Math.ceil(words.length * 2 / 3);
+                        html = '<span class="title-line">' + words.slice(0,a).join(' ') + '</span>' +
+                               '<span class="title-line gradient-text">' + words.slice(a,b).join(' ') + '</span>' +
+                               '<span class="title-line">' + words.slice(b).join(' ') + '</span>';
                     }
+                    titleEl.innerHTML = html;
                 }
+            }
 
-                // Descrição hero
-                if (cfg.heroDesc) {
-                    var desc = document.getElementById('cfg-hero-desc');
-                    if (desc) desc.textContent = cfg.heroDesc;
-                }
+            // Descrição hero
+            if (cfg.heroDesc) {
+                var desc = document.getElementById('cfg-hero-desc');
+                if (desc) desc.textContent = cfg.heroDesc;
+            }
 
-                // Números (trust indicators)
-                function setCounter(id, val) {
+            // Números (trust indicators) — atualiza data-target E reanima
+            function setCounter(id, val) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                var num = parseInt(val);
+                if (!num) return;
+                el.setAttribute('data-target', String(num));
+                el.textContent = '0';
+                // Força animação mesmo que o observer já tenha disparado antes
+                var target = num;
+                var current = 0;
+                var increment = target / 50;
+                var suffix = (id === 'cfg-satisfacao') ? '%' : '+';
+                var step = function() {
+                    if (current < target) {
+                        current += increment;
+                        el.textContent = Math.ceil(current);
+                        requestAnimationFrame(step);
+                    } else {
+                        el.textContent = target + suffix;
+                    }
+                };
+                step();
+            }
+            setCounter('cfg-anos', cfg.anosExperiencia);
+            setCounter('cfg-imoveis-neg', cfg.imoveisNegociados);
+            setCounter('cfg-satisfacao', cfg.satisfacao);
+
+            // Velocidade
+            if (cfg.velocidade) {
+                ['cfg-velocidade-d','cfg-velocidade-m'].forEach(function(id) {
                     var el = document.getElementById(id);
-                    if (el && val) {
-                        el.setAttribute('data-target', String(val));
-                        el.textContent = '0';
-                    }
-                }
-                if (cfg.anosExperiencia)   setCounter('cfg-anos', cfg.anosExperiencia);
-                if (cfg.imoveisNegociados) setCounter('cfg-imoveis-neg', cfg.imoveisNegociados);
-                if (cfg.satisfacao)        setCounter('cfg-satisfacao', cfg.satisfacao);
+                    if (el) el.textContent = cfg.velocidade;
+                });
+            }
 
-                // Velocidade
-                if (cfg.velocidade) {
-                    ['cfg-velocidade-d','cfg-velocidade-m'].forEach(function(id) {
-                        var el = document.getElementById(id);
-                        if (el) el.textContent = cfg.velocidade;
-                    });
-                }
-
-                // Depoimentos
-                if (cfg.depoimentos && cfg.depoimentos.length) {
-                    var track = document.getElementById('cfg-depoimentos');
-                    if (track) {
-                        track.innerHTML = cfg.depoimentos.map(function(d) {
-                            return '<div class="testimonial-card">' +
-                                '<div class="testimonial-quote">"</div>' +
-                                '<p class="testimonial-text">' + (d.texto||'') + '</p>' +
-                                '<div class="testimonial-author">' +
-                                '<span>' + (d.autor||'') + '</span>' +
-                                '<span class="author-location">• ' + (d.local||'') + '</span>' +
-                                '</div></div>';
-                        }).join('');
-
-                        // Atualiza dots
-                        var carousel = track.closest('.testimonials-carousel');
-                        if (carousel) {
-                            var dotsEl = carousel.querySelector('.carousel-dots');
-                            if (dotsEl) {
-                                dotsEl.innerHTML = cfg.depoimentos.map(function(_, i) {
-                                    return '<span class="dot' + (i===0?' active':'') + '"></span>';
-                                }).join('');
-                            }
+            // Depoimentos
+            if (cfg.depoimentos && cfg.depoimentos.length) {
+                var track = document.getElementById('cfg-depoimentos');
+                if (track) {
+                    track.innerHTML = cfg.depoimentos.map(function(d) {
+                        return '<div class="testimonial-card">' +
+                            '<div class="testimonial-quote">"</div>' +
+                            '<p class="testimonial-text">' + (d.texto||'') + '</p>' +
+                            '<div class="testimonial-author">' +
+                            '<span>' + (d.autor||'') + '</span>' +
+                            '<span class="author-location">• ' + (d.local||'') + '</span>' +
+                            '</div></div>';
+                    }).join('');
+                    var carouselEl = track.closest('.testimonials-carousel');
+                    if (carouselEl) {
+                        var dotsEl = carouselEl.querySelector('.carousel-dots');
+                        if (dotsEl) {
+                            dotsEl.innerHTML = cfg.depoimentos.map(function(_, i) {
+                                return '<span class="dot' + (i===0?' active':'') + '"></span>';
+                            }).join('');
                         }
-                        // Re-inicializa carrossel
-                        if (window._carousel && typeof window._carousel.destroy === 'function') {
-                            window._carousel.destroy();
-                        }
-                        window._carousel = new TestimonialsCarousel();
                     }
+                    if (window._carousel && typeof window._carousel.destroy === 'function') window._carousel.destroy();
+                    window._carousel = new TestimonialsCarousel();
                 }
+            }
 
-                // Bairros (faixa rolante)
-                if (cfg.bairros) {
-                    var btrack = document.getElementById('cfg-bairros-track');
-                    if (btrack) {
-                        var lista = cfg.bairros.split(',').map(function(b){ return b.trim(); }).filter(Boolean);
-                        var items = lista.map(function(b){ return '<span>' + b + '</span><span class="separator">✦</span>'; }).join('');
-                        btrack.innerHTML = items + items; // duplicado para loop infinito
-                    }
+            // Bairros (faixa rolante)
+            if (cfg.bairros) {
+                var btrack = document.getElementById('cfg-bairros-track');
+                if (btrack) {
+                    var lista = cfg.bairros.split(',').map(function(b){ return b.trim(); }).filter(Boolean);
+                    var items = lista.map(function(b){ return '<span>' + b + '</span><span class="separator">✦</span>'; }).join('');
+                    btrack.innerHTML = items + items;
                 }
+            }
 
-            }).catch(function(){});
-        } catch(e) {}
+        }).catch(function(err){ console.error('[Config] Erro ao carregar config/site:', err); });
     });
 }
 
