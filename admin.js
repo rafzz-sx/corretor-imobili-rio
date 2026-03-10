@@ -996,3 +996,101 @@ function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopia
         }).join('')}
     </div>`;
 }
+
+// ========== CONFIGURAÇÕES DO SITE ==========
+async function loadSiteConfig() {
+    const loading = document.getElementById('site-loading');
+    const content = document.getElementById('site-content');
+    if (loading) loading.style.display = 'flex';
+    if (content) content.style.display = 'none';
+    let cfg = {};
+    try { const doc = await db.collection('config').doc('site').get(); if (doc.exists) cfg = doc.data(); } catch(e) {}
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+    content.innerHTML = `
+    <div style="max-width:820px;">
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-user"></i> Informações Pessoais</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="form-group"><label class="form-label">Nome do Corretor</label><input type="text" id="cfg-nome" class="form-control" value="${cfg.nome||'Leandro Bomfim'}"></div>
+                <div class="form-group"><label class="form-label">CRECI</label><input type="text" id="cfg-creci" class="form-control" value="${cfg.creci||''}"></div>
+                <div class="form-group"><label class="form-label">WhatsApp (com DDI)</label><input type="text" id="cfg-whatsapp" class="form-control" value="${cfg.whatsapp||'5521981424469'}"></div>
+                <div class="form-group"><label class="form-label">Email de Contato</label><input type="email" id="cfg-email" class="form-control" value="${cfg.emailContato||''}"></div>
+                <div class="form-group" style="grid-column:1/-1;"><label class="form-label">Foto de Perfil (URL)</label><input type="text" id="cfg-foto" class="form-control" value="${cfg.fotoPerfil||'https://files.catbox.moe/nqdyup.png'}"></div>
+            </div>
+        </div>
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-star"></i> Números do Hero</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                <div class="form-group"><label class="form-label">Anos de Experiência</label><input type="number" id="cfg-anos" class="form-control" value="${cfg.anosExperiencia||6}"></div>
+                <div class="form-group"><label class="form-label">Imóveis Negociados</label><input type="number" id="cfg-imoveis-neg" class="form-control" value="${cfg.imoveisNegociados||60}"></div>
+                <div class="form-group"><label class="form-label">% Satisfação</label><input type="number" id="cfg-satisfacao" class="form-control" value="${cfg.satisfacao||100}"></div>
+            </div>
+        </div>
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-pen"></i> Textos do Site</h3>
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+                <div class="form-group"><label class="form-label">Título do Hero</label><input type="text" id="cfg-hero-titulo" class="form-control" value="${cfg.heroTitulo||'Transformando Sonhos em Endereços'}"></div>
+                <div class="form-group"><label class="form-label">Descrição do Hero</label><textarea id="cfg-hero-desc" class="form-control" rows="3">${cfg.heroDesc||'Com mais de 6 anos de experiência no mercado imobiliário...'}</textarea></div>
+                <div class="form-group"><label class="form-label">Destaque velocidade (ex: 47%)</label><input type="text" id="cfg-velocidade" class="form-control" value="${cfg.velocidade||'47%'}"></div>
+            </div>
+        </div>
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-map-marker-alt"></i> Bairros (faixa rolante)</h3>
+            <div class="form-group"><label class="form-label">Separados por vírgula</label><input type="text" id="cfg-bairros" class="form-control" value="${cfg.bairros||'Ipanema, Leblon, Barra da Tijuca, Recreio dos Bandeirantes, Barra Olímpica, Copacabana'}"></div>
+        </div>
+        <div class="dashboard-card" style="margin-bottom:1.5rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-quote-right"></i> Depoimentos</h3>
+            <div id="depoimentos-list" style="display:flex;flex-direction:column;gap:.8rem;">
+                ${(cfg.depoimentos||[{texto:'O Leandro não apenas vendeu nosso apartamento, ele realizou nosso sonho do primeiro lar.',autor:'Carlos e Ana Lima',local:'Ipanema'},{texto:'Profissional incrível! Conseguiu vender minha cobertura em apenas 15 dias pelo valor que eu queria.',autor:'Roberto Fonseca',local:'Barra da Tijuca'}]).map((d,i)=>`
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);" id="dep-${i}">
+                    <input type="text" class="form-control dep-texto" placeholder="Depoimento" value="${d.texto||''}">
+                    <input type="text" class="form-control dep-autor" placeholder="Nome" value="${d.autor||''}">
+                    <input type="text" class="form-control dep-local" placeholder="Bairro" value="${d.local||''}">
+                    <button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>
+                </div>`).join('')}
+            </div>
+            <button onclick="addDepoimento()" class="btn-secondary" style="margin-top:.8rem;"><i class="fas fa-plus"></i> Adicionar</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:.8rem;">
+            <button onclick="loadSiteConfig()" class="btn-secondary"><i class="fas fa-undo"></i> Descartar</button>
+            <button onclick="saveSiteConfig()" class="btn-primary"><i class="fas fa-save"></i> Salvar Configurações</button>
+        </div>
+    </div>`;
+}
+
+function addDepoimento() {
+    const list = document.getElementById('depoimentos-list');
+    const i = list.children.length;
+    const div = document.createElement('div');
+    div.id = 'dep-' + i;
+    div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);';
+    div.innerHTML = `<input type="text" class="form-control dep-texto" placeholder="Depoimento"><input type="text" class="form-control dep-autor" placeholder="Nome"><input type="text" class="form-control dep-local" placeholder="Bairro"><button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>`;
+    list.appendChild(div);
+}
+
+async function saveSiteConfig() {
+    const depoimentos = Array.from(document.querySelectorAll('[id^=dep-]')).map(el=>({
+        texto:el.querySelector('.dep-texto')?.value||'',
+        autor:el.querySelector('.dep-autor')?.value||'',
+        local:el.querySelector('.dep-local')?.value||'',
+    })).filter(d=>d.texto);
+    const cfg = {
+        nome:document.getElementById('cfg-nome')?.value||'',
+        creci:document.getElementById('cfg-creci')?.value||'',
+        whatsapp:document.getElementById('cfg-whatsapp')?.value||'',
+        emailContato:document.getElementById('cfg-email')?.value||'',
+        fotoPerfil:document.getElementById('cfg-foto')?.value||'',
+        anosExperiencia:parseInt(document.getElementById('cfg-anos')?.value)||6,
+        imoveisNegociados:parseInt(document.getElementById('cfg-imoveis-neg')?.value)||60,
+        satisfacao:parseInt(document.getElementById('cfg-satisfacao')?.value)||100,
+        heroTitulo:document.getElementById('cfg-hero-titulo')?.value||'',
+        heroDesc:document.getElementById('cfg-hero-desc')?.value||'',
+        velocidade:document.getElementById('cfg-velocidade')?.value||'',
+        bairros:document.getElementById('cfg-bairros')?.value||'',
+        depoimentos,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    try { await db.collection('config').doc('site').set(cfg); showToast('✅ Configurações salvas!'); }
+    catch(e) { showToast('Erro ao salvar','error'); }
+}
