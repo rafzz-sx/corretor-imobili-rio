@@ -1,103 +1,88 @@
 // =============================================
-//  TRACKER DE VISITAS — Leandro Imóveis v2
-//  - Visitas únicas por dispositivo/página/dia
-//  - Rastreamento de imóveis visualizados
+//  TRACKER DE VISITAS — Leandro Imóveis
+//  Registra visitas únicas por dispositivo
+//  no Firestore, sem contar repetidos
 // =============================================
 
 (function() {
     'use strict';
 
+    // Espera o Firebase estar disponível
     function waitForFirebase(cb, attempts) {
         attempts = attempts || 0;
-        if (attempts > 40) { console.warn('⚠️ Tracker: Firebase não disponível'); return; }
-        if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
+        if (attempts > 20) return; // desiste após 2s
+        if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
             cb();
         } else {
-            setTimeout(function() { waitForFirebase(cb, attempts + 1); }, 100);
+            setTimeout(() => waitForFirebase(cb, attempts + 1), 100);
         }
     }
 
+    // Gera ou recupera um ID único para este dispositivo/browser
     function getDeviceId() {
-        try {
-            var id = localStorage.getItem('_lb_did');
-            if (!id) {
-                id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
-                localStorage.setItem('_lb_did', id);
-            }
-            return id;
-        } catch(e) {
-            return 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+        let id = localStorage.getItem('_lb_did');
+        if (!id) {
+            id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+            localStorage.setItem('_lb_did', id);
         }
+        return id;
     }
 
+    // Nome amigável da página
     function getPageName() {
-        var path = window.location.pathname;
-        if (path.includes('imoveis'))  return 'Imoveis';
+        const path = window.location.pathname;
+        if (path.includes('imoveis'))  return 'Imóveis';
         if (path.includes('contato'))  return 'Contato';
-        return 'Inicio';
+        return 'Início';
     }
 
-    // Registra visita de página
     function trackVisit() {
         try {
-            var db       = firebase.firestore();
-            var deviceId = getDeviceId();
-            var page     = getPageName();
-            var today    = new Date().toISOString().slice(0, 10);
-            var visitKey = deviceId + '_' + page + '_' + today;
-            var ref      = db.collection('visitas').doc(visitKey);
+            const db       = firebase.firestore();
+            const deviceId = getDeviceId();
+            const page     = getPageName();
+            const today    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-            ref.get().then(function(doc) {
+            // Chave única: dispositivo + página + dia
+            // Isso garante: 1 contagem por dispositivo por página por dia
+            const visitKey = `${deviceId}_${page}_${today}`;
+            const ref      = db.collection('visitas').doc(visitKey);
+
+            ref.get().then(doc => {
                 if (!doc.exists) {
-                    return ref.set({
+                    // Nova visita única — registra
+                    ref.set({
                         deviceId:  deviceId,
                         page:      page,
                         date:      today,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                         userAgent: navigator.userAgent.slice(0, 200),
-                    });
+                    }).catch(() => {}); // silencia erros de rede
                 }
-            }).then(function() {
-                console.log('📊 Tracker: visita registrada —', page);
-            }).catch(function(err) {
-                console.warn('⚠️ Tracker: erro ao registrar visita:', err.code, err.message);
-            });
+                // Se já existe, ignora (visitante repetido hoje nessa página)
+            }).catch(() => {});
+
         } catch (e) {
-            console.warn('⚠️ Tracker erro:', e);
+            // Nunca quebra a página
         }
     }
 
-    // Registra visualização de imóvel específico
-    window.trackImovelView = function(imovelId, imovelTitulo, imovelBairro) {
+    waitForFirebase(trackVisit);
+})();
+    // Registra cópia de link de imóvel
+    window.trackLinkCopiado = function(imovelId, imovelTitulo) {
         waitForFirebase(function() {
             try {
                 var db       = firebase.firestore();
                 var deviceId = getDeviceId();
                 var today    = new Date().toISOString().slice(0, 10);
-                var key      = deviceId + '_imovel_' + imovelId + '_' + today;
-                var ref      = db.collection('visitas_imoveis').doc(key);
-
-                ref.get().then(function(doc) {
-                    if (!doc.exists) {
-                        return ref.set({
-                            deviceId:   deviceId,
-                            imovelId:   imovelId,
-                            titulo:     imovelTitulo || '',
-                            bairro:     imovelBairro || '',
-                            date:       today,
-                            timestamp:  firebase.firestore.FieldValue.serverTimestamp(),
-                        });
-                    } else {
-                        // Já viu hoje, apenas atualiza contador
-                        return ref.update({
-                            views: firebase.firestore.FieldValue.increment(1),
-                            lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                        });
-                    }
+                db.collection('links_copiados').add({
+                    deviceId:  deviceId,
+                    imovelId:  imovelId,
+                    titulo:    imovelTitulo || '',
+                    date:      today,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                 }).catch(function() {});
             } catch(e) {}
         });
     };
-
-    waitForFirebase(trackVisit);
-})();
