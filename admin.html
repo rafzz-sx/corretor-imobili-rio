@@ -75,6 +75,12 @@
                     <i class="fas fa-eye"></i><span>Visitas ao Site</span>
                 </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
+                <a href="#" class="nav-item" data-section="site">
+                    <i class="fas fa-sliders-h"></i><span>Config. do Site</span>
+                </a>
+                <a href="#" class="nav-item" data-section="perfil">
+                    <i class="fas fa-user-check"></i><span>Perfil de Visitante</span>
+                </a>
                 <a href="#" class="nav-item" data-section="configuracoes">
                     <i class="fas fa-cog"></i><span>Configurações</span>
                 </a>
@@ -286,6 +292,22 @@
                     <span class="loading" style="border-top-color:var(--accent);"></span> Carregando dados...
                 </div>
                 <div id="visitas-content"></div>
+            </section>
+
+            <!-- CONFIGURAÇÕES DO SITE -->
+            <section id="section-site" class="admin-section">
+                <div id="site-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando...
+                </div>
+                <div id="site-content"></div>
+            </section>
+
+            <!-- PERFIL DE VISITANTE -->
+            <section id="section-perfil" class="admin-section">
+                <div id="perfil-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando...
+                </div>
+                <div id="perfil-content"></div>
             </section>
 
             <!-- CONFIGURAÇÕES -->
