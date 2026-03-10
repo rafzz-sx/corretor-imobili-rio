@@ -1,7 +1,7 @@
 // ============================================================
-//  ADMIN.JS v3.0 — Leandro Imóveis
+//  ADMIN.JS v3.1 — Leandro Imóveis
 // ============================================================
-console.log('🚀 Admin.js v3.0');
+console.log('🚀 Admin.js v3.1');
 
 let auth, db;
 function initFirebase() {
@@ -13,15 +13,53 @@ function initFirebase() {
 }
 
 let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], deleteId = null;
-const loginTime = new Date();
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas
+const SESSION_KEY = '_lb_session_start';
+let sessionTimer = null;
 
 // ========== AUTENTICAÇÃO ==========
 function setupAuthListener() {
     auth.onAuthStateChanged(user => {
-        if (user) { currentUser = user; showAdminPanel(); loadDashboard(); }
-        else showLoginScreen();
+        if (user) {
+            // Verifica se a sessão expirou
+            const sessionStart = localStorage.getItem(SESSION_KEY);
+            const now = Date.now();
+            if (sessionStart && (now - parseInt(sessionStart)) > SESSION_DURATION_MS) {
+                console.log('⏰ Sessão expirada — fazendo logout automático');
+                localStorage.removeItem(SESSION_KEY);
+                auth.signOut();
+                return;
+            }
+            currentUser = user;
+            if (!sessionStart) localStorage.setItem(SESSION_KEY, now.toString());
+            startSessionTimer();
+            showAdminPanel();
+            loadDashboard();
+        } else {
+            clearSessionTimer();
+            showLoginScreen();
+        }
     });
 }
+
+function startSessionTimer() {
+    clearSessionTimer();
+    const sessionStart = parseInt(localStorage.getItem(SESSION_KEY) || Date.now());
+    const elapsed = Date.now() - sessionStart;
+    const remaining = SESSION_DURATION_MS - elapsed;
+    if (remaining <= 0) { auth.signOut(); return; }
+    // Avisa 5 min antes de expirar
+    const warnAt = remaining - 5 * 60 * 1000;
+    if (warnAt > 0) {
+        setTimeout(() => showToast('⚠️ Sessão expira em 5 minutos', 'warning'), warnAt);
+    }
+    sessionTimer = setTimeout(() => {
+        showToast('Sessão expirada por segurança. Faça login novamente.', 'error');
+        setTimeout(() => { localStorage.removeItem(SESSION_KEY); auth.signOut(); }, 2500);
+    }, remaining);
+}
+
+function clearSessionTimer() { if (sessionTimer) { clearTimeout(sessionTimer); sessionTimer = null; } }
 
 function setupLoginForm() {
     const form = document.getElementById('login-form');
@@ -45,7 +83,7 @@ function setupLoginForm() {
     });
 }
 
-function logout() { auth.signOut().then(() => showToast('Sessão encerrada.')); }
+function logout() { localStorage.removeItem(SESSION_KEY); clearSessionTimer(); auth.signOut().then(() => showToast('Sessão encerrada.')); }
 
 function togglePassword(id) {
     const input = document.getElementById(id); if (!input) return;
@@ -84,11 +122,42 @@ function setupNavigation() {
 }
 
 // ========== DASHBOARD ==========
+const STATIC_IMOVEIS_SEED = [
+    { bairro:'Ipanema', quartos:2, preco:850000, area:80, titulo:'Apartamento Moderno em Ipanema', descricao:'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.', imagem:'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg', fotos:['https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg','https://files.catbox.moe/ihe3p5.png','https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/0tg1le.png'] },
+    { bairro:'Barra da Tijuca', quartos:3, preco:1200000, area:140, titulo:'Cobertura na Barra da Tijuca', descricao:'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.', imagem:'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg', fotos:['https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg','https://files.catbox.moe/o4xhj9.png','https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/ihe3p5.png'] },
+    { bairro:'Recreio dos Bandeirantes', quartos:2, preco:520000, area:70, titulo:'Apartamento Moderno no Recreio', descricao:'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.', imagem:'https://files.catbox.moe/ihe3p5.png', fotos:['https://files.catbox.moe/ihe3p5.png','https://files.catbox.moe/0tg1le.png'] },
+    { bairro:'Leblon', quartos:3, preco:1500000, area:110, titulo:'Apartamento de Luxo no Leblon', descricao:'Sofisticado apartamento de 3 quartos no bairro mais valorizado do Rio.', imagem:'https://files.catbox.moe/ta8pp6.png', fotos:['https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/ihe3p5.png'] },
+    { bairro:'Copacabana', quartos:1, preco:420000, area:45, titulo:'Studio em Copacabana', descricao:'Studio moderno e bem localizado em Copacabana, ideal para investimento.', imagem:'https://files.catbox.moe/0tg1le.png', fotos:['https://files.catbox.moe/0tg1le.png'] }
+];
+
+async function seedStaticImoveis() {
+    try {
+        const batch = db.batch();
+        const ts = firebase.firestore.FieldValue.serverTimestamp();
+        STATIC_IMOVEIS_SEED.forEach(im => {
+            const ref = db.collection('imoveis').doc();
+            batch.set(ref, { ...im, createdAt: ts, updatedAt: ts });
+        });
+        await batch.commit();
+        console.log('✅ Imóveis estáticos migrados para o Firestore!');
+        showToast('✅ Imóveis de exemplo importados para o banco de dados!');
+    } catch(e) {
+        console.error('Erro ao fazer seed:', e);
+    }
+}
+
 async function loadDashboard() {
     if (!db) return;
     try {
         const snap = await db.collection('imoveis').get();
         imoveisData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Se não há imóveis no Firestore, importa os estáticos automaticamente
+        if (imoveisData.length === 0 && !localStorage.getItem('_lb_seeded')) {
+            localStorage.setItem('_lb_seeded', '1');
+            await seedStaticImoveis();
+            const snap2 = await db.collection('imoveis').get();
+            imoveisData = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
         const total = imoveisData.length;
         const bairros = [...new Set(imoveisData.map(i => i.bairro))];
         const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s,i) => s+(parseInt(i.quartos)||0),0)/total) : 0;
@@ -96,6 +165,7 @@ async function loadDashboard() {
         setEl('total-imoveis', total); setEl('total-bairros', bairros.length);
         setEl('media-quartos', mediaQ); setEl('preco-medio', 'R$ '+precoMedio.toLocaleString('pt-BR'));
         setEl('badge-imoveis', total);
+        syncMobileBadges();
         loadDashboardVisitas();
         renderBairrosChart('bairros-chart');
         renderRecentList('ultimos-imoveis', 5);
@@ -338,7 +408,15 @@ function renderTopList(id,list,tipo) {
 
 // ========== CONFIGURAÇÕES ==========
 function loadConfiguracoes() {
-    if (currentUser) { setEl('settings-email',currentUser.email||'—'); setEl('settings-uid',currentUser.uid||'—'); setEl('settings-login-time',loginTime.toLocaleString('pt-BR')); }
+    if (currentUser) {
+        setEl('settings-email',currentUser.email||'—');
+        setEl('settings-uid',currentUser.uid||'—');
+        const sessionStart = localStorage.getItem(SESSION_KEY);
+        const loginDisplay = sessionStart ? new Date(parseInt(sessionStart)).toLocaleString('pt-BR') : '—';
+        const expDisplay = sessionStart ? new Date(parseInt(sessionStart) + SESSION_DURATION_MS).toLocaleString('pt-BR') : '—';
+        setEl('settings-login-time', loginDisplay);
+        setEl('settings-session-expires', expDisplay);
+    }
     setEl('settings-date',new Date().toLocaleDateString('pt-BR',{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
 }
 
@@ -394,12 +472,29 @@ async function editImovel(id) {
     } catch(e){showToast('Erro ao carregar','error');}
 }
 
+// ========== MOBILE NAVIGATION ==========
+function mobileNav(section, el) {
+    showSection(section);
+    document.querySelectorAll('.mobile-nav-item').forEach(b => b.classList.remove('active'));
+    if (el) el.classList.add('active');
+}
+
+function syncMobileBadges() {
+    const badgeI = document.getElementById('mobile-badge-imoveis');
+    const badgeL = document.getElementById('mobile-badge-lixeira');
+    const iCount = imoveisData.length;
+    const lCount = lixeiraData.length;
+    if (badgeI) { badgeI.textContent = iCount > 0 ? iCount : ''; badgeI.style.display = iCount > 0 ? 'flex' : 'none'; }
+    if (badgeL) { badgeL.textContent = lCount > 0 ? lCount : ''; badgeL.style.display = lCount > 0 ? 'flex' : 'none'; }
+}
+
 // ========== UTILS ==========
 function setEl(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
 function showToast(message,type='success'){
     const toast=document.getElementById('toast'),msg=document.getElementById('toast-message'),icon=toast.querySelector('i');
     msg.textContent=message;
     if(type==='error'){toast.style.borderColor='rgba(239,68,68,0.3)';icon.className='fas fa-exclamation-circle';icon.style.color='var(--red)';}
+    else if(type==='warning'){toast.style.borderColor='rgba(245,158,11,0.3)';icon.className='fas fa-exclamation-triangle';icon.style.color='var(--amber)';}
     else{toast.style.borderColor='rgba(34,197,94,0.3)';icon.className='fas fa-check-circle';icon.style.color='var(--green)';}
     toast.classList.add('active'); setTimeout(()=>toast.classList.remove('active'),3200);
 }
