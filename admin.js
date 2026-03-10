@@ -104,7 +104,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', site:'Configurações do Site', perfil:'Perfil de Visitante', configuracoes:'Configurações' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') loadImoveisTable();
@@ -180,11 +180,35 @@ async function loadDashboard() {
 
 async function loadDashboardVisitas() {
     try {
-        const snap = await db.collection('visitas').get();
-        const uniqueDevices = new Set(snap.docs.map(d => d.data().deviceId));
-        setEl('dash-visitas-total', snap.size);
+        const [visitasSnap, imoveisViewsSnap] = await Promise.all([
+            db.collection('visitas').get(),
+            db.collection('visitas_imoveis').get()
+        ]);
+        const uniqueDevices = new Set(visitasSnap.docs.map(d => d.data().deviceId));
+        setEl('dash-visitas-total', visitasSnap.size);
         setEl('dash-visitas-unique', uniqueDevices.size);
-    } catch (e) {}
+
+        // Imóvel mais visto do dia
+        const hoje = new Date().toISOString().slice(0,10);
+        const counts = {};
+        imoveisViewsSnap.docs.forEach(d => {
+            const v = d.data();
+            if (v.date === hoje) {
+                if (!counts[v.imovelId]) counts[v.imovelId] = { titulo: v.titulo, bairro: v.bairro, count: 0 };
+                counts[v.imovelId].count++;
+            }
+        });
+        const top = Object.values(counts).sort((a,b) => b.count - a.count)[0];
+        const el = document.getElementById('dash-imovel-top');
+        if (el) el.innerHTML = top
+            ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count>1?'s':''} hoje</span>`
+            : `<strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>`;
+
+        // Links copiados hoje
+        const copiadosSnap = await db.collection('links_copiados').where('date','==',hoje).get();
+        const elC = document.getElementById('dash-links-copiados');
+        if (elC) elC.textContent = copiadosSnap.size;
+    } catch (e) { console.error('loadDashboardVisitas', e); }
 }
 
 function renderBairrosChart(containerId) {
@@ -213,8 +237,43 @@ async function loadImoveisTable() {
 
 function renderImoveisTable(list) {
     const tbody = document.getElementById('imoveis-table-body'); if (!tbody) return;
-    if (!list.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">Nenhum imóvel encontrado</td></tr>'; return; }
-    tbody.innerHTML = list.map(i => `<tr><td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td><td style="color:var(--text-primary);font-weight:500;">${i.titulo}</td><td>${i.bairro}</td><td>${i.quartos} qts</td><td>${i.area} m²</td><td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td><td><div class="table-actions"><button onclick="editImovel('${i.id}')" class="btn-edit" title="Editar"><i class="fas fa-pen"></i></button><button onclick="moveToLixeira('${i.id}')" class="btn-trash" title="Mover para lixeira"><i class="fas fa-trash"></i></button></div></td></tr>`).join('');
+    if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Nenhum imóvel encontrado</td></tr>'; return; }
+    tbody.innerHTML = list.map(i => {
+        const isDestaque = i.destaque === true;
+        return `<tr style="${isDestaque?'background:rgba(245,158,11,0.04);border-left:2px solid var(--amber);':''}">
+            <td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td>
+            <td style="color:var(--text-primary);font-weight:500;">${i.titulo}${isDestaque?' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>':''}</td>
+            <td>${i.bairro}</td><td>${i.quartos} qts</td><td>${i.area} m²</td>
+            <td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td>
+            <td>
+                <div class="table-actions">
+                    <button onclick="toggleDestaque('${i.id}',${isDestaque})" class="btn-edit" title="${isDestaque?'Remover destaque':'Marcar como destaque'}" style="${isDestaque?'color:var(--amber);border-color:var(--amber);':''}">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    <button onclick="editImovel('${i.id}')" class="btn-edit" title="Editar"><i class="fas fa-pen"></i></button>
+                    <button onclick="moveToLixeira('${i.id}')" class="btn-trash" title="Mover para lixeira"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function toggleDestaque(id, isDestaque) {
+    try {
+        if (!isDestaque) {
+            // Remove destaque de qualquer outro imóvel
+            const snap = await db.collection('imoveis').where('destaque','==',true).get();
+            const batch = db.batch();
+            snap.docs.forEach(d => batch.update(d.ref, { destaque: false }));
+            batch.update(db.collection('imoveis').doc(id), { destaque: true });
+            await batch.commit();
+            showToast('⭐ Imóvel marcado como destaque!');
+        } else {
+            await db.collection('imoveis').doc(id).update({ destaque: false });
+            showToast('Destaque removido.');
+        }
+        loadImoveisTable();
+    } catch(e) { showToast('Erro ao alterar destaque','error'); }
 }
 
 function updateBairroFilter(list) {
@@ -505,169 +564,113 @@ function showToast(message,type='success'){
 document.addEventListener('DOMContentLoaded', () => {
     if (!initFirebase()) return;
     setupAuthListener(); setupLoginForm(); setupNavigation(); setupFormListeners();
+    // Inicia listeners de tempo real após garantir auth
+    auth.onAuthStateChanged(u => { if (u) startRealtimeListeners(); else stopRealtimeListeners(); });
     document.getElementById('delete-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeDeleteModal();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDeleteModal();});
     console.log('✅ Admin v3.0 iniciado');
 });
-// ========== CONFIGURAÇÕES DO SITE ==========
-async function loadSiteConfig() {
-    const loading = document.getElementById('site-loading');
-    const content = document.getElementById('site-content');
-    if (loading) loading.style.display = 'flex';
-    if (content) content.style.display = 'none';
 
-    // Carrega config salva no Firestore (coleção 'config', doc 'site')
-    let cfg = {};
-    try {
-        const doc = await db.collection('config').doc('site').get();
-        if (doc.exists) cfg = doc.data();
-    } catch(e) {}
+// ========== NOTIFICAÇÕES EM TEMPO REAL ==========
+let _visitasListener = null;
+let _linksListener = null;
+let _lastVisitasCount = null;
 
-    if (loading) loading.style.display = 'none';
-    if (content) content.style.display = 'block';
+function startRealtimeListeners() {
+    if (_visitasListener) return; // já ativo
 
-    content.innerHTML = `
-    <div style="max-width:820px;">
-        <!-- INFORMAÇÕES PESSOAIS -->
-        <div class="dashboard-card" style="margin-bottom:1.2rem;">
-            <h3 style="margin-bottom:1rem;"><i class="fas fa-user"></i> Informações Pessoais</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                <div class="form-group">
-                    <label class="form-label">Nome do Corretor</label>
-                    <input type="text" id="cfg-nome" class="form-control" placeholder="Ex: Leandro Bomfim" value="${cfg.nome||'Leandro Bomfim'}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">CRECI</label>
-                    <input type="text" id="cfg-creci" class="form-control" placeholder="Ex: CRECI-RJ 12345" value="${cfg.creci||''}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">WhatsApp (com DDI)</label>
-                    <input type="text" id="cfg-whatsapp" class="form-control" placeholder="Ex: 5521981424469" value="${cfg.whatsapp||'5521981424469'}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email de Contato</label>
-                    <input type="email" id="cfg-email" class="form-control" placeholder="Ex: leandro@email.com" value="${cfg.emailContato||''}">
-                </div>
-                <div class="form-group" style="grid-column:1/-1;">
-                    <label class="form-label">Foto de Perfil (URL)</label>
-                    <input type="text" id="cfg-foto" class="form-control" placeholder="https://..." value="${cfg.fotoPerfil||'https://files.catbox.moe/nqdyup.png'}">
-                </div>
-            </div>
-        </div>
+    _visitasListener = db.collection('visitas')
+        .orderBy('timestamp','desc')
+        .limit(1)
+        .onSnapshot(snap => {
+            if (_lastVisitasCount === null) {
+                _lastVisitasCount = snap.size;
+                return;
+            }
+            snap.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const v = change.doc.data();
+                    const ua = parseUA(v.userAgent || '');
+                    showNotification(
+                        '👀 Novo visitante',
+                        `${v.page || 'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`,
+                        'blue'
+                    );
+                    // Atualiza contadores no dashboard se visível
+                    loadDashboardVisitas();
+                }
+            });
+        }, err => console.warn('Listener visitas:', err));
 
-        <!-- ESTATÍSTICAS DO HERO -->
-        <div class="dashboard-card" style="margin-bottom:1.2rem;">
-            <h3 style="margin-bottom:1rem;"><i class="fas fa-star"></i> Números do Hero (página inicial)</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
-                <div class="form-group">
-                    <label class="form-label">Anos de Experiência</label>
-                    <input type="number" id="cfg-anos" class="form-control" value="${cfg.anosExperiencia||6}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Imóveis Negociados</label>
-                    <input type="number" id="cfg-imoveis-neg" class="form-control" value="${cfg.imoveisNegociados||60}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">% Satisfação</label>
-                    <input type="number" id="cfg-satisfacao" class="form-control" value="${cfg.satisfacao||100}">
-                </div>
-            </div>
-        </div>
-
-        <!-- TEXTOS DO SITE -->
-        <div class="dashboard-card" style="margin-bottom:1.2rem;">
-            <h3 style="margin-bottom:1rem;"><i class="fas fa-pen"></i> Textos do Site</h3>
-            <div style="display:flex;flex-direction:column;gap:1rem;">
-                <div class="form-group">
-                    <label class="form-label">Título do Hero</label>
-                    <input type="text" id="cfg-hero-titulo" class="form-control" value="${cfg.heroTitulo||'Transformando Sonhos em Endereços'}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Descrição do Hero</label>
-                    <textarea id="cfg-hero-desc" class="form-control" rows="3" style="resize:vertical;">${cfg.heroDesc||'Com mais de 6 anos de experiência no mercado imobiliário...'}</textarea>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Destaque da velocidade (ex: 47%)</label>
-                    <input type="text" id="cfg-velocidade" class="form-control" value="${cfg.velocidade||'47%'}">
-                </div>
-            </div>
-        </div>
-
-        <!-- BAIRROS ATENDIDOS -->
-        <div class="dashboard-card" style="margin-bottom:1.2rem;">
-            <h3 style="margin-bottom:1rem;"><i class="fas fa-map-marker-alt"></i> Bairros Atendidos (faixa rolante)</h3>
-            <div class="form-group">
-                <label class="form-label">Bairros separados por vírgula</label>
-                <input type="text" id="cfg-bairros" class="form-control" value="${cfg.bairros||'Ipanema, Leblon, Barra da Tijuca, Recreio dos Bandeirantes, Barra Olímpica, Copacabana'}">
-            </div>
-        </div>
-
-        <!-- DEPOIMENTOS -->
-        <div class="dashboard-card" style="margin-bottom:1.5rem;">
-            <h3 style="margin-bottom:1rem;"><i class="fas fa-quote-right"></i> Depoimentos</h3>
-            <div id="depoimentos-list" style="display:flex;flex-direction:column;gap:.8rem;">
-                ${(cfg.depoimentos||[
-                    {texto:'O Leandro não apenas vendeu nosso apartamento, ele realizou nosso sonho do primeiro lar.', autor:'Carlos e Ana Lima', local:'Ipanema'},
-                    {texto:'Profissional incrível! Conseguiu vender minha cobertura em apenas 15 dias pelo valor que eu queria.', autor:'Roberto Fonseca', local:'Barra da Tijuca'},
-                ]).map((d,i) => `
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);" id="dep-${i}">
-                    <input type="text" class="form-control dep-texto" placeholder="Depoimento" value="${d.texto||''}">
-                    <input type="text" class="form-control dep-autor" placeholder="Nome" value="${d.autor||''}">
-                    <input type="text" class="form-control dep-local" placeholder="Bairro" value="${d.local||''}">
-                    <button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>
-                </div>`).join('')}
-            </div>
-            <button onclick="addDepoimento()" class="btn-secondary" style="margin-top:.8rem;"><i class="fas fa-plus"></i> Adicionar depoimento</button>
-        </div>
-
-        <div style="display:flex;justify-content:flex-end;gap:.8rem;">
-            <button onclick="loadSiteConfig()" class="btn-secondary"><i class="fas fa-undo"></i> Descartar</button>
-            <button onclick="saveSiteConfig()" class="btn-primary"><i class="fas fa-save"></i> Salvar Configurações</button>
-        </div>
-    </div>`;
+    _linksListener = db.collection('links_copiados')
+        .orderBy('timestamp','desc')
+        .limit(1)
+        .onSnapshot(snap => {
+            snap.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const v = change.doc.data();
+                    showNotification(
+                        '🔗 Link copiado!',
+                        `"${v.titulo || 'Imóvel'}" — ${v.deviceId ? v.deviceId.slice(0,14)+'…' : ''}`,
+                        'green'
+                    );
+                    loadDashboardVisitas();
+                }
+            });
+        }, err => console.warn('Listener links:', err));
 }
 
-function addDepoimento() {
-    const list = document.getElementById('depoimentos-list');
-    const i = list.children.length;
-    const div = document.createElement('div');
-    div.id = 'dep-' + i;
-    div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);';
-    div.innerHTML = `<input type="text" class="form-control dep-texto" placeholder="Depoimento"><input type="text" class="form-control dep-autor" placeholder="Nome"><input type="text" class="form-control dep-local" placeholder="Bairro"><button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>`;
-    list.appendChild(div);
+function stopRealtimeListeners() {
+    if (_visitasListener) { _visitasListener(); _visitasListener = null; }
+    if (_linksListener)   { _linksListener();   _linksListener   = null; }
 }
 
-async function saveSiteConfig() {
-    const depoimentos = Array.from(document.querySelectorAll('[id^=dep-]')).map(el => ({
-        texto: el.querySelector('.dep-texto')?.value || '',
-        autor: el.querySelector('.dep-autor')?.value || '',
-        local: el.querySelector('.dep-local')?.value || '',
-    })).filter(d => d.texto);
+// Toast de notificação diferente do toast padrão (não sobrepõe)
+let _notifQueue = [];
+let _notifActive = false;
 
-    const cfg = {
-        nome:              document.getElementById('cfg-nome')?.value || '',
-        creci:             document.getElementById('cfg-creci')?.value || '',
-        whatsapp:          document.getElementById('cfg-whatsapp')?.value || '',
-        emailContato:      document.getElementById('cfg-email')?.value || '',
-        fotoPerfil:        document.getElementById('cfg-foto')?.value || '',
-        anosExperiencia:   parseInt(document.getElementById('cfg-anos')?.value) || 6,
-        imoveisNegociados: parseInt(document.getElementById('cfg-imoveis-neg')?.value) || 60,
-        satisfacao:        parseInt(document.getElementById('cfg-satisfacao')?.value) || 100,
-        heroTitulo:        document.getElementById('cfg-hero-titulo')?.value || '',
-        heroDesc:          document.getElementById('cfg-hero-desc')?.value || '',
-        velocidade:        document.getElementById('cfg-velocidade')?.value || '',
-        bairros:           document.getElementById('cfg-bairros')?.value || '',
-        depoimentos,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    };
+function showNotification(title, body, color) {
+    _notifQueue.push({ title, body, color });
+    if (!_notifActive) processNotifQueue();
+}
 
-    try {
-        await db.collection('config').doc('site').set(cfg);
-        showToast('✅ Configurações salvas! Atualize o site para ver as mudanças.');
-    } catch(e) {
-        showToast('Erro ao salvar configurações', 'error');
-        console.error(e);
+function processNotifQueue() {
+    if (!_notifQueue.length) { _notifActive = false; return; }
+    _notifActive = true;
+    const { title, body, color } = _notifQueue.shift();
+    const colors = { blue:'var(--accent)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)' };
+    const c = colors[color] || colors.blue;
+
+    let el = document.getElementById('_realtime-notif');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = '_realtime-notif';
+        el.style.cssText = `position:fixed;bottom:5.5rem;right:1.5rem;z-index:9999;min-width:260px;max-width:320px;
+            background:var(--bg-elevated);border-radius:var(--radius);padding:.9rem 1.1rem;
+            box-shadow:var(--shadow-lg);display:flex;gap:.75rem;align-items:flex-start;
+            border-left:3px solid ${c};transform:translateX(120%);transition:transform .35s cubic-bezier(.22,1,.36,1);`;
+        document.body.appendChild(el);
     }
+    el.style.borderLeftColor = c;
+    el.innerHTML = `
+        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.3rem;flex-shrink:0;box-shadow:0 0 8px ${c};animation:pulse 1.2s infinite;"></div>
+        <div><div style="font-weight:600;font-size:.82rem;color:var(--text-primary);">${title}</div>
+        <div style="font-size:.75rem;color:var(--text-secondary);margin-top:.15rem;">${body}</div></div>`;
+    requestAnimationFrame(() => { el.style.transform = 'translateX(0)'; });
+    setTimeout(() => {
+        el.style.transform = 'translateX(120%)';
+        setTimeout(processNotifQueue, 400);
+    }, 4000);
+}
+
+// ========== LINKS COPIADOS — RELATÓRIO ==========
+async function loadLinksCopiados() {
+    if (!db) return;
+    try {
+        const snap = await db.collection('links_copiados').orderBy('timestamp','desc').limit(100).get();
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        return data;
+    } catch(e) { return []; }
 }
 
 // ========== PERFIL DE VISITANTE ==========
@@ -676,136 +679,172 @@ async function loadPerfilVisitante() {
     const content = document.getElementById('perfil-content');
     if (loading) loading.style.display = 'flex';
     if (content) content.style.display = 'none';
-
     try {
-        // Carrega visitas de páginas e de imóveis em paralelo
-        const [visitasSnap, imoveisSnap, imoveisListSnap] = await Promise.all([
+        const [visitasSnap, imoveisSnap, imoveisListSnap, linksSnap] = await Promise.all([
             db.collection('visitas').orderBy('timestamp','desc').get(),
             db.collection('visitas_imoveis').orderBy('timestamp','desc').get(),
-            db.collection('imoveis').get()
+            db.collection('imoveis').get(),
+            db.collection('links_copiados').orderBy('timestamp','desc').get()
         ]);
-
         const visitas = visitasSnap.docs.map(d => ({id:d.id,...d.data()}));
         const imoveisViews = imoveisSnap.docs.map(d => ({id:d.id,...d.data()}));
+        const linksCopiados = linksSnap.docs.map(d => ({id:d.id,...d.data()}));
         const imoveis = {};
         imoveisListSnap.docs.forEach(d => { imoveis[d.id] = d.data(); });
-
         if (loading) loading.style.display = 'none';
         if (content) content.style.display = 'block';
-
-        renderPerfilVisitante(visitas, imoveisViews, imoveis);
+        renderPerfilVisitante(visitas, imoveisViews, imoveis, linksCopiados);
     } catch(e) {
         console.error(e);
-        showToast('Erro ao carregar perfil', 'error');
+        showToast('Erro ao carregar perfil','error');
         if (loading) loading.style.display = 'none';
     }
 }
 
-function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog) {
+function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopiados) {
+    linksCopiados = linksCopiados || [];
     const content = document.getElementById('perfil-content');
 
-    // Agrupa por deviceId
+    // Agrupa visitas por deviceId
     const devMap = {};
     visitas.forEach(v => {
-        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: v.userAgent };
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:v.userAgent };
         devMap[v.deviceId].pages.push(v.page);
         if (v.date < devMap[v.deviceId].firstSeen) devMap[v.deviceId].firstSeen = v.date;
         if (v.date > devMap[v.deviceId].lastSeen) devMap[v.deviceId].lastSeen = v.date;
     });
 
-    // Adiciona imóveis vistos por device
+    // Imóveis vistos por device
     imoveisViews.forEach(v => {
-        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: '' };
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:'' };
         if (!devMap[v.deviceId].imoveisVistos) devMap[v.deviceId].imoveisVistos = [];
-        devMap[v.deviceId].imoveisVistos.push({ id: v.imovelId, titulo: v.titulo, bairro: v.bairro, date: v.date });
+        devMap[v.deviceId].imoveisVistos.push({ id:v.imovelId, titulo:v.titulo, bairro:v.bairro, date:v.date });
     });
 
-    // Top imóveis mais visualizados
+    // Links copiados por device
+    const linksByDevice = {};
+    linksCopiados.forEach(v => {
+        if (!linksByDevice[v.deviceId]) linksByDevice[v.deviceId] = [];
+        linksByDevice[v.deviceId].push({ titulo:v.titulo, imovelId:v.imovelId, date:v.date });
+        // também garante o device no mapa
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:'' };
+    });
+
+    // Top imóveis mais vistos
     const imovelCount = {};
     imoveisViews.forEach(v => {
-        if (!imovelCount[v.imovelId]) imovelCount[v.imovelId] = { id: v.imovelId, titulo: v.titulo, bairro: v.bairro, count: 0, devices: new Set() };
+        if (!imovelCount[v.imovelId]) imovelCount[v.imovelId] = { id:v.imovelId, titulo:v.titulo, bairro:v.bairro, count:0, devices:new Set() };
         imovelCount[v.imovelId].count++;
         imovelCount[v.imovelId].devices.add(v.deviceId);
     });
-    const topImoveis = Object.values(imovelCount).sort((a,b) => b.count - a.count).slice(0, 10);
+    const topImoveis = Object.values(imovelCount).sort((a,b)=>b.count-a.count).slice(0,10);
 
-    const devices = Object.values(devMap).sort((a,b) => (b.lastSeen||'') > (a.lastSeen||'') ? 1 : -1);
+    // Top links copiados
+    const linkCount = {};
+    linksCopiados.forEach(v => {
+        const k = v.imovelId || v.titulo;
+        if (!linkCount[k]) linkCount[k] = { titulo:v.titulo||k, count:0, devices:new Set() };
+        linkCount[k].count++;
+        linkCount[k].devices.add(v.deviceId);
+    });
+    const topLinks = Object.values(linkCount).sort((a,b)=>b.count-a.count).slice(0,5);
+
+    const devices = Object.values(devMap).sort((a,b)=>(b.lastSeen||'')>(a.lastSeen||'')?1:-1);
 
     content.innerHTML = `
-    <!-- KPIs rápidos -->
     <div class="stats-grid" style="margin-bottom:1.5rem;">
         <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-fingerprint"></i></div><div class="stat-info"><span class="stat-value">${devices.length}</span><span class="stat-label">Dispositivos Únicos</span></div></div>
         <div class="stat-card"><div class="stat-icon green"><i class="fas fa-building"></i></div><div class="stat-info"><span class="stat-value">${imoveisViews.length}</span><span class="stat-label">Views de Imóveis</span></div></div>
-        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-route"></i></div><div class="stat-info"><span class="stat-value">${devices.filter(d => new Set(d.pages).size > 1).length}</span><span class="stat-label">Visitantes Multi-página</span></div></div>
+        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-link"></i></div><div class="stat-info"><span class="stat-value">${linksCopiados.length}</span><span class="stat-label">Links Copiados</span></div></div>
         <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-fire"></i></div><div class="stat-info"><span class="stat-value">${topImoveis[0]?.titulo?.split(' ').slice(0,2).join(' ')||'—'}</span><span class="stat-label">Imóvel Mais Visto</span></div></div>
     </div>
 
-    <!-- TOP IMÓVEIS MAIS VISTOS -->
-    ${topImoveis.length ? `
-    <div class="dashboard-card" style="margin-bottom:1.5rem;">
-        <h3 style="margin-bottom:1rem;"><i class="fas fa-fire" style="color:var(--amber)"></i> Imóveis Mais Visualizados</h3>
-        <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:.83rem;">
-            <thead><tr style="border-bottom:1px solid var(--border);">
-                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">#</th>
-                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">Imóvel</th>
-                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">Bairro</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--text-muted);font-weight:500;">Visualizações</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--text-muted);font-weight:500;">Dispositivos</th>
-            </tr></thead>
-            <tbody>
-            ${topImoveis.map((im,i) => `<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
-                <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
-                <td style="padding:.6rem .8rem;color:var(--text-primary);font-weight:500;">${im.titulo||im.id}</td>
-                <td style="padding:.6rem .8rem;color:var(--text-secondary);">${im.bairro||'—'}</td>
-                <td style="padding:.6rem .8rem;text-align:center;"><span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .7rem;border-radius:99px;font-weight:700;">${im.count}</span></td>
-                <td style="padding:.6rem .8rem;text-align:center;color:var(--text-secondary);">${im.devices.size}</td>
-            </tr>`).join('')}
-            </tbody>
-        </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+        <!-- TOP IMÓVEIS MAIS VISTOS -->
+        <div class="dashboard-card">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-fire" style="color:var(--amber)"></i> Imóveis Mais Vistos</h3>
+            ${topImoveis.length ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+                <thead><tr style="border-bottom:1px solid var(--border);">
+                    <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);font-weight:500;">#</th>
+                    <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);font-weight:500;">Imóvel</th>
+                    <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Views</th>
+                    <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Devs</th>
+                </tr></thead>
+                <tbody>${topImoveis.map((im,i)=>`<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i+1}</td>
+                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${im.titulo||im.id}</td>
+                    <td style="padding:.5rem .6rem;text-align:center;"><span style="background:var(--amber-soft);color:var(--amber);padding:.15rem .6rem;border-radius:99px;font-weight:700;">${im.count}</span></td>
+                    <td style="padding:.5rem .6rem;text-align:center;color:var(--text-secondary);">${im.devices.size}</td>
+                </tr>`).join('')}</tbody>
+            </table></div>` : '<p style="color:var(--text-muted);font-size:.83rem;padding:1rem 0;">Nenhum imóvel visualizado ainda</p>'}
         </div>
-    </div>` : '<div class="dashboard-card" style="margin-bottom:1.5rem;text-align:center;padding:2rem;color:var(--text-muted)"><i class="fas fa-building" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.7rem;"></i>Nenhum imóvel visualizado ainda</div>'}
 
-    <!-- PERFIL DE CADA DISPOSITIVO -->
+        <!-- LINKS MAIS COPIADOS -->
+        <div class="dashboard-card">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-link" style="color:var(--purple)"></i> Links Mais Copiados</h3>
+            ${topLinks.length ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+                <thead><tr style="border-bottom:1px solid var(--border);">
+                    <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);font-weight:500;">#</th>
+                    <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);font-weight:500;">Imóvel</th>
+                    <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Cópias</th>
+                    <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Devs</th>
+                </tr></thead>
+                <tbody>${topLinks.map((lk,i)=>`<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i+1}</td>
+                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${lk.titulo||'—'}</td>
+                    <td style="padding:.5rem .6rem;text-align:center;"><span style="background:var(--purple-soft);color:var(--purple);padding:.15rem .6rem;border-radius:99px;font-weight:700;">${lk.count}</span></td>
+                    <td style="padding:.5rem .6rem;text-align:center;color:var(--text-secondary);">${lk.devices.size}</td>
+                </tr>`).join('')}</tbody>
+            </table></div>` : '<p style="color:var(--text-muted);font-size:.83rem;padding:1rem 0;">Nenhum link copiado ainda</p>'}
+        </div>
+    </div>
+
+    <!-- PERFIL POR DISPOSITIVO -->
     <div class="dashboard-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
             <h3><i class="fas fa-users"></i> Perfil por Dispositivo</h3>
-            <span style="font-size:.78rem;color:var(--text-muted);">${devices.length} visitante(s)</span>
+            <span style="font-size:.78rem;color:var(--text-muted);">${devices.length} visitante(s) — clique para expandir</span>
         </div>
-        ${devices.length === 0 ? '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Nenhum visitante ainda</p>' :
-        devices.map((dev, idx) => {
-            const ua = parseUA(dev.ua);
+        ${devices.length===0 ? '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Nenhum visitante ainda</p>' :
+        devices.map((dev,idx) => {
+            const ua = parseUA(dev.ua||'');
             const uniquePages = [...new Set(dev.pages)];
             const imVisto = dev.imoveisVistos || [];
+            const linksDev = linksByDevice[dev.deviceId] || [];
             return `
-            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.8rem;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="this.querySelector('.dev-detail').style.display=this.querySelector('.dev-detail').style.display==='none'?'block':'none'">
+            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.7rem;cursor:pointer;transition:border-color .2s,background .2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''" onclick="this.querySelector('.dev-detail').style.display=this.querySelector('.dev-detail').style.display==='none'?'block':'none'">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
                     <div style="display:flex;align-items:center;gap:.7rem;">
-                        ${deviceIcon(ua.device)}
+                        <span style="font-size:1.1rem;">${deviceIcon(ua.device)}</span>
                         <div>
-                            <div style="font-family:monospace;font-size:.75rem;color:var(--text-muted);">${(dev.deviceId||'').slice(0,28)}…</div>
-                            <div style="font-size:.8rem;color:var(--text-secondary);margin-top:.15rem;">${ua.browser} · ${ua.os}</div>
+                            <div style="font-family:monospace;font-size:.72rem;color:var(--text-muted);">${(dev.deviceId||'').slice(0,26)}…</div>
+                            <div style="font-size:.78rem;color:var(--text-secondary);margin-top:.1rem;">${ua.browser} · ${ua.os}</div>
                         </div>
                     </div>
-                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                        ${uniquePages.map(p => pageBadge(p)).join('')}
-                        ${imVisto.length ? `<span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;"><i class="fas fa-building"></i> ${imVisto.length} imóvel(is)</span>` : ''}
-                        <span style="font-size:.75rem;color:var(--text-muted);">último acesso: ${dev.lastSeen||'—'}</span>
-                        <i class="fas fa-chevron-down" style="color:var(--text-muted);font-size:.7rem;"></i>
+                    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+                        ${uniquePages.map(p=>pageBadge(p)).join('')}
+                        ${imVisto.length?`<span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-building"></i> ${imVisto.length}</span>`:''}
+                        ${linksDev.length?`<span style="background:var(--purple-soft);color:var(--purple);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-link"></i> ${linksDev.length}</span>`:''}
+                        <span style="font-size:.72rem;color:var(--text-muted);">↩ ${dev.lastSeen||'—'}</span>
+                        <i class="fas fa-chevron-down" style="color:var(--text-muted);font-size:.65rem;"></i>
                     </div>
                 </div>
-                <div class="dev-detail" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="dev-detail" style="display:none;margin-top:.9rem;padding-top:.9rem;border-top:1px solid var(--border);">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
                         <div>
-                            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em;">Páginas visitadas</div>
-                            ${uniquePages.map(p => `<div style="padding:.3rem 0;color:var(--text-secondary);font-size:.82rem;"><i class="fas fa-check" style="color:var(--green);margin-right:.4rem;font-size:.7rem;"></i>${p}</div>`).join('')}
+                            <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Páginas visitadas</div>
+                            ${uniquePages.map(p=>`<div style="padding:.25rem 0;color:var(--text-secondary);font-size:.8rem;"><i class="fas fa-check" style="color:var(--green);margin-right:.35rem;font-size:.65rem;"></i>${p}</div>`).join('')}
                         </div>
                         <div>
-                            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em;">Imóveis visualizados</div>
-                            ${imVisto.length ? imVisto.map(iv => `<div style="padding:.3rem 0;font-size:.82rem;"><span style="color:var(--text-secondary);">${iv.titulo||iv.id}</span> <span style="color:var(--text-muted);font-size:.72rem;">— ${iv.date||''}</span></div>`).join('') : '<span style="color:var(--text-muted);font-size:.8rem;">Nenhum imóvel aberto</span>'}
+                            <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Imóveis vistos</div>
+                            ${imVisto.length?imVisto.map(iv=>`<div style="padding:.25rem 0;font-size:.78rem;color:var(--text-secondary);">${iv.titulo||iv.id} <span style="color:var(--text-muted);font-size:.7rem;">· ${iv.date||''}</span></div>`).join(''):'<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
+                        </div>
+                        <div>
+                            <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Links copiados</div>
+                            ${linksDev.length?linksDev.map(lk=>`<div style="padding:.25rem 0;font-size:.78rem;"><i class="fas fa-link" style="color:var(--purple);margin-right:.3rem;font-size:.65rem;"></i><span style="color:var(--text-secondary);">${lk.titulo||'Imóvel'}</span> <span style="color:var(--text-muted);font-size:.7rem;">· ${lk.date||''}</span></div>`).join(''):'<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
                         </div>
                     </div>
-                    <div style="margin-top:.7rem;font-size:.72rem;color:var(--text-muted);">Primeiro acesso: ${dev.firstSeen||'—'} · User Agent: ${(dev.ua||'').slice(0,80)}</div>
+                    <div style="margin-top:.6rem;font-size:.68rem;color:var(--text-muted);">1º acesso: ${dev.firstSeen||'—'} · ${(dev.ua||'').slice(0,90)}</div>
                 </div>
             </div>`;
         }).join('')}
