@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- Firebase rastreador de visitas -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="tracker.js"></script>
@@ -106,7 +105,7 @@
                 <p class="modal-preco" id="modal-preco"></p>
                 <p class="modal-descricao" id="modal-descricao"></p>
                 <div class="modal-cta-group">
-                    <a href="https://wa.me/5521981424469" class="modal-cta">
+                    <a id="modal-whatsapp" href="https://wa.me/5521981424469" class="modal-cta" target="_blank" rel="noopener">
                         <i class="fab fa-whatsapp"></i>
                         <span>Tenho Interesse</span>
                     </a>
@@ -114,6 +113,10 @@
                         <i class="fas fa-address-card"></i>
                         <span>Ver Contatos</span>
                     </a>
+                    <button id="modal-share-btn" class="modal-cta modal-cta-share" type="button">
+                        <i class="fas fa-share-alt"></i>
+                        <span>Compartilhar</span>
+                    </button>
                 </div>
             </div>
         </div>
