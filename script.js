@@ -475,9 +475,113 @@ class TestimonialsCarousel {
 
 // ========== INICIALIZAÇÃO ==========
 
+// ========== CONFIG DO SITE (Firestore) ==========
+function waitForFirebaseScript(cb, attempts) {
+    attempts = attempts || 0;
+    if (attempts > 40) return;
+    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) { cb(); }
+    else { setTimeout(() => waitForFirebaseScript(cb, attempts + 1), 100); }
+}
+
+function loadSiteConfig() {
+    waitForFirebaseScript(() => {
+        try {
+            firebase.firestore().collection('config').doc('site').get().then(doc => {
+                if (!doc.exists) return;
+                const cfg = doc.data();
+
+                // Foto de perfil
+                if (cfg.fotoPerfil) {
+                    const img = document.getElementById('cfg-foto');
+                    if (img) img.src = cfg.fotoPerfil;
+                }
+
+                // Texto hero — substitui mantendo as 3 linhas com gradiente
+                if (cfg.heroTitulo) {
+                    const titleEl = document.getElementById('cfg-hero-title');
+                    if (titleEl) {
+                        const words = cfg.heroTitulo.split(' ');
+                        const mid = Math.ceil(words.length / 2);
+                        const line1 = words.slice(0, Math.floor(words.length/3)).join(' ');
+                        const line2 = words.slice(Math.floor(words.length/3), Math.ceil(words.length*2/3)).join(' ');
+                        const line3 = words.slice(Math.ceil(words.length*2/3)).join(' ');
+                        titleEl.innerHTML = `<span class="title-line">${line1}</span><span class="title-line gradient-text">${line2}</span><span class="title-line">${line3}</span>`;
+                    }
+                }
+
+                // Descrição hero
+                if (cfg.heroDesc) {
+                    const desc = document.getElementById('cfg-hero-desc');
+                    if (desc) desc.textContent = cfg.heroDesc;
+                }
+
+                // Números (trust indicators)
+                const setCounter = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el && val) {
+                        el.setAttribute('data-target', val);
+                        el.textContent = '0';
+                    }
+                };
+                if (cfg.anosExperiencia) setCounter('cfg-anos', cfg.anosExperiencia);
+                if (cfg.imoveisNegociados) setCounter('cfg-imoveis-neg', cfg.imoveisNegociados);
+                if (cfg.satisfacao) setCounter('cfg-satisfacao', cfg.satisfacao);
+
+                // Velocidade (stats card)
+                if (cfg.velocidade) {
+                    ['cfg-velocidade-d','cfg-velocidade-m'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = cfg.velocidade;
+                    });
+                }
+
+                // Depoimentos
+                if (cfg.depoimentos && cfg.depoimentos.length) {
+                    const track = document.getElementById('cfg-depoimentos');
+                    if (track) {
+                        track.innerHTML = cfg.depoimentos.map(d => `
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">${d.texto||''}</p>
+                                <div class="testimonial-author">
+                                    <span>${d.autor||''}</span>
+                                    <span class="author-location">• ${d.local||''}</span>
+                                </div>
+                            </div>`).join('');
+
+                        // Atualiza dots do carrossel
+                        const dotsEl = track.closest('.testimonials-carousel')?.querySelector('.carousel-dots');
+                        if (dotsEl) {
+                            dotsEl.innerHTML = cfg.depoimentos.map((_, i) =>
+                                `<span class="dot${i===0?' active':''}"></span>`).join('');
+                        }
+                        // Re-inicializa carrossel
+                        if (window._carousel) window._carousel.destroy?.();
+                        window._carousel = new TestimonialsCarousel();
+                    }
+                }
+
+                // Bairros (faixa rolante)
+                if (cfg.bairros) {
+                    const track = document.getElementById('cfg-bairros-track');
+                    if (track) {
+                        const lista = cfg.bairros.split(',').map(b => b.trim()).filter(Boolean);
+                        const items = lista.map(b => `<span>${b}</span><span class="separator">✦</span>`).join('');
+                        track.innerHTML = items + items; // duplicado para loop infinito
+                    }
+                }
+
+            }).catch(() => {});
+        } catch(e) {}
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Carrega configurações do site do Firestore
+    loadSiteConfig();
+
     if (document.querySelector('.testimonials-carousel')) {
-        new TestimonialsCarousel();
+        window._carousel = new TestimonialsCarousel();
     }
 
     document.querySelectorAll('.fade-in').forEach((el, i) => {
