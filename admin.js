@@ -364,15 +364,21 @@ function closeDeleteModal() {
 // ========== RELATÓRIO DE VISITAS ==========
 let visitasFilter = { page: '', period: '14' };
 
+let linksData = [];
+
 async function loadVisitas() {
     if (!db) return;
     const loading = document.getElementById('visitas-loading');
     const content = document.getElementById('visitas-content');
     if (loading) loading.style.display = 'flex'; if (content) content.style.display = 'none';
     try {
-        const snap = await db.collection('visitas').orderBy('timestamp','desc').get();
-        visitasData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderVisitasReport(visitasData);
+        const [visitasSnap, linksSnap] = await Promise.all([
+            db.collection('visitas').orderBy('timestamp','desc').get(),
+            db.collection('links_copiados').orderBy('timestamp','desc').get().catch(()=>({docs:[]}))
+        ]);
+        visitasData = visitasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        linksData   = linksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderVisitasReport(visitasData, linksData);
         if (loading) loading.style.display = 'none'; if (content) content.style.display = 'block';
     } catch (e) { console.error(e); showToast('Erro ao carregar visitas','error'); if (loading) loading.style.display = 'none'; }
 }
@@ -413,12 +419,17 @@ function deviceIcon(device) {
 }
 
 function pageColor(page) {
-    const map = { 'Inicio':'var(--accent)', 'Imoveis':'var(--green)', 'Contato':'var(--amber)' };
-    return map[page] || 'var(--text-secondary)';
+    const p = (page||'').toLowerCase();
+    if (p.includes('inicio') || p === 'início' || p === 'inicio') return '#3b82f6';   // azul
+    if (p.includes('imovel') || p.includes('imóvel') || p === 'imoveis' || p === 'imóveis') return '#22c55e'; // verde
+    if (p.includes('contato')) return '#f59e0b'; // âmbar
+    return 'var(--text-secondary)';
 }
 
-function pageBadge(page) {
-    return `<span style="background:${pageColor(page)}22;color:${pageColor(page)};padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;">${page}</span>`;
+function pageBadge(page, extra) {
+    const color = pageColor(page);
+    const label = extra ? `${page} <span style="font-size:.65rem;opacity:.8;">${extra}</span>` : page;
+    return `<span style="background:${color}22;color:${color};padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:.25rem;">${label}</span>`;
 }
 
 function formatTimestamp(ts) {
@@ -427,50 +438,62 @@ function formatTimestamp(ts) {
     return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 }
 
-function renderVisitasReport(data) {
+function renderVisitasReport(data, links) {
+    links = links || linksData || [];
     const el = document.getElementById('visitas-content'); if (!el) return;
-    if (!data.length) {
+    if (!data.length && !links.length) {
         el.innerHTML = '<div class="empty-state"><i class="fas fa-eye-slash"></i><h3>Sem dados de visitas</h3><p>Aguarde visitantes acessarem o site.</p></div>';
         return;
     }
     const filtered = getFilteredVisitas(data);
-    const uniqueDevices = new Set(data.map(v => v.deviceId));
     const uniqueDevicesFiltered = new Set(filtered.map(v => v.deviceId));
     const totalVisitas = filtered.length;
     const hoje = new Date().toISOString().slice(0,10);
     const visitasHoje = data.filter(v => v.date === hoje).length;
-    const porPagina = {}; filtered.forEach(v => porPagina[v.page] = (porPagina[v.page]||0)+1);
-    const devPorPagina = {}; filtered.forEach(v => { if (!devPorPagina[v.page]) devPorPagina[v.page] = new Set(); devPorPagina[v.page].add(v.deviceId); });
+    const porPagina = {}; filtered.forEach(v => { const k=v.page||'?'; porPagina[k]=(porPagina[k]||0)+1; });
+    const devPorPagina = {}; filtered.forEach(v => { const k=v.page||'?'; if (!devPorPagina[k]) devPorPagina[k]=new Set(); devPorPagina[k].add(v.deviceId); });
     const days = parseInt(visitasFilter.period) || 14;
     const porDia = {};
     for (let i=days-1; i>=0; i--) { const d=new Date(); d.setDate(d.getDate()-i); porDia[d.toISOString().slice(0,10)]=0; }
     filtered.forEach(v => { if (v.date && porDia.hasOwnProperty(v.date)) porDia[v.date]++; });
     const maxDia = Math.max(...Object.values(porDia), 1);
     const diasAtivos = Object.values(porDia).filter(v=>v>0).length;
-    const browsers={}, oss={}, devices={mobile:0,tablet:0,desktop:0};
+    const browsers={}, devices={mobile:0,tablet:0,desktop:0};
     filtered.forEach(v => {
         const p=parseUA(v.userAgent);
         browsers[p.browser]=(browsers[p.browser]||0)+1;
-        oss[p.os]=(oss[p.os]||0)+1;
         devices[p.device]++;
     });
-    const allPages=[...new Set(data.map(v=>v.page))];
+    const allPages=[...new Set(data.map(v=>v.page).filter(Boolean))];
+
+    // Mescla visitas + links numa timeline unificada para a tabela
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-(days-1));
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const filteredLinks = links.filter(l => !l.date || l.date >= cutoffStr);
+    const merged = [
+        ...filtered.map(v => ({ ...v, _tipo: 'visita' })),
+        ...filteredLinks.map(l => ({ ...l, _tipo: 'link' }))
+    ].sort((a,b) => {
+        const ta = a.timestamp?.seconds || 0;
+        const tb = b.timestamp?.seconds || 0;
+        return tb - ta;
+    });
 
     el.innerHTML = `
     <!-- FILTROS -->
     <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem;padding:1rem 1.2rem;background:var(--bg-elevated);border-radius:var(--radius);border:1px solid var(--border);">
         <i class="fas fa-filter" style="color:var(--text-muted)"></i>
         <span style="color:var(--text-secondary);font-size:.82rem;font-weight:500;">Filtrar por:</span>
-        <select onchange="visitasFilter.page=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
+        <select onchange="visitasFilter.page=this.value;renderVisitasReport(visitasData,linksData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
             <option value="">Todas as páginas</option>
             ${allPages.map(p=>`<option value="${p}" ${visitasFilter.page===p?'selected':''}>${p}</option>`).join('')}
         </select>
-        <select onchange="visitasFilter.period=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
+        <select onchange="visitasFilter.period=this.value;renderVisitasReport(visitasData,linksData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
             <option value="7" ${visitasFilter.period==='7'?'selected':''}>Últimos 7 dias</option>
             <option value="14" ${visitasFilter.period==='14'?'selected':''}>Últimos 14 dias</option>
             <option value="30" ${visitasFilter.period==='30'?'selected':''}>Últimos 30 dias</option>
         </select>
-        <span style="margin-left:auto;color:var(--text-muted);font-size:.78rem;">${filtered.length} registro(s)</span>
+        <span style="margin-left:auto;color:var(--text-muted);font-size:.78rem;">${merged.length} evento(s)</span>
     </div>
 
     <!-- KPIs -->
@@ -478,7 +501,7 @@ function renderVisitasReport(data) {
         <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-eye"></i></div><div class="stat-info"><span class="stat-value">${totalVisitas}</span><span class="stat-label">Total de Visitas</span></div></div>
         <div class="stat-card"><div class="stat-icon green"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value">${uniqueDevicesFiltered.size}</span><span class="stat-label">Visitantes Únicos</span></div></div>
         <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${visitasHoje}</span><span class="stat-label">Visitas Hoje</span></div></div>
-        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${diasAtivos?Math.round(totalVisitas/diasAtivos):0}</span><span class="stat-label">Média Diária</span></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-link"></i></div><div class="stat-info"><span class="stat-value">${filteredLinks.length}</span><span class="stat-label">Links Copiados</span></div></div>
     </div>
 
     <!-- GRÁFICO DE BARRAS -->
@@ -502,63 +525,73 @@ function renderVisitasReport(data) {
             <div style="margin-top:.8rem;">
             ${Object.entries(porPagina).sort((a,b)=>b[1]-a[1]).map(([pg,n])=>`
                 <div style="margin-bottom:1rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">${pageBadge(pg)}<span style="font-weight:600;font-size:.9rem;">${n}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;background:${pageColor(pg)};opacity:.85;"></div></div>
-                    <span style="font-size:.72rem;color:var(--text-muted);">${devPorPagina[pg]?.size||0} dispositivos únicos</span>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">${pageBadge(pg)}<span style="font-weight:700;font-size:.92rem;">${n}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${(n/Math.max(totalVisitas,1))*100}%;background:${pageColor(pg)};opacity:.85;border-radius:99px;"></div></div>
+                    <span style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem;display:block;">${devPorPagina[pg]?.size||0} dispositivos únicos</span>
                 </div>`).join('')}
             </div>
         </div>
         <div class="dashboard-card">
             <h3><i class="fas fa-mobile-alt"></i> Tipo de Dispositivo</h3>
             <div style="margin-top:.8rem;">
-                ${[['desktop','Desktop','var(--green)'],['mobile','Mobile','var(--accent)'],['tablet','Tablet','var(--purple)']].map(([k,label,color])=>`
+                ${[['desktop','Desktop','#22c55e'],['mobile','Mobile','#3b82f6'],['tablet','Tablet','#a855f7']].map(([k,label,color])=>`
                 <div style="margin-bottom:.9rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIcon(k)} ${label}</span><span style="font-weight:600;">${devices[k]}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${totalVisitas?((devices[k]/totalVisitas)*100):0}%;background:${color};opacity:.8;"></div></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIcon(k)} ${label}</span><span style="font-weight:700;">${devices[k]}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${totalVisitas?((devices[k]/totalVisitas)*100):0}%;background:${color};opacity:.8;border-radius:99px;"></div></div>
                 </div>`).join('')}
             </div>
         </div>
         <div class="dashboard-card">
             <h3><i class="fas fa-globe"></i> Navegadores</h3>
             <div style="margin-top:.8rem;">
-            ${Object.entries(browsers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n])=>`
-                <div style="margin-bottom:.9rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:var(--text-secondary);font-size:.83rem;">${br}</span><span style="font-weight:600;">${n}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;opacity:.8;"></div></div>
-                </div>`).join('')}
+            ${Object.entries(browsers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n],idx)=>{
+                const cols=['#3b82f6','#f59e0b','#22c55e','#a855f7','#ef4444'];
+                return `<div style="margin-bottom:.9rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:var(--text-secondary);font-size:.83rem;">${br}</span><span style="font-weight:700;">${n}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${(n/Math.max(totalVisitas,1))*100}%;background:${cols[idx]};opacity:.8;border-radius:99px;"></div></div>
+                </div>`;
+            }).join('')}
             </div>
         </div>
     </div>
 
-    <!-- TABELA INDIVIDUAL -->
+    <!-- TABELA UNIFICADA: VISITAS + LINKS -->
     <div class="dashboard-card" style="margin-bottom:1.5rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
             <h3><i class="fas fa-list-ul"></i> Registro Individual de Visitas</h3>
-            <span style="font-size:.78rem;color:var(--text-muted);">${filtered.length} entradas</span>
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                <span style="background:#3b82f622;color:#3b82f6;padding:.15rem .55rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-eye"></i> Visita</span>
+                <span style="background:#a855f722;color:#a855f7;padding:.15rem .55rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-link"></i> Link copiado</span>
+                <span style="font-size:.78rem;color:var(--text-muted);">${merged.length} evento(s)</span>
+            </div>
         </div>
         <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
             <thead><tr style="border-bottom:1px solid var(--border);">
                 <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">#</th>
                 <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Data / Hora</th>
-                <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Página</th>
+                <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Evento</th>
                 <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Dispositivo</th>
                 <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Navegador / OS</th>
                 <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">ID Dispositivo</th>
             </tr></thead>
             <tbody>
-                ${filtered.slice(0,100).map((v,i)=>{
-                    const p=parseUA(v.userAgent);
-                    return `<tr style="border-bottom:1px solid var(--border);transition:background .15s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                ${merged.slice(0,120).map((v,i)=>{
+                    const p = parseUA(v.userAgent||'');
+                    const isLink = v._tipo === 'link';
+                    const eventoCell = isLink
+                        ? `<span style="background:#a855f722;color:#a855f7;padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:.3rem;"><i class="fas fa-link" style="font-size:.62rem;"></i> ${v.titulo||'Imóvel'}</span>`
+                        : pageBadge(v.page||'?');
+                    return `<tr style="border-bottom:1px solid var(--border);transition:background .15s;${isLink?'background:rgba(168,85,247,0.03);':''}" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='${isLink?'rgba(168,85,247,0.03)':''}'">
                         <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
                         <td style="padding:.6rem .8rem;color:var(--text-secondary);white-space:nowrap;">${formatTimestamp(v.timestamp)}</td>
-                        <td style="padding:.6rem .8rem;">${pageBadge(v.page||'—')}</td>
+                        <td style="padding:.6rem .8rem;">${eventoCell}</td>
                         <td style="padding:.6rem .8rem;">${deviceIcon(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
                         <td style="padding:.6rem .8rem;color:var(--text-secondary);">${p.browser} · ${p.os}</td>
                         <td style="padding:.6rem .8rem;font-family:monospace;font-size:.75rem;color:var(--text-muted);" title="${v.deviceId||''}">${(v.deviceId||'—').slice(0,22)}…</td>
                     </tr>`;
                 }).join('')}
-                ${filtered.length>100?`<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.8rem;">… e mais ${filtered.length-100} registros. Exporte o CSV para ver todos.</td></tr>`:''}
+                ${merged.length>120?`<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.8rem;">… e mais ${merged.length-120} eventos. Exporte o CSV para ver todos.</td></tr>`:''}
             </tbody>
         </table>
         </div>
