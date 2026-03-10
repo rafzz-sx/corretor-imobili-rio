@@ -413,18 +413,20 @@ function deviceIcon(device) {
 }
 
 function pageColor(page) {
-    const p = (page || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if (p === 'inicio' || p === 'in\u00edcio') return '#3b82f6';
+    const p = (page||'').toLowerCase()
+        .replace(/[àáâãä]/g,'a').replace(/[èéêë]/g,'e')
+        .replace(/[ìíîï]/g,'i').replace(/[òóôõö]/g,'o')
+        .replace(/[ùúûü]/g,'u');
+    if (p === 'inicio' || p === 'in') return '#3b82f6';
     if (p.startsWith('im')) return '#22c55e';
-    if (p.startsWith('con')) return '#f59e0b';
+    if (p.startsWith('co')) return '#f59e0b';
     return '#94a3b8';
 }
 
 function pageBadge(page) {
-    const color = pageColor(page);
-    // Converte hex para rgba para funcionar no background com opacidade
-    const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
-    return `<span style="background:rgba(${r},${g},${b},.18);color:${color};padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;">${page}</span>`;
+    const hex = pageColor(page);
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return `<span style="background:rgba(${r},${g},${b},.2);color:${hex};padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;display:inline-block;">${page}</span>`;
 }
 
 function formatTimestamp(ts) {
