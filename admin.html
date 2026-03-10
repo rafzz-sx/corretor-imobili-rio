@@ -75,12 +75,6 @@
                     <i class="fas fa-eye"></i><span>Visitas ao Site</span>
                 </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
-                <a href="#" class="nav-item" data-section="site">
-                    <i class="fas fa-sliders-h"></i><span>Config. do Site</span>
-                </a>
-                <a href="#" class="nav-item" data-section="perfil">
-                    <i class="fas fa-user-check"></i><span>Perfil de Visitante</span>
-                </a>
                 <a href="#" class="nav-item" data-section="configuracoes">
                     <i class="fas fa-cog"></i><span>Configurações</span>
                 </a>
@@ -128,7 +122,7 @@
                 </div>
 
                 <!-- Cards de visitas no dashboard -->
-                <div class="dash-visitas-row">
+                <div class="dash-visitas-row" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
                     <div class="dash-visitas-card">
                         <div class="dash-visitas-icon"><i class="fas fa-eye"></i></div>
                         <div class="dash-visitas-info">
@@ -145,6 +139,26 @@
                         </div>
                         <a href="#" onclick="showSection('visitas');return false;" class="dash-visitas-link">Ver relatório <i class="fas fa-arrow-right"></i></a>
                     </div>
+                    <div class="dash-visitas-card">
+                        <div class="dash-visitas-icon" style="background:var(--amber-soft);color:var(--amber)"><i class="fas fa-fire"></i></div>
+                        <div class="dash-visitas-info" id="dash-imovel-top">
+                            <strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>
+                        </div>
+                        <a href="#" onclick="showSection('perfil');return false;" class="dash-visitas-link">Perfil <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <div class="dash-visitas-card">
+                        <div class="dash-visitas-icon" style="background:var(--purple-soft);color:var(--purple)"><i class="fas fa-link"></i></div>
+                        <div class="dash-visitas-info">
+                            <span class="dash-visitas-value" id="dash-links-copiados">—</span>
+                            <span class="dash-visitas-label">Links copiados hoje</span>
+                        </div>
+                        <a href="#" onclick="showSection('perfil');return false;" class="dash-visitas-link">Ver perfil <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </div>
+                <!-- Indicador tempo real -->
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;margin-top:-.3rem;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 6px var(--green);animation:pulse 1.5s infinite;"></span>
+                    <span style="font-size:.73rem;color:var(--text-muted);">Monitorando em tempo real — novas visitas e links aparecem automaticamente</span>
                 </div>
 
                 <div class="dashboard-grid">
@@ -292,22 +306,6 @@
                     <span class="loading" style="border-top-color:var(--accent);"></span> Carregando dados...
                 </div>
                 <div id="visitas-content"></div>
-            </section>
-
-            <!-- CONFIGURAÇÕES DO SITE -->
-            <section id="section-site" class="admin-section">
-                <div id="site-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
-                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando...
-                </div>
-                <div id="site-content"></div>
-            </section>
-
-            <!-- PERFIL DE VISITANTE -->
-            <section id="section-perfil" class="admin-section">
-                <div id="perfil-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
-                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando...
-                </div>
-                <div id="perfil-content"></div>
             </section>
 
             <!-- CONFIGURAÇÕES -->
