@@ -1,5 +1,10 @@
 // ========== INICIALIZAR FIREBASE ==========
-// Firebase já foi inicializado pelo firebase-config.js
+// A configuração está no arquivo firebase-config.js
+// Certifique-se de que o arquivo firebase-config.js está configurado corretamente
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.firestore();
 
 // Array de imóveis (será preenchido do Firebase)
@@ -21,13 +26,7 @@ async function carregarImoveis() {
             </div>
         `;
         
-        let snapshot;
-        try {
-            snapshot = await db.collection('imoveis').orderBy('createdAt', 'desc').get();
-        } catch (indexErr) {
-            console.warn('orderBy falhou, tentando sem ordenação:', indexErr.message);
-            snapshot = await db.collection('imoveis').get();
-        }
+        const snapshot = await db.collection('imoveis').orderBy('createdAt', 'desc').get();
         imoveis = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -244,6 +243,11 @@ function openModal(imovelId) {
     const modal = document.getElementById('imovel-modal');
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
+
+    // Rastrear visualização do imóvel
+    if (typeof window.trackImovelView === 'function') {
+        window.trackImovelView(String(imo.id), imo.titulo, imo.bairro);
+    }
 }
 
 function closeModal() {
