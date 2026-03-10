@@ -1,103 +1,163 @@
-const imoveis = [
-    {
-        id: 1,
-        bairro: 'Ipanema',
-        quartos: 2,
-        preco: 850000,
-        area: 80,
-        titulo: 'Apartamento Moderno em Ipanema',
-        descricao: 'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.',
-        imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-        fotos: [
-            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-            'https://files.catbox.moe/ihe3p5.png',
-            'https://files.catbox.moe/ta8pp6.png',
-            'https://files.catbox.moe/0tg1le.png'
-        ]
-    },
-    {
-        id: 2,
-        bairro: 'Barra da Tijuca',
-        quartos: 3,
-        preco: 1200000,
-        area: 140,
-        titulo: 'Cobertura na Barra da Tijuca',
-        descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.',
-        imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
-        fotos: [
-            'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
-            'https://files.catbox.moe/o4xhj9.png',
-            'https://files.catbox.moe/ta8pp6.png',
-            'https://files.catbox.moe/ihe3p5.png'
-        ]
-    },
-    {
-        id: 3,
-        bairro: 'Recreio dos Bandeirantes',
-        quartos: 2,
-        preco: 520000,
-        area: 70,
-        titulo: 'Apartamento Moderno no Recreio',
-        descricao: 'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.',
-        imagem: 'https://files.catbox.moe/ihe3p5.png',
-        fotos: [
-            'https://files.catbox.moe/ihe3p5.png',
-            'https://files.catbox.moe/0tg1le.png',
-            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-            'https://files.catbox.moe/ta8pp6.png'
-        ]
-    },
-    {
-        id: 4,
-        bairro: 'Leblon',
-        quartos: 3,
-        preco: 1500000,
-        area: 110,
-        titulo: 'Apartamento Familiar no Leblon',
-        descricao: 'Espaçoso apartamento familiar com 3 quartos em um dos bairros mais valorizados do Rio de Janeiro.',
-        imagem: 'https://files.catbox.moe/o4xhj9.png',
-        fotos: [
-            'https://files.catbox.moe/o4xhj9.png',
-            'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
-            'https://files.catbox.moe/ta8pp6.png',
-            'https://files.catbox.moe/0tg1le.png'
-        ]
-    },
-    {
-        id: 5,
-        bairro: 'Barra Olímpica',
-        quartos: 2,
-        preco: 680000,
-        area: 90,
-        titulo: 'Apartamento Elegante na Barra Olímpica',
-        descricao: 'Apartamento elegante em condomínio fechado com 2 suítes, varanda gourmet e infraestrutura completa de lazer.',
-        imagem: 'https://files.catbox.moe/ta8pp6.png',
-        fotos: [
-            'https://files.catbox.moe/ta8pp6.png',
-            'https://files.catbox.moe/ihe3p5.png',
-            'https://files.catbox.moe/o4xhj9.png',
-            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg'
-        ]
-    },
-    {
-        id: 6,
-        bairro: 'Recreio dos Bandeirantes',
-        quartos: 2,
-        preco: 450000,
-        area: 72,
-        titulo: 'Apartamento Renovado no Recreio',
-        descricao: 'Apartamento recentemente renovado com cozinha americana, área de serviço e ótima localização.',
-        imagem: 'https://files.catbox.moe/0tg1le.png',
-        fotos: [
-            'https://files.catbox.moe/0tg1le.png',
-            'https://files.catbox.moe/ta8pp6.png',
-            'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-            'https://files.catbox.moe/ihe3p5.png'
-        ]
-    }
-];
+// ========== INICIALIZAR FIREBASE ==========
+// Firebase já foi inicializado pelo firebase-config.js
+const db = firebase.firestore();
 
-// Contador animado
+// Array de imóveis (será preenchido do Firebase)
+let imoveis = [];
+let imoveisCarregados = false;
+
+// ========== CARREGAR IMÓVEIS DO FIREBASE ==========
+
+async function carregarImoveis() {
+    try {
+        const gallery = document.getElementById('gallery');
+        if (!gallery) return;
+        
+        // Mostrar loading
+        gallery.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+                <div class="loading" style="display: inline-block; width: 40px; height: 40px; border: 3px solid rgba(52, 152, 219, 0.3); border-radius: 50%; border-top-color: #3498db; animation: spin 1s linear infinite;"></div>
+                <p style="color: #888; margin-top: 1rem;">Carregando imóveis...</p>
+            </div>
+        `;
+        
+        let snapshot;
+        try {
+            snapshot = await db.collection('imoveis').orderBy('createdAt', 'desc').get();
+        } catch (indexErr) {
+            console.warn('orderBy falhou, tentando sem ordenação:', indexErr.message);
+            snapshot = await db.collection('imoveis').get();
+        }
+        imoveis = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        imoveisCarregados = true;
+        renderGallery(imoveis);
+        
+    } catch (error) {
+        console.error('Erro ao carregar imóveis:', error);
+        // Fallback: usar dados estáticos se houver erro
+        carregarImoveisEstaticos();
+    }
+}
+
+// Dados estáticos de fallback
+function carregarImoveisEstaticos() {
+    imoveis = [
+        {
+            id: 1,
+            bairro: 'Ipanema',
+            quartos: 2,
+            preco: 850000,
+            area: 80,
+            titulo: 'Apartamento Moderno em Ipanema',
+            descricao: 'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.',
+            imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+            fotos: [
+                'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+                'https://files.catbox.moe/ihe3p5.png',
+                'https://files.catbox.moe/ta8pp6.png',
+                'https://files.catbox.moe/0tg1le.png'
+            ]
+        },
+        {
+            id: 2,
+            bairro: 'Barra da Tijuca',
+            quartos: 3,
+            preco: 1200000,
+            area: 140,
+            titulo: 'Cobertura na Barra da Tijuca',
+            descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.',
+            imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+            fotos: [
+                'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+                'https://files.catbox.moe/o4xhj9.png',
+                'https://files.catbox.moe/ta8pp6.png',
+                'https://files.catbox.moe/ihe3p5.png'
+            ]
+        },
+        {
+            id: 3,
+            bairro: 'Recreio dos Bandeirantes',
+            quartos: 2,
+            preco: 520000,
+            area: 70,
+            titulo: 'Apartamento Moderno no Recreio',
+            descricao: 'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.',
+            imagem: 'https://files.catbox.moe/ihe3p5.png',
+            fotos: [
+                'https://files.catbox.moe/ihe3p5.png',
+                'https://files.catbox.moe/0tg1le.png',
+                'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+                'https://files.catbox.moe/ta8pp6.png'
+            ]
+        },
+        {
+            id: 4,
+            bairro: 'Leblon',
+            quartos: 3,
+            preco: 1500000,
+            area: 110,
+            titulo: 'Apartamento Familiar no Leblon',
+            descricao: 'Espaçoso apartamento familiar com 3 quartos em um dos bairros mais valorizados do Rio de Janeiro.',
+            imagem: 'https://files.catbox.moe/o4xhj9.png',
+            fotos: [
+                'https://files.catbox.moe/o4xhj9.png',
+                'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
+                'https://files.catbox.moe/ta8pp6.png',
+                'https://files.catbox.moe/0tg1le.png'
+            ]
+        },
+        {
+            id: 5,
+            bairro: 'Barra Olímpica',
+            quartos: 2,
+            preco: 680000,
+            area: 90,
+            titulo: 'Apartamento Elegante na Barra Olímpica',
+            descricao: 'Apartamento elegante em condomínio fechado com 2 suítes, varanda gourmet e infraestrutura completa de lazer.',
+            imagem: 'https://files.catbox.moe/ta8pp6.png',
+            fotos: [
+                'https://files.catbox.moe/ta8pp6.png',
+                'https://files.catbox.moe/ihe3p5.png',
+                'https://files.catbox.moe/o4xhj9.png',
+                'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg'
+            ]
+        },
+        {
+            id: 6,
+            bairro: 'Recreio dos Bandeirantes',
+            quartos: 2,
+            preco: 450000,
+            area: 72,
+            titulo: 'Apartamento Renovado no Recreio',
+            descricao: 'Apartamento recentemente renovado com cozinha americana, área de serviço e ótima localização.',
+            imagem: 'https://files.catbox.moe/0tg1le.png',
+            fotos: [
+                'https://files.catbox.moe/0tg1le.png',
+                'https://files.catbox.moe/ta8pp6.png',
+                'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
+                'https://files.catbox.moe/ihe3p5.png'
+            ]
+        }
+    ];
+    
+    const gallery = document.getElementById('gallery');
+    if (gallery) {
+        gallery.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+                <p style="color: #888;">Não foi possível conectar ao servidor. Mostrando imóveis de exemplo.</p>
+            </div>
+        `;
+    }
+    
+    renderGallery(imoveis);
+}
+
+// ========== CONTADOR ANIMADO ==========
+
 const animateCounter = (counter) => {
     const target = parseInt(counter.getAttribute('data-target'));
     let current = 0;
@@ -129,7 +189,8 @@ document.querySelectorAll('.trust-number, .fade-in, .testimonial-card, .stats-ca
     observer.observe(el);
 });
 
-// Menu mobile
+// ========== MENU MOBILE ==========
+
 const menuToggle = document.querySelector('.menu-toggle');
 const navUl = document.querySelector('nav ul');
 
@@ -148,7 +209,8 @@ menuToggle?.addEventListener('click', () => {
     }
 });
 
-// Efeito parallax no mouse
+// ========== EFEITO PARALLAX NO MOUSE ==========
+
 document.addEventListener('mousemove', (e) => {
     const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
     const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
@@ -159,6 +221,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 // ========== MODAL SAIBA MAIS ==========
+
 let currentPhotoIndex = 0;
 let currentImovelFotos = [];
 
@@ -173,7 +236,7 @@ function openModal(imovelId) {
     document.getElementById('modal-bairro').textContent = imo.bairro;
     document.getElementById('modal-quartos').textContent = imo.quartos;
     document.getElementById('modal-area').textContent = imo.area + ' m²';
-    document.getElementById('modal-preco').textContent = 'R$ ' + imo.preco.toLocaleString('pt-BR');
+    document.getElementById('modal-preco').textContent = 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR');
     document.getElementById('modal-descricao').textContent = imo.descricao;
 
     renderModalPhotos();
@@ -228,6 +291,7 @@ function nextPhoto() {
 }
 
 // ========== GALERIA ==========
+
 function renderGallery(imoveisList) {
     const gallery = document.getElementById('gallery');
     if (!gallery) return;
@@ -239,6 +303,7 @@ function renderGallery(imoveisList) {
 
     let html = '';
     imoveisList.forEach(imo => {
+        const preco = parseFloat(imo.preco).toLocaleString('pt-BR');
         html += `
             <div class="imovel">
                 <div class="imovel-img-wrap">
@@ -252,9 +317,9 @@ function renderGallery(imoveisList) {
                         <span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>
                         <span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} quarto${imo.quartos > 1 ? 's' : ''}</span>
                     </div>
-                    <p class="imovel-preco">R$ ${imo.preco.toLocaleString('pt-BR')}</p>
+                    <p class="imovel-preco">R$ ${preco}</p>
                     <p class="imovel-desc">${imo.descricao}</p>
-                    <button class="btn-saiba-mais" onclick="openModal(${imo.id})">
+                    <button class="btn-saiba-mais" onclick="openModal('${imo.id}')">
                         <span>Saiba Mais</span>
                         <i class="fas fa-arrow-right"></i>
                     </button>
@@ -279,9 +344,10 @@ function filtrar() {
         const matchQuartos = !quartos || imo.quartos.toString() === quartos;
         let matchPreco = true;
         if (preco) {
-            if (preco === '0-600000') matchPreco = imo.preco <= 600000;
-            else if (preco === '600001-1000000') matchPreco = imo.preco > 600000 && imo.preco <= 1000000;
-            else if (preco === '1000001+') matchPreco = imo.preco > 1000000;
+            const precoNum = parseFloat(imo.preco);
+            if (preco === '0-600000') matchPreco = precoNum <= 600000;
+            else if (preco === '600001-1000000') matchPreco = precoNum > 600000 && precoNum <= 1000000;
+            else if (preco === '1000001+') matchPreco = precoNum > 1000000;
         }
         return matchBairro && matchQuartos && matchPreco;
     });
@@ -290,6 +356,7 @@ function filtrar() {
 }
 
 // ========== CARROSSEL ==========
+
 class TestimonialsCarousel {
     constructor() {
         this.currentIndex = 0;
@@ -356,6 +423,7 @@ class TestimonialsCarousel {
 }
 
 // ========== INICIALIZAÇÃO ==========
+
 document.addEventListener('DOMContentLoaded', () => {
     if (document.querySelector('.testimonials-carousel')) {
         new TestimonialsCarousel();
@@ -366,7 +434,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (document.getElementById('gallery')) {
-        renderGallery(imoveis);
+        // Carregar imóveis do Firebase
+        carregarImoveis();
+        
         document.getElementById('bairro')?.addEventListener('change', filtrar);
         document.getElementById('quartos')?.addEventListener('change', filtrar);
         document.getElementById('preco')?.addEventListener('change', filtrar);
@@ -386,3 +456,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('load', () => { document.body.classList.add('loaded'); });
+
+// Adicionar animação de loading
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
