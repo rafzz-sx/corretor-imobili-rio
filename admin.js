@@ -12,7 +12,7 @@ function initFirebase() {
     } catch (e) { console.error('❌', e); return false; }
 }
 
-let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], linksData = [], deleteId = null;
+let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], deleteId = null;
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas
 const SESSION_KEY = '_lb_session_start';
 let sessionTimer = null;
@@ -413,12 +413,18 @@ function deviceIcon(device) {
 }
 
 function pageColor(page) {
-    const map = { 'Inicio':'var(--accent)', 'Imoveis':'var(--green)', 'Contato':'var(--amber)' };
-    return map[page] || 'var(--text-secondary)';
+    const p = (page || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if (p === 'inicio' || p === 'in\u00edcio') return '#3b82f6';
+    if (p.startsWith('im')) return '#22c55e';
+    if (p.startsWith('con')) return '#f59e0b';
+    return '#94a3b8';
 }
 
 function pageBadge(page) {
-    return `<span style="background:${pageColor(page)}22;color:${pageColor(page)};padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;">${page}</span>`;
+    const color = pageColor(page);
+    // Converte hex para rgba para funcionar no background com opacidade
+    const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+    return `<span style="background:rgba(${r},${g},${b},.18);color:${color};padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;">${page}</span>`;
 }
 
 function formatTimestamp(ts) {
@@ -721,33 +727,33 @@ document.addEventListener('DOMContentLoaded', () => {
 let _visitasListener = null;
 let _linksListener = null;
 let _lastVisitasCount = null;
-let _visitasRealtimeListener = null;
-let _linksRealtimeListener   = null;
 
 function startRealtimeListeners() {
     if (_visitasListener) return; // já ativo
 
-    // ── Listener p/ notificação de novo visitante (limite 1, só novos) ──
     _visitasListener = db.collection('visitas')
         .orderBy('timestamp','desc')
         .limit(1)
         .onSnapshot(snap => {
-            if (_lastVisitasCount === null) { _lastVisitasCount = snap.size; return; }
+            if (_lastVisitasCount === null) {
+                _lastVisitasCount = snap.size;
+                return;
+            }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
                     const ua = parseUA(v.userAgent || '');
-                    showNotification('👀 Novo visitante', `${v.page||'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`, 'blue');
+                    showNotification(
+                        '👀 Novo visitante',
+                        `${v.page || 'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`,
+                        'blue'
+                    );
+                    // Atualiza contadores no dashboard se visível
                     loadDashboardVisitas();
-                    // Se o relatório de visitas estiver aberto, atualiza automaticamente
-                    if (document.getElementById('section-visitas')?.classList.contains('active')) {
-                        refreshVisitasQuiet();
-                    }
                 }
             });
         }, err => console.warn('Listener visitas:', err));
 
-    // ── Listener p/ notificação de link copiado ──
     _linksListener = db.collection('links_copiados')
         .orderBy('timestamp','desc')
         .limit(1)
@@ -755,81 +761,20 @@ function startRealtimeListeners() {
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
-                    showNotification('🔗 Link copiado!', `"${v.titulo||'Imóvel'}" — ${v.deviceId?v.deviceId.slice(0,14)+'…':''}`, 'purple');
+                    showNotification(
+                        '🔗 Link copiado!',
+                        `"${v.titulo || 'Imóvel'}" — ${v.deviceId ? v.deviceId.slice(0,14)+'…' : ''}`,
+                        'green'
+                    );
                     loadDashboardVisitas();
-                    if (document.getElementById('section-visitas')?.classList.contains('active')) {
-                        refreshVisitasQuiet();
-                    }
                 }
             });
         }, err => console.warn('Listener links:', err));
-
-    // ── Listener em tempo real para o relatório de visitas (atualiza tabela ao vivo) ──
-    startVisitasRealtime();
-}
-
-function startVisitasRealtime() {
-    // Listener completo de visitas — atualiza o relatório em tempo real
-    _visitasRealtimeListener = db.collection('visitas')
-        .orderBy('timestamp','desc')
-        .onSnapshot(snap => {
-            const newData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            visitasData = newData;
-            // Só re-renderiza se o relatório estiver aberto e não estiver carregando
-            const section = document.getElementById('section-visitas');
-            const loading = document.getElementById('visitas-loading');
-            if (section?.classList.contains('active') && loading?.style.display === 'none') {
-                renderVisitasReport(visitasData, linksData);
-                showLiveIndicator();
-            }
-        }, err => console.warn('Listener visitas completo:', err));
-
-    _linksRealtimeListener = db.collection('links_copiados')
-        .orderBy('timestamp','desc')
-        .onSnapshot(snap => {
-            linksData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            const section = document.getElementById('section-visitas');
-            const loading = document.getElementById('visitas-loading');
-            if (section?.classList.contains('active') && loading?.style.display === 'none') {
-                renderVisitasReport(visitasData, linksData);
-                showLiveIndicator();
-            }
-        }, err => console.warn('Listener links completo:', err));
-}
-
-// Mostra piscar verde discreto para indicar atualização ao vivo
-function showLiveIndicator() {
-    let el = document.getElementById('_live-ind');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = '_live-ind';
-        el.style.cssText = 'position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.18);border:1px solid #22c55e;color:#22c55e;padding:.35rem 1rem;border-radius:99px;font-size:.75rem;font-weight:600;z-index:9998;display:flex;align-items:center;gap:.4rem;opacity:0;transition:opacity .3s;pointer-events:none;';
-        el.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Atualizado agora';
-        document.body.appendChild(el);
-    }
-    el.style.opacity = '1';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.opacity = '0'; }, 2000);
-}
-
-async function refreshVisitasQuiet() {
-    // Atualiza dados silenciosamente sem mostrar loading
-    try {
-        const [vs, ls] = await Promise.all([
-            db.collection('visitas').orderBy('timestamp','desc').get(),
-            db.collection('links_copiados').orderBy('timestamp','desc').get().catch(()=>({docs:[]}))
-        ]);
-        visitasData = vs.docs.map(d => ({ id: d.id, ...d.data() }));
-        linksData   = ls.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderVisitasReport(visitasData, linksData);
-    } catch(e) {}
 }
 
 function stopRealtimeListeners() {
-    if (_visitasListener)        { _visitasListener();        _visitasListener        = null; }
-    if (_linksListener)          { _linksListener();          _linksListener          = null; }
-    if (_visitasRealtimeListener){ _visitasRealtimeListener(); _visitasRealtimeListener= null; }
-    if (_linksRealtimeListener)  { _linksRealtimeListener();  _linksRealtimeListener  = null; }
+    if (_visitasListener) { _visitasListener(); _visitasListener = null; }
+    if (_linksListener)   { _linksListener();   _linksListener   = null; }
 }
 
 // Toast de notificação diferente do toast padrão (não sobrepõe)
