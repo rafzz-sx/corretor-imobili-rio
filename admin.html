@@ -296,6 +296,7 @@
                         <div class="settings-row"><span class="settings-label">Email</span><span class="settings-value" id="settings-email">—</span></div>
                         <div class="settings-row"><span class="settings-label">UID</span><span class="settings-value" id="settings-uid" style="font-size:.72rem;">—</span></div>
                         <div class="settings-row"><span class="settings-label">Login em</span><span class="settings-value" id="settings-login-time">—</span></div>
+                        <div class="settings-row"><span class="settings-label">Sessão expira</span><span class="settings-value" id="settings-session-expires" style="color:var(--amber);">—</span></div>
                     </div>
                     <div class="settings-card">
                         <div class="settings-card-header"><i class="fas fa-database"></i><h4>Banco de Dados</h4></div>
@@ -313,7 +314,7 @@
                     </div>
                     <div class="settings-card">
                         <div class="settings-card-header"><i class="fas fa-info-circle"></i><h4>Informações</h4></div>
-                        <div class="settings-row"><span class="settings-label">Versão do painel</span><span class="settings-value">3.0.0</span></div>
+                        <div class="settings-row"><span class="settings-label">Versão do painel</span><span class="settings-value">3.1.0</span></div>
                         <div class="settings-row"><span class="settings-label">Firebase SDK</span><span class="settings-value">9.22.0 (compat)</span></div>
                         <div class="settings-row"><span class="settings-label">Data atual</span><span class="settings-value" id="settings-date">—</span></div>
                     </div>
@@ -321,6 +322,28 @@
             </section>
         </main>
     </div>
+
+    <!-- Mobile Bottom Nav -->
+    <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+        <button class="mobile-nav-item active" data-section="dashboard" onclick="mobileNav('dashboard',this)">
+            <i class="fas fa-chart-pie"></i><span>Dashboard</span>
+        </button>
+        <button class="mobile-nav-item" data-section="imoveis" onclick="mobileNav('imoveis',this)">
+            <i class="fas fa-building"></i>
+            <span>Imóveis</span>
+            <span class="mobile-nav-badge" id="mobile-badge-imoveis" style="display:none"></span>
+        </button>
+        <button class="mobile-nav-item" data-section="adicionar" onclick="mobileNav('adicionar',this)">
+            <i class="fas fa-plus-circle"></i><span>Adicionar</span>
+        </button>
+        <button class="mobile-nav-item" data-section="lixeira" onclick="mobileNav('lixeira',this)">
+            <i class="fas fa-trash-alt"></i><span>Lixeira</span>
+            <span class="mobile-nav-badge" id="mobile-badge-lixeira" style="display:none"></span>
+        </button>
+        <button class="mobile-nav-item" data-section="configuracoes" onclick="mobileNav('configuracoes',this)">
+            <i class="fas fa-cog"></i><span>Config</span>
+        </button>
+    </nav>
 
     <!-- Modal Confirmação -->
     <div id="delete-modal" class="modal-overlay">
