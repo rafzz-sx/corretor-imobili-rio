@@ -104,7 +104,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', site:'Configurações do Site', perfil:'Perfil de Visitante', configuracoes:'Configurações' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') loadImoveisTable();
@@ -112,6 +112,8 @@ function showSection(name) {
     else if (name === 'lixeira') loadLixeira();
     else if (name === 'analytics') loadAnalytics();
     else if (name === 'visitas') loadVisitas();
+    else if (name === 'site') loadSiteConfig();
+    else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
 }
 
@@ -301,8 +303,6 @@ function closeDeleteModal() {
 }
 
 // ========== RELATÓRIO DE VISITAS ==========
-let visitasFilter = { page: '', period: '14' };
-
 async function loadVisitas() {
     if (!db) return;
     const loading = document.getElementById('visitas-loading');
@@ -316,207 +316,54 @@ async function loadVisitas() {
     } catch (e) { console.error(e); showToast('Erro ao carregar visitas','error'); if (loading) loading.style.display = 'none'; }
 }
 
-function getFilteredVisitas(data) {
-    const days = parseInt(visitasFilter.period) || 14;
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1);
-    const cutoffStr = cutoff.toISOString().slice(0,10);
-    return data.filter(v => {
-        const matchPage = !visitasFilter.page || v.page === visitasFilter.page;
-        const matchDate = !v.date || v.date >= cutoffStr;
-        return matchPage && matchDate;
-    });
-}
-
-function parseUA(ua) {
-    if (!ua) return { browser: 'Desconhecido', os: 'Desconhecido', device: 'desktop' };
-    let browser = 'Outro', os = 'Outro', device = 'desktop';
-    if (/Mobi|Android|iPhone|iPad/i.test(ua)) device = /iPad/i.test(ua) ? 'tablet' : 'mobile';
-    if (/Chrome\/[0-9]/i.test(ua) && !/Edg|OPR/i.test(ua)) browser = 'Chrome';
-    else if (/Firefox\//i.test(ua)) browser = 'Firefox';
-    else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
-    else if (/Edg\//i.test(ua)) browser = 'Edge';
-    else if (/OPR\//i.test(ua)) browser = 'Opera';
-    if (/Windows/i.test(ua)) os = 'Windows';
-    else if (/Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) os = 'macOS';
-    else if (/iPhone/i.test(ua)) os = 'iOS';
-    else if (/iPad/i.test(ua)) os = 'iPadOS';
-    else if (/Android/i.test(ua)) os = 'Android';
-    else if (/Linux/i.test(ua)) os = 'Linux';
-    return { browser, os, device };
-}
-
-function deviceIcon(device) {
-    if (device === 'mobile') return '<i class="fas fa-mobile-alt" style="color:var(--accent)"></i>';
-    if (device === 'tablet') return '<i class="fas fa-tablet-alt" style="color:var(--purple)"></i>';
-    return '<i class="fas fa-desktop" style="color:var(--green)"></i>';
-}
-
-function pageColor(page) {
-    const map = { 'Inicio':'var(--accent)', 'Imoveis':'var(--green)', 'Contato':'var(--amber)' };
-    return map[page] || 'var(--text-secondary)';
-}
-
-function pageBadge(page) {
-    return `<span style="background:${pageColor(page)}22;color:${pageColor(page)};padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;">${page}</span>`;
-}
-
-function formatTimestamp(ts) {
-    if (!ts) return '—';
-    const d = ts.toDate ? ts.toDate() : new Date(ts.seconds ? ts.seconds*1000 : ts);
-    return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-}
-
 function renderVisitasReport(data) {
     const el = document.getElementById('visitas-content'); if (!el) return;
     if (!data.length) {
-        el.innerHTML = '<div class="empty-state"><i class="fas fa-eye-slash"></i><h3>Sem dados de visitas</h3><p>Aguarde visitantes acessarem o site.</p></div>';
+        el.innerHTML = '<div class="empty-state"><i class="fas fa-eye-slash"></i><h3>Sem dados de visitas</h3><p>Adicione o tracker.js nas páginas do site para começar a rastrear visitas.</p></div>';
         return;
     }
-
-    const filtered = getFilteredVisitas(data);
     const uniqueDevices = new Set(data.map(v => v.deviceId));
-    const uniqueDevicesFiltered = new Set(filtered.map(v => v.deviceId));
-    const totalVisitas = filtered.length;
-    const hoje = new Date().toISOString().slice(0,10);
-    const visitasHoje = data.filter(v => v.date === hoje).length;
-
-    const porPagina = {}; filtered.forEach(v => porPagina[v.page] = (porPagina[v.page]||0)+1);
-    const devPorPagina = {}; filtered.forEach(v => { if (!devPorPagina[v.page]) devPorPagina[v.page] = new Set(); devPorPagina[v.page].add(v.deviceId); });
-
-    const days = parseInt(visitasFilter.period) || 14;
+    const totalVisitas = data.length;
+    const porPagina = {}; data.forEach(v => porPagina[v.page] = (porPagina[v.page]||0)+1);
+    const devPorPagina = {}; data.forEach(v => { if (!devPorPagina[v.page]) devPorPagina[v.page] = new Set(); devPorPagina[v.page].add(v.deviceId); });
     const porDia = {};
-    for (let i = days-1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); porDia[d.toISOString().slice(0,10)] = 0; }
-    filtered.forEach(v => { if (v.date && porDia.hasOwnProperty(v.date)) porDia[v.date]++; });
+    const hoje = new Date();
+    for (let i = 13; i >= 0; i--) { const d = new Date(hoje); d.setDate(d.getDate()-i); porDia[d.toISOString().slice(0,10)] = 0; }
+    data.forEach(v => { if (v.date && porDia.hasOwnProperty(v.date)) porDia[v.date]++; });
     const maxDia = Math.max(...Object.values(porDia), 1);
     const diasAtivos = Object.values(porDia).filter(v => v > 0).length;
-
-    // Browsers e OS
-    const browsers = {}, oss = {}, devices = { mobile:0, tablet:0, desktop:0 };
-    filtered.forEach(v => {
-        const p = parseUA(v.userAgent);
-        browsers[p.browser] = (browsers[p.browser]||0)+1;
-        oss[p.os] = (oss[p.os]||0)+1;
-        devices[p.device]++;
-    });
-
-    // Páginas únicas para filtro
-    const allPages = [...new Set(data.map(v => v.page))];
-
     el.innerHTML = `
-    <!-- FILTROS -->
-    <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem;padding:1rem 1.2rem;background:var(--bg-elevated);border-radius:var(--radius);border:1px solid var(--border);">
-        <i class="fas fa-filter" style="color:var(--text-muted)"></i>
-        <span style="color:var(--text-secondary);font-size:.82rem;font-weight:500;">Filtrar por:</span>
-        <select onchange="visitasFilter.page=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
-            <option value="">Todas as páginas</option>
-            ${allPages.map(p => `<option value="${p}" ${visitasFilter.page===p?'selected':''}>${p}</option>`).join('')}
-        </select>
-        <select onchange="visitasFilter.period=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
-            <option value="7" ${visitasFilter.period==='7'?'selected':''}>Últimos 7 dias</option>
-            <option value="14" ${visitasFilter.period==='14'?'selected':''}>Últimos 14 dias</option>
-            <option value="30" ${visitasFilter.period==='30'?'selected':''}>Últimos 30 dias</option>
-        </select>
-        <span style="margin-left:auto;color:var(--text-muted);font-size:.78rem;">${filtered.length} registro(s)</span>
-    </div>
-
-    <!-- KPIs -->
-    <div class="stats-grid" style="margin-bottom:1.5rem;">
-        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-eye"></i></div><div class="stat-info"><span class="stat-value">${totalVisitas}</span><span class="stat-label">Total de Visitas</span></div></div>
-        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value">${uniqueDevicesFiltered.size}</span><span class="stat-label">Visitantes Únicos</span></div></div>
-        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${visitasHoje}</span><span class="stat-label">Visitas Hoje</span></div></div>
-        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${diasAtivos ? Math.round(totalVisitas/diasAtivos) : 0}</span><span class="stat-label">Média Diária</span></div></div>
-    </div>
-
-    <!-- GRÁFICO DE BARRAS -->
-    <div class="dashboard-card" style="margin-bottom:1.5rem;">
-        <h3><i class="fas fa-chart-bar"></i> Visitas por dia — últimos ${days} dias</h3>
-        <div class="visits-timeline" style="margin-top:1.2rem;">
-            ${Object.entries(porDia).map(([date,count]) => {
-                const d = new Date(date+'T12:00:00');
-                const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-                const isToday = date === hoje;
-                const pct = (count/maxDia)*100;
-                return `<div class="vt-col"><div class="vt-bar-wrap"><div class="vt-bar" style="height:${Math.max(pct,2)}%;${isToday?'background:var(--accent);box-shadow:0 0 8px var(--accent-glow);':''}" title="${count} visita(s) em ${label}"></div></div><div class="vt-count" style="${isToday?'color:var(--accent);font-weight:700;':''}">${count||''}</div><div class="vt-label" style="${isToday?'color:var(--accent);':''}">${label}</div></div>`;
-            }).join('')}
+        <div class="stats-grid" style="margin-bottom:1.5rem;">
+            <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-eye"></i></div><div class="stat-info"><span class="stat-value">${totalVisitas}</span><span class="stat-label">Total de Visitas</span></div></div>
+            <div class="stat-card"><div class="stat-icon green"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value">${uniqueDevices.size}</span><span class="stat-label">Visitantes Únicos</span></div></div>
+            <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${porDia[hoje.toISOString().slice(0,10)]||0}</span><span class="stat-label">Visitas Hoje</span></div></div>
+            <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${diasAtivos ? Math.round(totalVisitas/diasAtivos) : 0}</span><span class="stat-label">Média Diária</span></div></div>
         </div>
-    </div>
-
-    <!-- LINHA 2: PÁGINAS + DISPOSITIVOS + BROWSERS -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:1.5rem;">
-        <div class="dashboard-card">
-            <h3><i class="fas fa-file-alt"></i> Visitas por Página</h3>
-            <div style="margin-top:.8rem;">
-            ${Object.entries(porPagina).sort((a,b)=>b[1]-a[1]).map(([pg,n]) => `
-                <div style="margin-bottom:1rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">${pageBadge(pg)}<span style="font-weight:600;font-size:.9rem;">${n}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;background:${pageColor(pg)};opacity:.85;"></div></div>
-                    <span style="font-size:.72rem;color:var(--text-muted);">${devPorPagina[pg]?.size||0} dispositivos únicos</span>
-                </div>`).join('')}
-            </div>
-        </div>
-        <div class="dashboard-card">
-            <h3><i class="fas fa-mobile-alt"></i> Tipo de Dispositivo</h3>
-            <div style="margin-top:.8rem;">
-                ${[['desktop','Desktop','var(--green)'],['mobile','Mobile','var(--accent)'],['tablet','Tablet','var(--purple)']].map(([k,label,color]) => `
-                <div style="margin-bottom:.9rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIcon(k)} ${label}</span><span style="font-weight:600;">${devices[k]}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${totalVisitas?((devices[k]/totalVisitas)*100):0}%;background:${color};opacity:.8;"></div></div>
-                </div>`).join('')}
-            </div>
-        </div>
-        <div class="dashboard-card">
-            <h3><i class="fas fa-globe"></i> Navegadores</h3>
-            <div style="margin-top:.8rem;">
-            ${Object.entries(browsers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n]) => `
-                <div style="margin-bottom:.9rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:var(--text-secondary);font-size:.83rem;">${br}</span><span style="font-weight:600;">${n}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;opacity:.8;"></div></div>
-                </div>`).join('')}
-            </div>
-        </div>
-    </div>
-
-    <!-- TABELA DE VISITAS INDIVIDUAIS -->
-    <div class="dashboard-card" style="margin-bottom:1.5rem;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
-            <h3><i class="fas fa-list-ul"></i> Registro Individual de Visitas</h3>
-            <span style="font-size:.78rem;color:var(--text-muted);">${filtered.length} entradas</span>
-        </div>
-        <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
-            <thead>
-                <tr style="border-bottom:1px solid var(--border);">
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">#</th>
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Data / Hora</th>
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Página</th>
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Dispositivo</th>
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Navegador / OS</th>
-                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">ID Dispositivo</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${filtered.slice(0,100).map((v,i) => {
-                    const p = parseUA(v.userAgent);
-                    return `<tr style="border-bottom:1px solid var(--border);transition:background .15s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
-                        <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
-                        <td style="padding:.6rem .8rem;color:var(--text-secondary);white-space:nowrap;">${formatTimestamp(v.timestamp)}</td>
-                        <td style="padding:.6rem .8rem;">${pageBadge(v.page||'—')}</td>
-                        <td style="padding:.6rem .8rem;">${deviceIcon(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
-                        <td style="padding:.6rem .8rem;color:var(--text-secondary);">${p.browser} · ${p.os}</td>
-                        <td style="padding:.6rem .8rem;font-family:monospace;font-size:.75rem;color:var(--text-muted);" title="${v.deviceId||''}">${(v.deviceId||'—').slice(0,22)}…</td>
-                    </tr>`;
+        <div class="dashboard-card" style="margin-bottom:1.5rem;">
+            <h3><i class="fas fa-calendar-alt"></i> Visitas nos últimos 14 dias</h3>
+            <div class="visits-timeline">
+                ${Object.entries(porDia).map(([date,count]) => {
+                    const d = new Date(date+'T12:00:00');
+                    const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+                    const pct = (count/maxDia)*100;
+                    return `<div class="vt-col"><div class="vt-bar-wrap"><div class="vt-bar" style="height:${Math.max(pct,2)}%" title="${count} visita(s)"></div></div><div class="vt-count">${count||''}</div><div class="vt-label">${label}</div></div>`;
                 }).join('')}
-                ${filtered.length > 100 ? `<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.8rem;">… e mais ${filtered.length - 100} registros. Exporte o CSV para ver todos.</td></tr>` : ''}
-            </tbody>
-        </table>
+            </div>
         </div>
-    </div>
-
-    <!-- AÇÕES -->
-    <div style="display:flex;justify-content:flex-end;gap:.7rem;flex-wrap:wrap;">
-        <button onclick="exportarVisitas()" class="btn-secondary"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar CSV</button>
-        <button onclick="limparVisitas()" class="btn-danger" style="opacity:.75;"><i class="fas fa-broom"></i> Limpar dados</button>
-    </div>`;
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <h3><i class="fas fa-file-alt"></i> Visitas por Página</h3>
+                ${Object.entries(porPagina).sort((a,b)=>b[1]-a[1]).map(([pg,n]) => `<div class="chart-bar" style="margin-bottom:.9rem;"><span class="chart-label">${pg}</span><div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;background:linear-gradient(90deg,var(--green),#16a34a)"></div></div><span class="chart-value">${n}</span></div>`).join('')}
+            </div>
+            <div class="dashboard-card">
+                <h3><i class="fas fa-fingerprint"></i> Dispositivos Únicos</h3>
+                ${Object.entries(devPorPagina).sort((a,b)=>b[1].size-a[1].size).map(([pg,devSet]) => `<div class="quartos-item"><span class="quartos-label">${pg}</span><span class="quartos-value">${devSet.size} únicos</span></div>`).join('')}
+            </div>
+        </div>
+        <div style="margin-top:1.2rem;display:flex;justify-content:flex-end;gap:.7rem;">
+            <button onclick="exportarVisitas()" class="btn-secondary"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar CSV</button>
+            <button onclick="limparVisitas()" class="btn-danger" style="opacity:.75;"><i class="fas fa-broom"></i> Limpar dados</button>
+        </div>`;
 }
 
 async function limparVisitas() {
@@ -662,3 +509,305 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDeleteModal();});
     console.log('✅ Admin v3.0 iniciado');
 });
+// ========== CONFIGURAÇÕES DO SITE ==========
+async function loadSiteConfig() {
+    const loading = document.getElementById('site-loading');
+    const content = document.getElementById('site-content');
+    if (loading) loading.style.display = 'flex';
+    if (content) content.style.display = 'none';
+
+    // Carrega config salva no Firestore (coleção 'config', doc 'site')
+    let cfg = {};
+    try {
+        const doc = await db.collection('config').doc('site').get();
+        if (doc.exists) cfg = doc.data();
+    } catch(e) {}
+
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    content.innerHTML = `
+    <div style="max-width:820px;">
+        <!-- INFORMAÇÕES PESSOAIS -->
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-user"></i> Informações Pessoais</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Nome do Corretor</label>
+                    <input type="text" id="cfg-nome" class="form-control" placeholder="Ex: Leandro Bomfim" value="${cfg.nome||'Leandro Bomfim'}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CRECI</label>
+                    <input type="text" id="cfg-creci" class="form-control" placeholder="Ex: CRECI-RJ 12345" value="${cfg.creci||''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">WhatsApp (com DDI)</label>
+                    <input type="text" id="cfg-whatsapp" class="form-control" placeholder="Ex: 5521981424469" value="${cfg.whatsapp||'5521981424469'}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email de Contato</label>
+                    <input type="email" id="cfg-email" class="form-control" placeholder="Ex: leandro@email.com" value="${cfg.emailContato||''}">
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label class="form-label">Foto de Perfil (URL)</label>
+                    <input type="text" id="cfg-foto" class="form-control" placeholder="https://..." value="${cfg.fotoPerfil||'https://files.catbox.moe/nqdyup.png'}">
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTATÍSTICAS DO HERO -->
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-star"></i> Números do Hero (página inicial)</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Anos de Experiência</label>
+                    <input type="number" id="cfg-anos" class="form-control" value="${cfg.anosExperiencia||6}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Imóveis Negociados</label>
+                    <input type="number" id="cfg-imoveis-neg" class="form-control" value="${cfg.imoveisNegociados||60}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">% Satisfação</label>
+                    <input type="number" id="cfg-satisfacao" class="form-control" value="${cfg.satisfacao||100}">
+                </div>
+            </div>
+        </div>
+
+        <!-- TEXTOS DO SITE -->
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-pen"></i> Textos do Site</h3>
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Título do Hero</label>
+                    <input type="text" id="cfg-hero-titulo" class="form-control" value="${cfg.heroTitulo||'Transformando Sonhos em Endereços'}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Descrição do Hero</label>
+                    <textarea id="cfg-hero-desc" class="form-control" rows="3" style="resize:vertical;">${cfg.heroDesc||'Com mais de 6 anos de experiência no mercado imobiliário...'}</textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Destaque da velocidade (ex: 47%)</label>
+                    <input type="text" id="cfg-velocidade" class="form-control" value="${cfg.velocidade||'47%'}">
+                </div>
+            </div>
+        </div>
+
+        <!-- BAIRROS ATENDIDOS -->
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-map-marker-alt"></i> Bairros Atendidos (faixa rolante)</h3>
+            <div class="form-group">
+                <label class="form-label">Bairros separados por vírgula</label>
+                <input type="text" id="cfg-bairros" class="form-control" value="${cfg.bairros||'Ipanema, Leblon, Barra da Tijuca, Recreio dos Bandeirantes, Barra Olímpica, Copacabana'}">
+            </div>
+        </div>
+
+        <!-- DEPOIMENTOS -->
+        <div class="dashboard-card" style="margin-bottom:1.5rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-quote-right"></i> Depoimentos</h3>
+            <div id="depoimentos-list" style="display:flex;flex-direction:column;gap:.8rem;">
+                ${(cfg.depoimentos||[
+                    {texto:'O Leandro não apenas vendeu nosso apartamento, ele realizou nosso sonho do primeiro lar.', autor:'Carlos e Ana Lima', local:'Ipanema'},
+                    {texto:'Profissional incrível! Conseguiu vender minha cobertura em apenas 15 dias pelo valor que eu queria.', autor:'Roberto Fonseca', local:'Barra da Tijuca'},
+                ]).map((d,i) => `
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);" id="dep-${i}">
+                    <input type="text" class="form-control dep-texto" placeholder="Depoimento" value="${d.texto||''}">
+                    <input type="text" class="form-control dep-autor" placeholder="Nome" value="${d.autor||''}">
+                    <input type="text" class="form-control dep-local" placeholder="Bairro" value="${d.local||''}">
+                    <button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>
+                </div>`).join('')}
+            </div>
+            <button onclick="addDepoimento()" class="btn-secondary" style="margin-top:.8rem;"><i class="fas fa-plus"></i> Adicionar depoimento</button>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:.8rem;">
+            <button onclick="loadSiteConfig()" class="btn-secondary"><i class="fas fa-undo"></i> Descartar</button>
+            <button onclick="saveSiteConfig()" class="btn-primary"><i class="fas fa-save"></i> Salvar Configurações</button>
+        </div>
+    </div>`;
+}
+
+function addDepoimento() {
+    const list = document.getElementById('depoimentos-list');
+    const i = list.children.length;
+    const div = document.createElement('div');
+    div.id = 'dep-' + i;
+    div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);';
+    div.innerHTML = `<input type="text" class="form-control dep-texto" placeholder="Depoimento"><input type="text" class="form-control dep-autor" placeholder="Nome"><input type="text" class="form-control dep-local" placeholder="Bairro"><button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>`;
+    list.appendChild(div);
+}
+
+async function saveSiteConfig() {
+    const depoimentos = Array.from(document.querySelectorAll('[id^=dep-]')).map(el => ({
+        texto: el.querySelector('.dep-texto')?.value || '',
+        autor: el.querySelector('.dep-autor')?.value || '',
+        local: el.querySelector('.dep-local')?.value || '',
+    })).filter(d => d.texto);
+
+    const cfg = {
+        nome:              document.getElementById('cfg-nome')?.value || '',
+        creci:             document.getElementById('cfg-creci')?.value || '',
+        whatsapp:          document.getElementById('cfg-whatsapp')?.value || '',
+        emailContato:      document.getElementById('cfg-email')?.value || '',
+        fotoPerfil:        document.getElementById('cfg-foto')?.value || '',
+        anosExperiencia:   parseInt(document.getElementById('cfg-anos')?.value) || 6,
+        imoveisNegociados: parseInt(document.getElementById('cfg-imoveis-neg')?.value) || 60,
+        satisfacao:        parseInt(document.getElementById('cfg-satisfacao')?.value) || 100,
+        heroTitulo:        document.getElementById('cfg-hero-titulo')?.value || '',
+        heroDesc:          document.getElementById('cfg-hero-desc')?.value || '',
+        velocidade:        document.getElementById('cfg-velocidade')?.value || '',
+        bairros:           document.getElementById('cfg-bairros')?.value || '',
+        depoimentos,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+
+    try {
+        await db.collection('config').doc('site').set(cfg);
+        showToast('✅ Configurações salvas! Atualize o site para ver as mudanças.');
+    } catch(e) {
+        showToast('Erro ao salvar configurações', 'error');
+        console.error(e);
+    }
+}
+
+// ========== PERFIL DE VISITANTE ==========
+async function loadPerfilVisitante() {
+    const loading = document.getElementById('perfil-loading');
+    const content = document.getElementById('perfil-content');
+    if (loading) loading.style.display = 'flex';
+    if (content) content.style.display = 'none';
+
+    try {
+        // Carrega visitas de páginas e de imóveis em paralelo
+        const [visitasSnap, imoveisSnap, imoveisListSnap] = await Promise.all([
+            db.collection('visitas').orderBy('timestamp','desc').get(),
+            db.collection('visitas_imoveis').orderBy('timestamp','desc').get(),
+            db.collection('imoveis').get()
+        ]);
+
+        const visitas = visitasSnap.docs.map(d => ({id:d.id,...d.data()}));
+        const imoveisViews = imoveisSnap.docs.map(d => ({id:d.id,...d.data()}));
+        const imoveis = {};
+        imoveisListSnap.docs.forEach(d => { imoveis[d.id] = d.data(); });
+
+        if (loading) loading.style.display = 'none';
+        if (content) content.style.display = 'block';
+
+        renderPerfilVisitante(visitas, imoveisViews, imoveis);
+    } catch(e) {
+        console.error(e);
+        showToast('Erro ao carregar perfil', 'error');
+        if (loading) loading.style.display = 'none';
+    }
+}
+
+function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog) {
+    const content = document.getElementById('perfil-content');
+
+    // Agrupa por deviceId
+    const devMap = {};
+    visitas.forEach(v => {
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: v.userAgent };
+        devMap[v.deviceId].pages.push(v.page);
+        if (v.date < devMap[v.deviceId].firstSeen) devMap[v.deviceId].firstSeen = v.date;
+        if (v.date > devMap[v.deviceId].lastSeen) devMap[v.deviceId].lastSeen = v.date;
+    });
+
+    // Adiciona imóveis vistos por device
+    imoveisViews.forEach(v => {
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: '' };
+        if (!devMap[v.deviceId].imoveisVistos) devMap[v.deviceId].imoveisVistos = [];
+        devMap[v.deviceId].imoveisVistos.push({ id: v.imovelId, titulo: v.titulo, bairro: v.bairro, date: v.date });
+    });
+
+    // Top imóveis mais visualizados
+    const imovelCount = {};
+    imoveisViews.forEach(v => {
+        if (!imovelCount[v.imovelId]) imovelCount[v.imovelId] = { id: v.imovelId, titulo: v.titulo, bairro: v.bairro, count: 0, devices: new Set() };
+        imovelCount[v.imovelId].count++;
+        imovelCount[v.imovelId].devices.add(v.deviceId);
+    });
+    const topImoveis = Object.values(imovelCount).sort((a,b) => b.count - a.count).slice(0, 10);
+
+    const devices = Object.values(devMap).sort((a,b) => (b.lastSeen||'') > (a.lastSeen||'') ? 1 : -1);
+
+    content.innerHTML = `
+    <!-- KPIs rápidos -->
+    <div class="stats-grid" style="margin-bottom:1.5rem;">
+        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-fingerprint"></i></div><div class="stat-info"><span class="stat-value">${devices.length}</span><span class="stat-label">Dispositivos Únicos</span></div></div>
+        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-building"></i></div><div class="stat-info"><span class="stat-value">${imoveisViews.length}</span><span class="stat-label">Views de Imóveis</span></div></div>
+        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-route"></i></div><div class="stat-info"><span class="stat-value">${devices.filter(d => new Set(d.pages).size > 1).length}</span><span class="stat-label">Visitantes Multi-página</span></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-fire"></i></div><div class="stat-info"><span class="stat-value">${topImoveis[0]?.titulo?.split(' ').slice(0,2).join(' ')||'—'}</span><span class="stat-label">Imóvel Mais Visto</span></div></div>
+    </div>
+
+    <!-- TOP IMÓVEIS MAIS VISTOS -->
+    ${topImoveis.length ? `
+    <div class="dashboard-card" style="margin-bottom:1.5rem;">
+        <h3 style="margin-bottom:1rem;"><i class="fas fa-fire" style="color:var(--amber)"></i> Imóveis Mais Visualizados</h3>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:.83rem;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">#</th>
+                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">Imóvel</th>
+                <th style="padding:.6rem .8rem;text-align:left;color:var(--text-muted);font-weight:500;">Bairro</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--text-muted);font-weight:500;">Visualizações</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--text-muted);font-weight:500;">Dispositivos</th>
+            </tr></thead>
+            <tbody>
+            ${topImoveis.map((im,i) => `<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
+                <td style="padding:.6rem .8rem;color:var(--text-primary);font-weight:500;">${im.titulo||im.id}</td>
+                <td style="padding:.6rem .8rem;color:var(--text-secondary);">${im.bairro||'—'}</td>
+                <td style="padding:.6rem .8rem;text-align:center;"><span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .7rem;border-radius:99px;font-weight:700;">${im.count}</span></td>
+                <td style="padding:.6rem .8rem;text-align:center;color:var(--text-secondary);">${im.devices.size}</td>
+            </tr>`).join('')}
+            </tbody>
+        </table>
+        </div>
+    </div>` : '<div class="dashboard-card" style="margin-bottom:1.5rem;text-align:center;padding:2rem;color:var(--text-muted)"><i class="fas fa-building" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.7rem;"></i>Nenhum imóvel visualizado ainda</div>'}
+
+    <!-- PERFIL DE CADA DISPOSITIVO -->
+    <div class="dashboard-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+            <h3><i class="fas fa-users"></i> Perfil por Dispositivo</h3>
+            <span style="font-size:.78rem;color:var(--text-muted);">${devices.length} visitante(s)</span>
+        </div>
+        ${devices.length === 0 ? '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Nenhum visitante ainda</p>' :
+        devices.map((dev, idx) => {
+            const ua = parseUA(dev.ua);
+            const uniquePages = [...new Set(dev.pages)];
+            const imVisto = dev.imoveisVistos || [];
+            return `
+            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.8rem;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="this.querySelector('.dev-detail').style.display=this.querySelector('.dev-detail').style.display==='none'?'block':'none'">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+                    <div style="display:flex;align-items:center;gap:.7rem;">
+                        ${deviceIcon(ua.device)}
+                        <div>
+                            <div style="font-family:monospace;font-size:.75rem;color:var(--text-muted);">${(dev.deviceId||'').slice(0,28)}…</div>
+                            <div style="font-size:.8rem;color:var(--text-secondary);margin-top:.15rem;">${ua.browser} · ${ua.os}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                        ${uniquePages.map(p => pageBadge(p)).join('')}
+                        ${imVisto.length ? `<span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;"><i class="fas fa-building"></i> ${imVisto.length} imóvel(is)</span>` : ''}
+                        <span style="font-size:.75rem;color:var(--text-muted);">último acesso: ${dev.lastSeen||'—'}</span>
+                        <i class="fas fa-chevron-down" style="color:var(--text-muted);font-size:.7rem;"></i>
+                    </div>
+                </div>
+                <div class="dev-detail" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em;">Páginas visitadas</div>
+                            ${uniquePages.map(p => `<div style="padding:.3rem 0;color:var(--text-secondary);font-size:.82rem;"><i class="fas fa-check" style="color:var(--green);margin-right:.4rem;font-size:.7rem;"></i>${p}</div>`).join('')}
+                        </div>
+                        <div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em;">Imóveis visualizados</div>
+                            ${imVisto.length ? imVisto.map(iv => `<div style="padding:.3rem 0;font-size:.82rem;"><span style="color:var(--text-secondary);">${iv.titulo||iv.id}</span> <span style="color:var(--text-muted);font-size:.72rem;">— ${iv.date||''}</span></div>`).join('') : '<span style="color:var(--text-muted);font-size:.8rem;">Nenhum imóvel aberto</span>'}
+                        </div>
+                    </div>
+                    <div style="margin-top:.7rem;font-size:.72rem;color:var(--text-muted);">Primeiro acesso: ${dev.firstSeen||'—'} · User Agent: ${(dev.ua||'').slice(0,80)}</div>
+                </div>
+            </div>`;
+        }).join('')}
+    </div>`;
+}
