@@ -10,8 +10,11 @@
     // Espera o Firebase estar disponível
     function waitForFirebase(cb, attempts) {
         attempts = attempts || 0;
-        if (attempts > 20) return; // desiste após 2s
-        if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+        if (attempts > 40) {
+            console.warn('⚠️ Tracker: Firebase não ficou disponível após 4s');
+            return;
+        }
+        if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
             cb();
         } else {
             setTimeout(() => waitForFirebase(cb, attempts + 1), 100);
@@ -20,20 +23,24 @@
 
     // Gera ou recupera um ID único para este dispositivo/browser
     function getDeviceId() {
-        let id = localStorage.getItem('_lb_did');
-        if (!id) {
-            id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
-            localStorage.setItem('_lb_did', id);
+        try {
+            let id = localStorage.getItem('_lb_did');
+            if (!id) {
+                id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+                localStorage.setItem('_lb_did', id);
+            }
+            return id;
+        } catch(e) {
+            return 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
         }
-        return id;
     }
 
     // Nome amigável da página
     function getPageName() {
         const path = window.location.pathname;
-        if (path.includes('imoveis'))  return 'Imóveis';
+        if (path.includes('imoveis'))  return 'Imoveis';
         if (path.includes('contato'))  return 'Contato';
-        return 'Início';
+        return 'Inicio';
     }
 
     function trackVisit() {
@@ -44,26 +51,28 @@
             const today    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
             // Chave única: dispositivo + página + dia
-            // Isso garante: 1 contagem por dispositivo por página por dia
-            const visitKey = `${deviceId}_${page}_${today}`;
+            const visitKey = deviceId + '_' + page + '_' + today;
             const ref      = db.collection('visitas').doc(visitKey);
 
-            ref.get().then(doc => {
+            ref.get().then(function(doc) {
                 if (!doc.exists) {
-                    // Nova visita única — registra
-                    ref.set({
+                    return ref.set({
                         deviceId:  deviceId,
                         page:      page,
                         date:      today,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                         userAgent: navigator.userAgent.slice(0, 200),
-                    }).catch(() => {}); // silencia erros de rede
+                    });
                 }
-                // Se já existe, ignora (visitante repetido hoje nessa página)
-            }).catch(() => {});
+            }).then(function() {
+                console.log('📊 Tracker: visita registrada —', page);
+            }).catch(function(err) {
+                // Erro de permissão — as regras do Firestore precisam permitir escrita pública na coleção 'visitas'
+                console.warn('⚠️ Tracker: erro ao registrar visita:', err.code, err.message);
+            });
 
         } catch (e) {
-            // Nunca quebra a página
+            console.warn('⚠️ Tracker: erro inesperado:', e);
         }
     }
 
