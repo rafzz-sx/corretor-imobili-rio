@@ -584,6 +584,10 @@ function exportarVisitas() {
     if (!visitasData.length) { showToast('Nenhum dado para exportar','error'); return; }
     const header = 'Data,Página,Dispositivo ID,User Agent\n';
     const rows = visitasData.map(v => `"${v.date||''}","${v.page||''}","${v.deviceId||''}","${(v.userAgent||'').replace(/"/g,'""')}"`).join('\n');
+    const blob = new Blob([header+rows],{type:'text/csv;charset=utf-8;'});
+    const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`visitas-${new Date().toISOString().slice(0,10)}.csv`});
+    a.click(); showToast('CSV exportado!');
+}
 
 // ========== ANALYTICS ==========
 async function loadAnalytics() {
