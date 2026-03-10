@@ -33,7 +33,10 @@ async function carregarImoveis() {
         }));
         
         imoveisCarregados = true;
+        // Imóvel em destaque aparece sempre primeiro
+        imoveis.sort((a,b) => (b.destaque===true?1:0) - (a.destaque===true?1:0));
         renderGallery(imoveis);
+        return imoveis;
         
     } catch (error) {
         console.error('Erro ao carregar imóveis:', error);
@@ -225,7 +228,7 @@ let currentPhotoIndex = 0;
 let currentImovelFotos = [];
 
 function openModal(imovelId) {
-    const imo = imoveis.find(i => i.id === imovelId);
+    const imo = imoveis.find(i => i.id === imovelId || String(i.id) === String(imovelId));
     if (!imo) return;
 
     currentImovelFotos = imo.fotos && imo.fotos.length ? imo.fotos : [imo.imagem];
@@ -239,6 +242,49 @@ function openModal(imovelId) {
     document.getElementById('modal-descricao').textContent = imo.descricao;
 
     renderModalPhotos();
+
+    // WhatsApp com mensagem pré-preenchida com o nome do imóvel
+    const waMsg = encodeURIComponent(
+        `Olá Leandro! Tenho interesse no imóvel: *${imo.titulo}* — ${imo.bairro}, R$ ${parseFloat(imo.preco).toLocaleString('pt-BR')}. Poderia me dar mais informações?`
+    );
+    const waLink = document.getElementById('modal-whatsapp');
+    if (waLink) waLink.href = `https://wa.me/5521981424469?text=${waMsg}`;
+
+    // Botão compartilhar — copia link direto para o imóvel
+    const shareBtn = document.getElementById('modal-share-btn');
+    if (shareBtn) {
+        shareBtn._imovelId = imo.id;
+        shareBtn._imovelTitulo = imo.titulo;
+        shareBtn.onclick = function() {
+            const url = window.location.origin + window.location.pathname.replace(/\/?$/, '/imoveis.html') + '#imovel-' + imo.id;
+            const finalUrl = window.location.pathname.includes('imoveis')
+                ? window.location.origin + window.location.pathname + '#imovel-' + imo.id
+                : window.location.origin + '/imoveis.html#imovel-' + imo.id;
+
+            const copy = (txt) => {
+                shareBtn.innerHTML = '<i class="fas fa-check"></i><span>Link copiado!</span>';
+                shareBtn.classList.add('share-copied');
+                setTimeout(() => {
+                    shareBtn.innerHTML = '<i class="fas fa-share-alt"></i><span>Compartilhar</span>';
+                    shareBtn.classList.remove('share-copied');
+                }, 2500);
+                if (typeof window.trackLinkCopiado === 'function') {
+                    window.trackLinkCopiado(String(imo.id), imo.titulo);
+                }
+            };
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(finalUrl).then(copy).catch(() => {
+                    const ta = Object.assign(document.createElement('textarea'), {value: finalUrl});
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+                    document.body.removeChild(ta); copy(finalUrl);
+                });
+            } else {
+                const ta = Object.assign(document.createElement('textarea'), {value: finalUrl});
+                document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+                document.body.removeChild(ta); copy(finalUrl);
+            }
+        };
+    }
 
     const modal = document.getElementById('imovel-modal');
     modal.classList.add('active');
@@ -313,6 +359,7 @@ function renderGallery(imoveisList) {
                 <div class="imovel-img-wrap">
                     <img src="${imo.imagem}" alt="${imo.titulo}" onerror="this.src='https://via.placeholder.com/400x300/1a1a2e/fff?text=Imóvel'">
                     <div class="imovel-badge">${imo.bairro}</div>
+                    ${imo.destaque ? '<div class="imovel-destaque-badge"><i class="fas fa-star"></i> Destaque</div>' : ''}
                     <div class="imovel-fotos-count"><i class="fas fa-images"></i> ${imo.fotos ? imo.fotos.length : 1} fotos</div>
                 </div>
                 <div class="imovel-content">
@@ -439,7 +486,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('gallery')) {
         // Carregar imóveis do Firebase
-        carregarImoveis();
+        carregarImoveis().then(() => {
+            // Auto-abre modal se URL tem hash de imóvel
+            const hash = window.location.hash;
+            if (hash && hash.startsWith('#imovel-')) {
+                const imovelId = hash.replace('#imovel-', '');
+                setTimeout(() => openModal(imovelId), 400);
+            }
+        }).catch(() => {});
         
         document.getElementById('bairro')?.addEventListener('change', filtrar);
         document.getElementById('quartos')?.addEventListener('change', filtrar);
