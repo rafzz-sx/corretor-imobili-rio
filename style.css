@@ -278,7 +278,7 @@ footer::before {
 
 /* Hero Content */
 .hero-content {
-    padding-right: 2rem;
+    padding-right: 1rem;
 }
 
 .badge-wrapper {
@@ -2271,6 +2271,29 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
     z-index: 2;
 }
 
+.imovel-destaque-badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    box-shadow: 0 4px 12px rgba(245,158,11,0.4);
+    animation: destaquePulse 2.5s ease-in-out infinite;
+}
+
+@keyframes destaquePulse {
+    0%, 100% { box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
+    50%       { box-shadow: 0 4px 20px rgba(245,158,11,0.7); }
+}
+
 .imovel-fotos-count {
     position: absolute;
     bottom: 10px; right: 10px;
@@ -2590,6 +2613,28 @@ a, button, .cta-primary, .cta-secondary, .floating-element, .dot, select, option
 
 .modal-cta-contato:hover {
     box-shadow: 0 14px 30px rgba(52,152,219,0.4);
+}
+
+.modal-cta-share {
+    background: rgba(255,255,255,0.08);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    box-shadow: none;
+    color: #f1f5f9;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.modal-cta-share:hover {
+    background: rgba(255,255,255,0.14);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+.modal-cta-share.share-copied {
+    background: rgba(34,197,94,0.15);
+    border-color: #22c55e;
+    color: #22c55e;
 }
 
 @media (max-width: 600px) {
