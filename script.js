@@ -480,104 +480,114 @@ function waitForFirebaseScript(cb, attempts) {
     attempts = attempts || 0;
     if (attempts > 40) return;
     if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) { cb(); }
-    else { setTimeout(() => waitForFirebaseScript(cb, attempts + 1), 100); }
+    else { setTimeout(function(){ waitForFirebaseScript(cb, attempts + 1); }, 100); }
 }
 
 function loadSiteConfig() {
-    waitForFirebaseScript(() => {
+    // Só roda na index.html (tem o hero)
+    if (!document.getElementById('cfg-hero-title') && !document.getElementById('cfg-anos')) return;
+    waitForFirebaseScript(function() {
         try {
-            firebase.firestore().collection('config').doc('site').get().then(doc => {
+            firebase.firestore().collection('config').doc('site').get().then(function(doc) {
                 if (!doc.exists) return;
-                const cfg = doc.data();
+                var cfg = doc.data();
 
                 // Foto de perfil
                 if (cfg.fotoPerfil) {
-                    const img = document.getElementById('cfg-foto');
+                    var img = document.getElementById('cfg-foto');
                     if (img) img.src = cfg.fotoPerfil;
                 }
 
-                // Texto hero — substitui mantendo as 3 linhas com gradiente
+                // Título hero
                 if (cfg.heroTitulo) {
-                    const titleEl = document.getElementById('cfg-hero-title');
+                    var titleEl = document.getElementById('cfg-hero-title');
                     if (titleEl) {
-                        const words = cfg.heroTitulo.split(' ');
-                        const mid = Math.ceil(words.length / 2);
-                        const line1 = words.slice(0, Math.floor(words.length/3)).join(' ');
-                        const line2 = words.slice(Math.floor(words.length/3), Math.ceil(words.length*2/3)).join(' ');
-                        const line3 = words.slice(Math.ceil(words.length*2/3)).join(' ');
-                        titleEl.innerHTML = `<span class="title-line">${line1}</span><span class="title-line gradient-text">${line2}</span><span class="title-line">${line3}</span>`;
+                        var words = cfg.heroTitulo.split(' ');
+                        var n = words.length;
+                        var l1 = words.slice(0, Math.floor(n/3)).join(' ');
+                        var l2 = words.slice(Math.floor(n/3), Math.ceil(n*2/3)).join(' ');
+                        var l3 = words.slice(Math.ceil(n*2/3)).join(' ');
+                        titleEl.innerHTML =
+                            '<span class="title-line">' + l1 + '</span>' +
+                            '<span class="title-line gradient-text">' + l2 + '</span>' +
+                            '<span class="title-line">' + l3 + '</span>';
                     }
                 }
 
                 // Descrição hero
                 if (cfg.heroDesc) {
-                    const desc = document.getElementById('cfg-hero-desc');
+                    var desc = document.getElementById('cfg-hero-desc');
                     if (desc) desc.textContent = cfg.heroDesc;
                 }
 
                 // Números (trust indicators)
-                const setCounter = (id, val) => {
-                    const el = document.getElementById(id);
+                function setCounter(id, val) {
+                    var el = document.getElementById(id);
                     if (el && val) {
-                        el.setAttribute('data-target', val);
+                        el.setAttribute('data-target', String(val));
                         el.textContent = '0';
                     }
-                };
-                if (cfg.anosExperiencia) setCounter('cfg-anos', cfg.anosExperiencia);
+                }
+                if (cfg.anosExperiencia)   setCounter('cfg-anos', cfg.anosExperiencia);
                 if (cfg.imoveisNegociados) setCounter('cfg-imoveis-neg', cfg.imoveisNegociados);
-                if (cfg.satisfacao) setCounter('cfg-satisfacao', cfg.satisfacao);
+                if (cfg.satisfacao)        setCounter('cfg-satisfacao', cfg.satisfacao);
 
-                // Velocidade (stats card)
+                // Velocidade
                 if (cfg.velocidade) {
-                    ['cfg-velocidade-d','cfg-velocidade-m'].forEach(id => {
-                        const el = document.getElementById(id);
+                    ['cfg-velocidade-d','cfg-velocidade-m'].forEach(function(id) {
+                        var el = document.getElementById(id);
                         if (el) el.textContent = cfg.velocidade;
                     });
                 }
 
                 // Depoimentos
                 if (cfg.depoimentos && cfg.depoimentos.length) {
-                    const track = document.getElementById('cfg-depoimentos');
+                    var track = document.getElementById('cfg-depoimentos');
                     if (track) {
-                        track.innerHTML = cfg.depoimentos.map(d => `
-                            <div class="testimonial-card">
-                                <div class="testimonial-quote">"</div>
-                                <p class="testimonial-text">${d.texto||''}</p>
-                                <div class="testimonial-author">
-                                    <span>${d.autor||''}</span>
-                                    <span class="author-location">• ${d.local||''}</span>
-                                </div>
-                            </div>`).join('');
+                        track.innerHTML = cfg.depoimentos.map(function(d) {
+                            return '<div class="testimonial-card">' +
+                                '<div class="testimonial-quote">"</div>' +
+                                '<p class="testimonial-text">' + (d.texto||'') + '</p>' +
+                                '<div class="testimonial-author">' +
+                                '<span>' + (d.autor||'') + '</span>' +
+                                '<span class="author-location">• ' + (d.local||'') + '</span>' +
+                                '</div></div>';
+                        }).join('');
 
-                        // Atualiza dots do carrossel
-                        const dotsEl = track.closest('.testimonials-carousel')?.querySelector('.carousel-dots');
-                        if (dotsEl) {
-                            dotsEl.innerHTML = cfg.depoimentos.map((_, i) =>
-                                `<span class="dot${i===0?' active':''}"></span>`).join('');
+                        // Atualiza dots
+                        var carousel = track.closest('.testimonials-carousel');
+                        if (carousel) {
+                            var dotsEl = carousel.querySelector('.carousel-dots');
+                            if (dotsEl) {
+                                dotsEl.innerHTML = cfg.depoimentos.map(function(_, i) {
+                                    return '<span class="dot' + (i===0?' active':'') + '"></span>';
+                                }).join('');
+                            }
                         }
                         // Re-inicializa carrossel
-                        if (window._carousel) window._carousel.destroy?.();
+                        if (window._carousel && typeof window._carousel.destroy === 'function') {
+                            window._carousel.destroy();
+                        }
                         window._carousel = new TestimonialsCarousel();
                     }
                 }
 
                 // Bairros (faixa rolante)
                 if (cfg.bairros) {
-                    const track = document.getElementById('cfg-bairros-track');
-                    if (track) {
-                        const lista = cfg.bairros.split(',').map(b => b.trim()).filter(Boolean);
-                        const items = lista.map(b => `<span>${b}</span><span class="separator">✦</span>`).join('');
-                        track.innerHTML = items + items; // duplicado para loop infinito
+                    var btrack = document.getElementById('cfg-bairros-track');
+                    if (btrack) {
+                        var lista = cfg.bairros.split(',').map(function(b){ return b.trim(); }).filter(Boolean);
+                        var items = lista.map(function(b){ return '<span>' + b + '</span><span class="separator">✦</span>'; }).join('');
+                        btrack.innerHTML = items + items; // duplicado para loop infinito
                     }
                 }
 
-            }).catch(() => {});
+            }).catch(function(){});
         } catch(e) {}
     });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Carrega configurações do site do Firestore
     loadSiteConfig();
 
     if (document.querySelector('.testimonials-carousel')) {
