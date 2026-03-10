@@ -1,26 +1,22 @@
 // =============================================
 //  TRACKER DE VISITAS — Leandro Imóveis
-//  Registra visitas únicas por dispositivo
-//  no Firestore, sem contar repetidos
 // =============================================
 
 (function() {
     'use strict';
 
-    // Espera o Firebase estar disponível
     function waitForFirebase(cb, attempts) {
         attempts = attempts || 0;
-        if (attempts > 20) return; // desiste após 2s
+        if (attempts > 40) return;
         if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
             cb();
         } else {
-            setTimeout(() => waitForFirebase(cb, attempts + 1), 100);
+            setTimeout(function() { waitForFirebase(cb, attempts + 1); }, 100);
         }
     }
 
-    // Gera ou recupera um ID único para este dispositivo/browser
     function getDeviceId() {
-        let id = localStorage.getItem('_lb_did');
+        var id = localStorage.getItem('_lb_did');
         if (!id) {
             id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
             localStorage.setItem('_lb_did', id);
@@ -28,9 +24,8 @@
         return id;
     }
 
-    // Nome amigável da página
     function getPageName() {
-        const path = window.location.pathname;
+        var path = window.location.pathname;
         if (path.includes('imoveis'))  return 'Imóveis';
         if (path.includes('contato'))  return 'Contato';
         return 'Início';
@@ -38,38 +33,47 @@
 
     function trackVisit() {
         try {
-            const db       = firebase.firestore();
-            const deviceId = getDeviceId();
-            const page     = getPageName();
-            const today    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-            // Chave única: dispositivo + página + dia
-            // Isso garante: 1 contagem por dispositivo por página por dia
-            const visitKey = `${deviceId}_${page}_${today}`;
-            const ref      = db.collection('visitas').doc(visitKey);
-
-            ref.get().then(doc => {
+            var db       = firebase.firestore();
+            var deviceId = getDeviceId();
+            var page     = getPageName();
+            var today    = new Date().toISOString().slice(0, 10);
+            var visitKey = deviceId + '_' + page + '_' + today;
+            var ref      = db.collection('visitas').doc(visitKey);
+            ref.get().then(function(doc) {
                 if (!doc.exists) {
-                    // Nova visita única — registra
                     ref.set({
                         deviceId:  deviceId,
                         page:      page,
                         date:      today,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                         userAgent: navigator.userAgent.slice(0, 200),
-                    }).catch(() => {}); // silencia erros de rede
+                    }).catch(function() {});
                 }
-                // Se já existe, ignora (visitante repetido hoje nessa página)
-            }).catch(() => {});
-
-        } catch (e) {
-            // Nunca quebra a página
-        }
+            }).catch(function() {});
+        } catch(e) {}
     }
 
-    waitForFirebase(trackVisit);
-})();
-    // Registra cópia de link de imóvel
+    // Rastreia visualização de imóvel (chamado pelo script.js)
+    window.trackImovelView = function(imovelId, titulo, bairro) {
+        waitForFirebase(function() {
+            try {
+                var db       = firebase.firestore();
+                var deviceId = getDeviceId();
+                var today    = new Date().toISOString().slice(0, 10);
+                var key      = deviceId + '_view_' + imovelId + '_' + today;
+                db.collection('visitas_imoveis').doc(key).set({
+                    deviceId:  deviceId,
+                    imovelId:  String(imovelId),
+                    titulo:    titulo || '',
+                    bairro:    bairro || '',
+                    date:      today,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true }).catch(function() {});
+            } catch(e) {}
+        });
+    };
+
+    // Rastreia cópia de link de imóvel (chamado pelo script.js)
     window.trackLinkCopiado = function(imovelId, imovelTitulo) {
         waitForFirebase(function() {
             try {
@@ -78,7 +82,7 @@
                 var today    = new Date().toISOString().slice(0, 10);
                 db.collection('links_copiados').add({
                     deviceId:  deviceId,
-                    imovelId:  imovelId,
+                    imovelId:  String(imovelId || ''),
                     titulo:    imovelTitulo || '',
                     date:      today,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
@@ -86,3 +90,7 @@
             } catch(e) {}
         });
     };
+
+    waitForFirebase(trackVisit);
+
+})();
