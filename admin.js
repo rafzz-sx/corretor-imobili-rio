@@ -301,6 +301,8 @@ function closeDeleteModal() {
 }
 
 // ========== RELATÓRIO DE VISITAS ==========
+let visitasFilter = { page: '', period: '14' };
+
 async function loadVisitas() {
     if (!db) return;
     const loading = document.getElementById('visitas-loading');
@@ -314,54 +316,207 @@ async function loadVisitas() {
     } catch (e) { console.error(e); showToast('Erro ao carregar visitas','error'); if (loading) loading.style.display = 'none'; }
 }
 
+function getFilteredVisitas(data) {
+    const days = parseInt(visitasFilter.period) || 14;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    return data.filter(v => {
+        const matchPage = !visitasFilter.page || v.page === visitasFilter.page;
+        const matchDate = !v.date || v.date >= cutoffStr;
+        return matchPage && matchDate;
+    });
+}
+
+function parseUA(ua) {
+    if (!ua) return { browser: 'Desconhecido', os: 'Desconhecido', device: 'desktop' };
+    let browser = 'Outro', os = 'Outro', device = 'desktop';
+    if (/Mobi|Android|iPhone|iPad/i.test(ua)) device = /iPad/i.test(ua) ? 'tablet' : 'mobile';
+    if (/Chrome\/[0-9]/i.test(ua) && !/Edg|OPR/i.test(ua)) browser = 'Chrome';
+    else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+    else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+    else if (/Edg\//i.test(ua)) browser = 'Edge';
+    else if (/OPR\//i.test(ua)) browser = 'Opera';
+    if (/Windows/i.test(ua)) os = 'Windows';
+    else if (/Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) os = 'macOS';
+    else if (/iPhone/i.test(ua)) os = 'iOS';
+    else if (/iPad/i.test(ua)) os = 'iPadOS';
+    else if (/Android/i.test(ua)) os = 'Android';
+    else if (/Linux/i.test(ua)) os = 'Linux';
+    return { browser, os, device };
+}
+
+function deviceIcon(device) {
+    if (device === 'mobile') return '<i class="fas fa-mobile-alt" style="color:var(--accent)"></i>';
+    if (device === 'tablet') return '<i class="fas fa-tablet-alt" style="color:var(--purple)"></i>';
+    return '<i class="fas fa-desktop" style="color:var(--green)"></i>';
+}
+
+function pageColor(page) {
+    const map = { 'Inicio':'var(--accent)', 'Imoveis':'var(--green)', 'Contato':'var(--amber)' };
+    return map[page] || 'var(--text-secondary)';
+}
+
+function pageBadge(page) {
+    return `<span style="background:${pageColor(page)}22;color:${pageColor(page)};padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600;">${page}</span>`;
+}
+
+function formatTimestamp(ts) {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts.seconds ? ts.seconds*1000 : ts);
+    return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
 function renderVisitasReport(data) {
     const el = document.getElementById('visitas-content'); if (!el) return;
     if (!data.length) {
-        el.innerHTML = '<div class="empty-state"><i class="fas fa-eye-slash"></i><h3>Sem dados de visitas</h3><p>Adicione o tracker.js nas páginas do site para começar a rastrear visitas.</p></div>';
+        el.innerHTML = '<div class="empty-state"><i class="fas fa-eye-slash"></i><h3>Sem dados de visitas</h3><p>Aguarde visitantes acessarem o site.</p></div>';
         return;
     }
+
+    const filtered = getFilteredVisitas(data);
     const uniqueDevices = new Set(data.map(v => v.deviceId));
-    const totalVisitas = data.length;
-    const porPagina = {}; data.forEach(v => porPagina[v.page] = (porPagina[v.page]||0)+1);
-    const devPorPagina = {}; data.forEach(v => { if (!devPorPagina[v.page]) devPorPagina[v.page] = new Set(); devPorPagina[v.page].add(v.deviceId); });
+    const uniqueDevicesFiltered = new Set(filtered.map(v => v.deviceId));
+    const totalVisitas = filtered.length;
+    const hoje = new Date().toISOString().slice(0,10);
+    const visitasHoje = data.filter(v => v.date === hoje).length;
+
+    const porPagina = {}; filtered.forEach(v => porPagina[v.page] = (porPagina[v.page]||0)+1);
+    const devPorPagina = {}; filtered.forEach(v => { if (!devPorPagina[v.page]) devPorPagina[v.page] = new Set(); devPorPagina[v.page].add(v.deviceId); });
+
+    const days = parseInt(visitasFilter.period) || 14;
     const porDia = {};
-    const hoje = new Date();
-    for (let i = 13; i >= 0; i--) { const d = new Date(hoje); d.setDate(d.getDate()-i); porDia[d.toISOString().slice(0,10)] = 0; }
-    data.forEach(v => { if (v.date && porDia.hasOwnProperty(v.date)) porDia[v.date]++; });
+    for (let i = days-1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); porDia[d.toISOString().slice(0,10)] = 0; }
+    filtered.forEach(v => { if (v.date && porDia.hasOwnProperty(v.date)) porDia[v.date]++; });
     const maxDia = Math.max(...Object.values(porDia), 1);
     const diasAtivos = Object.values(porDia).filter(v => v > 0).length;
+
+    // Browsers e OS
+    const browsers = {}, oss = {}, devices = { mobile:0, tablet:0, desktop:0 };
+    filtered.forEach(v => {
+        const p = parseUA(v.userAgent);
+        browsers[p.browser] = (browsers[p.browser]||0)+1;
+        oss[p.os] = (oss[p.os]||0)+1;
+        devices[p.device]++;
+    });
+
+    // Páginas únicas para filtro
+    const allPages = [...new Set(data.map(v => v.page))];
+
     el.innerHTML = `
-        <div class="stats-grid" style="margin-bottom:1.5rem;">
-            <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-eye"></i></div><div class="stat-info"><span class="stat-value">${totalVisitas}</span><span class="stat-label">Total de Visitas</span></div></div>
-            <div class="stat-card"><div class="stat-icon green"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value">${uniqueDevices.size}</span><span class="stat-label">Visitantes Únicos</span></div></div>
-            <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${porDia[hoje.toISOString().slice(0,10)]||0}</span><span class="stat-label">Visitas Hoje</span></div></div>
-            <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${diasAtivos ? Math.round(totalVisitas/diasAtivos) : 0}</span><span class="stat-label">Média Diária</span></div></div>
+    <!-- FILTROS -->
+    <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem;padding:1rem 1.2rem;background:var(--bg-elevated);border-radius:var(--radius);border:1px solid var(--border);">
+        <i class="fas fa-filter" style="color:var(--text-muted)"></i>
+        <span style="color:var(--text-secondary);font-size:.82rem;font-weight:500;">Filtrar por:</span>
+        <select onchange="visitasFilter.page=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
+            <option value="">Todas as páginas</option>
+            ${allPages.map(p => `<option value="${p}" ${visitasFilter.page===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <select onchange="visitasFilter.period=this.value;renderVisitasReport(visitasData)" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .8rem;font-size:.82rem;cursor:pointer;">
+            <option value="7" ${visitasFilter.period==='7'?'selected':''}>Últimos 7 dias</option>
+            <option value="14" ${visitasFilter.period==='14'?'selected':''}>Últimos 14 dias</option>
+            <option value="30" ${visitasFilter.period==='30'?'selected':''}>Últimos 30 dias</option>
+        </select>
+        <span style="margin-left:auto;color:var(--text-muted);font-size:.78rem;">${filtered.length} registro(s)</span>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats-grid" style="margin-bottom:1.5rem;">
+        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-eye"></i></div><div class="stat-info"><span class="stat-value">${totalVisitas}</span><span class="stat-label">Total de Visitas</span></div></div>
+        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value">${uniqueDevicesFiltered.size}</span><span class="stat-label">Visitantes Únicos</span></div></div>
+        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${visitasHoje}</span><span class="stat-label">Visitas Hoje</span></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${diasAtivos ? Math.round(totalVisitas/diasAtivos) : 0}</span><span class="stat-label">Média Diária</span></div></div>
+    </div>
+
+    <!-- GRÁFICO DE BARRAS -->
+    <div class="dashboard-card" style="margin-bottom:1.5rem;">
+        <h3><i class="fas fa-chart-bar"></i> Visitas por dia — últimos ${days} dias</h3>
+        <div class="visits-timeline" style="margin-top:1.2rem;">
+            ${Object.entries(porDia).map(([date,count]) => {
+                const d = new Date(date+'T12:00:00');
+                const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+                const isToday = date === hoje;
+                const pct = (count/maxDia)*100;
+                return `<div class="vt-col"><div class="vt-bar-wrap"><div class="vt-bar" style="height:${Math.max(pct,2)}%;${isToday?'background:var(--accent);box-shadow:0 0 8px var(--accent-glow);':''}" title="${count} visita(s) em ${label}"></div></div><div class="vt-count" style="${isToday?'color:var(--accent);font-weight:700;':''}">${count||''}</div><div class="vt-label" style="${isToday?'color:var(--accent);':''}">${label}</div></div>`;
+            }).join('')}
         </div>
-        <div class="dashboard-card" style="margin-bottom:1.5rem;">
-            <h3><i class="fas fa-calendar-alt"></i> Visitas nos últimos 14 dias</h3>
-            <div class="visits-timeline">
-                ${Object.entries(porDia).map(([date,count]) => {
-                    const d = new Date(date+'T12:00:00');
-                    const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-                    const pct = (count/maxDia)*100;
-                    return `<div class="vt-col"><div class="vt-bar-wrap"><div class="vt-bar" style="height:${Math.max(pct,2)}%" title="${count} visita(s)"></div></div><div class="vt-count">${count||''}</div><div class="vt-label">${label}</div></div>`;
+    </div>
+
+    <!-- LINHA 2: PÁGINAS + DISPOSITIVOS + BROWSERS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        <div class="dashboard-card">
+            <h3><i class="fas fa-file-alt"></i> Visitas por Página</h3>
+            <div style="margin-top:.8rem;">
+            ${Object.entries(porPagina).sort((a,b)=>b[1]-a[1]).map(([pg,n]) => `
+                <div style="margin-bottom:1rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">${pageBadge(pg)}<span style="font-weight:600;font-size:.9rem;">${n}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;background:${pageColor(pg)};opacity:.85;"></div></div>
+                    <span style="font-size:.72rem;color:var(--text-muted);">${devPorPagina[pg]?.size||0} dispositivos únicos</span>
+                </div>`).join('')}
+            </div>
+        </div>
+        <div class="dashboard-card">
+            <h3><i class="fas fa-mobile-alt"></i> Tipo de Dispositivo</h3>
+            <div style="margin-top:.8rem;">
+                ${[['desktop','Desktop','var(--green)'],['mobile','Mobile','var(--accent)'],['tablet','Tablet','var(--purple)']].map(([k,label,color]) => `
+                <div style="margin-bottom:.9rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIcon(k)} ${label}</span><span style="font-weight:600;">${devices[k]}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${totalVisitas?((devices[k]/totalVisitas)*100):0}%;background:${color};opacity:.8;"></div></div>
+                </div>`).join('')}
+            </div>
+        </div>
+        <div class="dashboard-card">
+            <h3><i class="fas fa-globe"></i> Navegadores</h3>
+            <div style="margin-top:.8rem;">
+            ${Object.entries(browsers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n]) => `
+                <div style="margin-bottom:.9rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:var(--text-secondary);font-size:.83rem;">${br}</span><span style="font-weight:600;">${n}</span></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;opacity:.8;"></div></div>
+                </div>`).join('')}
+            </div>
+        </div>
+    </div>
+
+    <!-- TABELA DE VISITAS INDIVIDUAIS -->
+    <div class="dashboard-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+            <h3><i class="fas fa-list-ul"></i> Registro Individual de Visitas</h3>
+            <span style="font-size:.78rem;color:var(--text-muted);">${filtered.length} entradas</span>
+        </div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">#</th>
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Data / Hora</th>
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Página</th>
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Dispositivo</th>
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">Navegador / OS</th>
+                    <th style="text-align:left;padding:.6rem .8rem;color:var(--text-muted);font-weight:500;">ID Dispositivo</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filtered.slice(0,100).map((v,i) => {
+                    const p = parseUA(v.userAgent);
+                    return `<tr style="border-bottom:1px solid var(--border);transition:background .15s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                        <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
+                        <td style="padding:.6rem .8rem;color:var(--text-secondary);white-space:nowrap;">${formatTimestamp(v.timestamp)}</td>
+                        <td style="padding:.6rem .8rem;">${pageBadge(v.page||'—')}</td>
+                        <td style="padding:.6rem .8rem;">${deviceIcon(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
+                        <td style="padding:.6rem .8rem;color:var(--text-secondary);">${p.browser} · ${p.os}</td>
+                        <td style="padding:.6rem .8rem;font-family:monospace;font-size:.75rem;color:var(--text-muted);" title="${v.deviceId||''}">${(v.deviceId||'—').slice(0,22)}…</td>
+                    </tr>`;
                 }).join('')}
-            </div>
+                ${filtered.length > 100 ? `<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.8rem;">… e mais ${filtered.length - 100} registros. Exporte o CSV para ver todos.</td></tr>` : ''}
+            </tbody>
+        </table>
         </div>
-        <div class="dashboard-grid">
-            <div class="dashboard-card">
-                <h3><i class="fas fa-file-alt"></i> Visitas por Página</h3>
-                ${Object.entries(porPagina).sort((a,b)=>b[1]-a[1]).map(([pg,n]) => `<div class="chart-bar" style="margin-bottom:.9rem;"><span class="chart-label">${pg}</span><div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;background:linear-gradient(90deg,var(--green),#16a34a)"></div></div><span class="chart-value">${n}</span></div>`).join('')}
-            </div>
-            <div class="dashboard-card">
-                <h3><i class="fas fa-fingerprint"></i> Dispositivos Únicos</h3>
-                ${Object.entries(devPorPagina).sort((a,b)=>b[1].size-a[1].size).map(([pg,devSet]) => `<div class="quartos-item"><span class="quartos-label">${pg}</span><span class="quartos-value">${devSet.size} únicos</span></div>`).join('')}
-            </div>
-        </div>
-        <div style="margin-top:1.2rem;display:flex;justify-content:flex-end;gap:.7rem;">
-            <button onclick="exportarVisitas()" class="btn-secondary"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar CSV</button>
-            <button onclick="limparVisitas()" class="btn-danger" style="opacity:.75;"><i class="fas fa-broom"></i> Limpar dados</button>
-        </div>`;
+    </div>
+
+    <!-- AÇÕES -->
+    <div style="display:flex;justify-content:flex-end;gap:.7rem;flex-wrap:wrap;">
+        <button onclick="exportarVisitas()" class="btn-secondary"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar CSV</button>
+        <button onclick="limparVisitas()" class="btn-danger" style="opacity:.75;"><i class="fas fa-broom"></i> Limpar dados</button>
+    </div>`;
 }
 
 async function limparVisitas() {
