@@ -375,17 +375,53 @@
             <span>Imóveis</span>
             <span class="mobile-nav-badge" id="mobile-badge-imoveis" style="display:none"></span>
         </button>
-        <button class="mobile-nav-item" data-section="adicionar" onclick="mobileNav('adicionar',this)">
-            <i class="fas fa-plus-circle"></i><span>Adicionar</span>
+        <button class="mobile-nav-item mobile-nav-add" data-section="adicionar" onclick="mobileNav('adicionar',this)">
+            <span class="mobile-add-icon"><i class="fas fa-plus"></i></span>
+            <span>Adicionar</span>
         </button>
         <button class="mobile-nav-item" data-section="lixeira" onclick="mobileNav('lixeira',this)">
             <i class="fas fa-trash-alt"></i><span>Lixeira</span>
             <span class="mobile-nav-badge" id="mobile-badge-lixeira" style="display:none"></span>
         </button>
-        <button class="mobile-nav-item" data-section="configuracoes" onclick="mobileNav('configuracoes',this)">
-            <i class="fas fa-cog"></i><span>Config</span>
+        <button class="mobile-nav-item" onclick="toggleMobileMoreMenu(this)">
+            <i class="fas fa-ellipsis-h"></i><span>Mais</span>
         </button>
     </nav>
+
+    <!-- Mobile "Mais" Menu -->
+    <div id="mobile-more-menu" class="mobile-more-menu">
+        <div class="mobile-more-overlay" onclick="closeMobileMoreMenu()"></div>
+        <div class="mobile-more-sheet">
+            <div class="mobile-more-handle"></div>
+            <div class="mobile-more-title">Mais opções</div>
+            <div class="mobile-more-grid">
+                <button class="mobile-more-item" onclick="mobileNavMore('analytics')">
+                    <span class="mobile-more-icon blue"><i class="fas fa-chart-bar"></i></span>
+                    <span>Analytics</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('visitas')">
+                    <span class="mobile-more-icon green"><i class="fas fa-eye"></i></span>
+                    <span>Visitas</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('perfil')">
+                    <span class="mobile-more-icon purple"><i class="fas fa-users"></i></span>
+                    <span>Visitantes</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('site')">
+                    <span class="mobile-more-icon amber"><i class="fas fa-sliders-h"></i></span>
+                    <span>Config. Site</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('configuracoes')">
+                    <span class="mobile-more-icon" style="background:var(--bg-elevated);color:var(--text-secondary);"><i class="fas fa-cog"></i></span>
+                    <span>Configurações</span>
+                </button>
+                <button class="mobile-more-item" onclick="logout();closeMobileMoreMenu()">
+                    <span class="mobile-more-icon" style="background:var(--red-soft);color:var(--red);"><i class="fas fa-sign-out-alt"></i></span>
+                    <span>Sair</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal Confirmação -->
     <div id="delete-modal" class="modal-overlay">
