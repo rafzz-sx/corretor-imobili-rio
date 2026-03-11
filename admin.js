@@ -107,9 +107,9 @@ function showSection(name) {
     const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
-    else if (name === 'imoveis') loadImoveisTable();
+    else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
     else if (name === 'adicionar') resetForm();
-    else if (name === 'lixeira') loadLixeira();
+    else if (name === 'lixeira') renderLixeiraTable(lixeiraData);
     else if (name === 'analytics') loadAnalytics();
     else if (name === 'visitas') loadVisitas();
     else if (name === 'site') loadSiteConfig();
@@ -229,6 +229,10 @@ function renderRecentList(containerId, limit) {
 async function loadImoveisTable() {
     if (!db) return;
     try {
+        // onSnapshot mantém imoveisData sempre atualizado — usa cache se disponível
+        if (_realtimeActive && imoveisData.length > 0) {
+            renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); return;
+        }
         const snap = await db.collection('imoveis').orderBy('createdAt','desc').get();
         imoveisData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderImoveisTable(imoveisData); updateBairroFilter(imoveisData);
@@ -291,13 +295,14 @@ async function moveToLixeira(id) {
         const data = doc.data(); data.deletedAt = firebase.firestore.FieldValue.serverTimestamp(); data.originalId = id;
         await db.collection('lixeira').doc(id).set(data);
         await db.collection('imoveis').doc(id).delete();
-        showToast('Imóvel movido para a lixeira.'); loadImoveisTable(); loadDashboard();
+        showToast('Imóvel movido para a lixeira.');
     } catch (e) { console.error(e); showToast('Erro ao mover para lixeira','error'); }
 }
 
 async function loadLixeira() {
     if (!db) return;
     try {
+        if (_realtimeActive && lixeiraData.length >= 0) { renderLixeiraTable(lixeiraData); return; }
         const snap = await db.collection('lixeira').get();
         lixeiraData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderLixeiraTable(lixeiraData);
@@ -321,7 +326,7 @@ async function restaurarImovel(id) {
         const data = doc.data(); delete data.deletedAt; delete data.originalId;
         await db.collection('imoveis').doc(id).set(data);
         await db.collection('lixeira').doc(id).delete();
-        showToast('Imóvel restaurado! ✅'); loadLixeira(); loadDashboard();
+        showToast('Imóvel restaurado! ✅');
     } catch (e) { console.error(e); showToast('Erro ao restaurar','error'); }
 }
 
@@ -351,7 +356,7 @@ async function confirmDelete() {
         } else if (deleteId) {
             await db.collection('lixeira').doc(deleteId).delete(); showToast('Excluído permanentemente.');
         }
-        closeDeleteModal(); loadLixeira(); loadDashboard();
+        closeDeleteModal();
     } catch (e) { showToast('Erro ao excluir','error'); }
 }
 
@@ -694,6 +699,22 @@ function mobileNav(section, el) {
     if (el) el.classList.add('active');
 }
 
+function toggleMobileMoreMenu(btn) {
+    const menu = document.getElementById('mobile-more-menu');
+    if (menu) menu.classList.toggle('open');
+}
+
+function closeMobileMoreMenu() {
+    const menu = document.getElementById('mobile-more-menu');
+    if (menu) menu.classList.remove('open');
+}
+
+function mobileNavMore(section) {
+    closeMobileMoreMenu();
+    showSection(section);
+    document.querySelectorAll('.mobile-nav-item').forEach(b => b.classList.remove('active'));
+}
+
 function syncMobileBadges() {
     const badgeI = document.getElementById('mobile-badge-imoveis');
     const badgeL = document.getElementById('mobile-badge-lixeira');
@@ -718,65 +739,129 @@ function showToast(message,type='success'){
 document.addEventListener('DOMContentLoaded', () => {
     if (!initFirebase()) return;
     setupAuthListener(); setupLoginForm(); setupNavigation(); setupFormListeners();
-    // Inicia listeners de tempo real após garantir auth
     auth.onAuthStateChanged(u => { if (u) startRealtimeListeners(); else stopRealtimeListeners(); });
     document.getElementById('delete-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeDeleteModal();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDeleteModal();});
-    console.log('✅ Admin v3.0 iniciado');
+    updateLastRefreshIndicator();
+    console.log('✅ Admin v3.1 iniciado');
 });
 
-// ========== NOTIFICAÇÕES EM TEMPO REAL ==========
-let _visitasListener = null;
-let _linksListener = null;
-let _lastVisitasCount = null;
+// ========== INDICADOR DE ÚLTIMA ATUALIZAÇÃO ==========
+function updateLastRefreshIndicator() {
+    const el = document.getElementById('last-refresh');
+    if (el) el.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+// ========== LISTENERS TEMPO REAL (onSnapshot completo) ==========
+let _imoveisListener   = null;
+let _lixeiraListener   = null;
+let _visitasListener   = null;
+let _linksListener     = null;
+let _imoveisInitialized = false;
+let _lixeiraInitialized = false;
 
 function startRealtimeListeners() {
-    if (_visitasListener) return; // já ativo
+    // ---- IMÓVEIS ----
+    if (!_imoveisListener) {
+        _imoveisListener = db.collection('imoveis').orderBy('createdAt','desc').onSnapshot(snap => {
+            const newData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const wasInit = _imoveisInitialized;
+            _imoveisInitialized = true;
 
-    _visitasListener = db.collection('visitas')
-        .orderBy('timestamp','desc')
-        .limit(1)
-        .onSnapshot(snap => {
-            if (_lastVisitasCount === null) {
-                _lastVisitasCount = snap.size;
-                return;
+            if (wasInit) {
+                // Detectar mudanças e notificar
+                snap.docChanges().forEach(change => {
+                    if (change.type === 'added')    showNotification('🏠 Novo imóvel adicionado', change.doc.data().titulo || '', 'green');
+                    if (change.type === 'modified') showNotification('✏️ Imóvel atualizado', change.doc.data().titulo || '', 'amber');
+                    if (change.type === 'removed')  showNotification('🗑️ Imóvel removido', change.doc.data().titulo || '', 'red');
+                });
             }
+
+            imoveisData = newData;
+            updateLastRefreshIndicator();
+
+            // Atualiza UI conforme a seção ativa
+            const activeSection = document.querySelector('.admin-section.active')?.id;
+            if (activeSection === 'section-dashboard') {
+                const total = imoveisData.length;
+                const bairros = [...new Set(imoveisData.map(i => i.bairro))];
+                const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s,i)=>s+(parseInt(i.quartos)||0),0)/total) : 0;
+                const precoMedio = total > 0 ? Math.round(imoveisData.reduce((s,i)=>s+(parseFloat(i.preco)||0),0)/total) : 0;
+                setEl('total-imoveis', total); setEl('total-bairros', bairros.length);
+                setEl('media-quartos', mediaQ); setEl('preco-medio','R$ '+precoMedio.toLocaleString('pt-BR'));
+                setEl('badge-imoveis', total);
+                syncMobileBadges();
+                renderBairrosChart('bairros-chart');
+                renderRecentList('ultimos-imoveis', 5);
+            } else if (activeSection === 'section-imoveis') {
+                renderImoveisTable(imoveisData);
+                updateBairroFilter(imoveisData);
+            } else if (activeSection === 'section-analytics') {
+                loadAnalytics();
+            }
+            // Sempre atualiza badge
+            setEl('badge-imoveis', imoveisData.length);
+            syncMobileBadges();
+        }, err => console.warn('Listener imóveis:', err));
+    }
+
+    // ---- LIXEIRA ----
+    if (!_lixeiraListener) {
+        _lixeiraListener = db.collection('lixeira').onSnapshot(snap => {
+            const wasInit = _lixeiraInitialized;
+            _lixeiraInitialized = true;
+            lixeiraData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const lCount = lixeiraData.length;
+            const badgeEl = document.getElementById('badge-lixeira');
+            if (badgeEl) { badgeEl.textContent = lCount > 0 ? lCount : ''; badgeEl.style.display = lCount > 0 ? '' : 'none'; }
+            syncMobileBadges();
+
+            const activeSection = document.querySelector('.admin-section.active')?.id;
+            if (wasInit && activeSection === 'section-lixeira') renderLixeiraTable(lixeiraData);
+        }, err => console.warn('Listener lixeira:', err));
+    }
+
+    // ---- VISITAS (notificação de novo visitante + refresh do relatório) ----
+    if (!_visitasListener) {
+        let _visitasInit = false;
+        _visitasListener = db.collection('visitas').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+            if (!_visitasInit) { _visitasInit = true; return; }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
                     const ua = parseUA(v.userAgent || '');
-                    showNotification(
-                        '👀 Novo visitante',
-                        `${v.page || 'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`,
-                        'blue'
-                    );
-                    // Atualiza contadores no dashboard se visível
-                    loadDashboardVisitas();
+                    showNotification('👀 Novo visitante', `${v.page||'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`, 'blue');
+                    updateLastRefreshIndicator();
+                    const activeSection = document.querySelector('.admin-section.active')?.id;
+                    if (activeSection === 'section-dashboard') loadDashboardVisitas();
+                    else if (activeSection === 'section-visitas') loadVisitas();
                 }
             });
         }, err => console.warn('Listener visitas:', err));
+    }
 
-    _linksListener = db.collection('links_copiados')
-        .orderBy('timestamp','desc')
-        .limit(1)
-        .onSnapshot(snap => {
+    // ---- LINKS COPIADOS ----
+    if (!_linksListener) {
+        let _linksInit = false;
+        _linksListener = db.collection('links_copiados').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+            if (!_linksInit) { _linksInit = true; return; }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
-                    showNotification(
-                        '🔗 Link copiado!',
-                        `"${v.titulo || 'Imóvel'}" — ${v.deviceId ? v.deviceId.slice(0,14)+'…' : ''}`,
-                        'green'
-                    );
-                    loadDashboardVisitas();
+                    showNotification('🔗 Link copiado!', `"${v.titulo||'Imóvel'}" — ${v.deviceId?v.deviceId.slice(0,14)+'…':''}`, 'green');
+                    const activeSection = document.querySelector('.admin-section.active')?.id;
+                    if (activeSection === 'section-dashboard') loadDashboardVisitas();
                 }
             });
         }, err => console.warn('Listener links:', err));
+    }
 }
 
 function stopRealtimeListeners() {
-    if (_visitasListener) { _visitasListener(); _visitasListener = null; }
-    if (_linksListener)   { _linksListener();   _linksListener   = null; }
+    if (_imoveisListener)  { _imoveisListener();  _imoveisListener  = null; _imoveisInitialized = false; }
+    if (_lixeiraListener)  { _lixeiraListener();  _lixeiraListener  = null; _lixeiraInitialized = false; }
+    if (_visitasListener)  { _visitasListener();  _visitasListener  = null; }
+    if (_linksListener)    { _linksListener();     _linksListener    = null; }
 }
 
 // Toast de notificação diferente do toast padrão (não sobrepõe)
