@@ -956,3 +956,162 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50%       { opacity: .6; transform: scale(1.3); }
 }
+
+/* ========== MOBILE — MAIS MENU (Bottom Sheet) ========== */
+.mobile-more-menu {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+}
+.mobile-more-menu.open { display: block; }
+
+.mobile-more-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(3px);
+    animation: fadeIn .2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.mobile-more-sheet {
+    position: absolute;
+    bottom: 64px; left: 0; right: 0;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 0 1rem 1.5rem;
+    animation: slideUpSheet .28s cubic-bezier(.22,1,.36,1) both;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+@keyframes slideUpSheet {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.mobile-more-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 99px;
+    margin: .75rem auto 1rem;
+}
+
+.mobile-more-title {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    padding: 0 .25rem;
+}
+
+.mobile-more-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .7rem;
+}
+
+.mobile-more-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: .85rem .5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-family: var(--font-ui);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, transform .12s;
+    text-align: center;
+}
+.mobile-more-item:active { transform: scale(.96); background: var(--bg-elevated); }
+
+.mobile-more-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+.mobile-more-icon.blue   { background: var(--accent-soft);  color: var(--accent); }
+.mobile-more-icon.green  { background: var(--green-soft);   color: var(--green); }
+.mobile-more-icon.purple { background: var(--purple-soft);  color: var(--purple); }
+.mobile-more-icon.amber  { background: var(--amber-soft);   color: var(--amber); }
+
+/* Botão Adicionar destacado */
+.mobile-nav-add .mobile-add-icon {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    color: white;
+    margin-bottom: -4px;
+    box-shadow: 0 4px 14px rgba(99,102,241,.4);
+}
+.mobile-nav-add i { display: none; } /* hide default icon, use .mobile-add-icon */
+
+/* Melhorias mobile gerais */
+@media (max-width: 768px) {
+    /* Formulário de imóvel — depoimentos em coluna no mobile */
+    .depoimento-row { grid-template-columns: 1fr !important; }
+
+    /* Analytics grid mobile */
+    .analytics-grid { grid-template-columns: 1fr !important; }
+
+    /* Seções de relatório com melhor padding */
+    #section-visitas,
+    #section-perfil,
+    #section-analytics { padding-bottom: 1rem; }
+
+    /* Settings cards mais compactos */
+    .settings-card { padding: 1rem; }
+    .settings-row { flex-direction: column; align-items: flex-start; gap: .2rem; }
+    .settings-value { font-size: .78rem; }
+
+    /* Tabela responsiva — esconde mais colunas no mobile */
+    .data-table th:nth-child(4),
+    .data-table td:nth-child(4) { display: none; } /* área */
+
+    /* Toast acima do bottom nav */
+    #toast { bottom: 80px !important; }
+
+    /* Notificação ao vivo acima do bottom nav */
+    #_realtime-notif { bottom: 80px !important; }
+
+    /* Header mais compacto */
+    .admin-header {
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+    .header-actions {
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+    .btn-view-site {
+        font-size: .78rem;
+        padding: .45rem .75rem;
+    }
+
+    /* Pull-to-refresh hint */
+    .ptr-hint {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        padding: .5rem;
+        font-size: .72rem;
+        color: var(--text-muted);
+    }
+}
