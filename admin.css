@@ -1115,3 +1115,56 @@
         color: var(--text-muted);
     }
 }
+/* ========== FOTOS DINÂMICAS ========== */
+.fotos-inputs { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .25rem; }
+
+.btn-add-foto, .btn-remove-foto {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .45rem .9rem; border-radius: var(--radius-sm, 8px);
+    font-size: .8rem; font-weight: 600; border: 1.5px solid; cursor: pointer; transition: all .2s;
+}
+.btn-add-foto  { background: rgba(99,102,241,0.1); color: var(--accent); border-color: var(--accent); }
+.btn-add-foto:hover  { background: var(--accent); color: #fff; }
+.btn-remove-foto { background: rgba(239,68,68,0.1); color: var(--red, #ef4444); border-color: var(--red, #ef4444); }
+.btn-remove-foto:hover { background: var(--red, #ef4444); color: #fff; }
+
+/* ========== VÍDEO ========== */
+.video-input-tabs { display: flex; gap: .4rem; margin-bottom: .6rem; }
+.video-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: .4rem;
+    padding: .5rem .8rem; border-radius: var(--radius-sm, 8px);
+    font-size: .8rem; font-weight: 600; border: 1.5px solid var(--border);
+    background: var(--bg-elevated); color: var(--text-secondary); cursor: pointer; transition: all .2s;
+}
+.video-tab:hover { border-color: var(--accent); color: var(--accent); }
+.video-tab.active { background: rgba(99,102,241,0.12); border-color: var(--accent); color: var(--accent); }
+
+.video-upload-area {
+    border: 2px dashed var(--border); border-radius: var(--radius, 10px);
+    padding: 1.5rem; text-align: center; cursor: pointer;
+    transition: border-color .2s, background .2s;
+    display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    color: var(--text-muted);
+}
+.video-upload-area:hover { border-color: var(--accent); background: rgba(99,102,241,0.05); color: var(--accent); }
+.video-upload-area i { font-size: 1.8rem; }
+.video-upload-area span { font-size: .88rem; font-weight: 500; }
+.video-upload-area small { font-size: .75rem; color: var(--text-muted); }
+
+/* ========== STATUS BADGES (tabela admin) ========== */
+.status-badge {
+    display: inline-block; padding: .2rem .6rem;
+    border-radius: 20px; font-size: .75rem; font-weight: 600;
+}
+.status-disponivel { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.status-vendido    { background: rgba(239,68,68,0.15);   color: #ef4444; }
+.status-reservado  { background: rgba(245,158,11,0.15);  color: #f59e0b; }
+.status-alugado    { background: rgba(99,102,241,0.15);  color: #818cf8; }
+
+/* ========== TRÊS COLUNAS ========== */
+.form-row.three-columns {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+}
+@media (max-width: 600px) {
+    .form-row.three-columns { grid-template-columns: 1fr 1fr; }
+}
