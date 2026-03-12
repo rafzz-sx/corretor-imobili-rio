@@ -108,7 +108,7 @@ function showSection(name) {
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
-    else if (name === 'adicionar') resetForm();
+    else if (name === 'adicionar') { /* form já preenchido por editImovel ou limpo por novoImovel() */ }
     else if (name === 'lixeira') renderLixeiraTable(lixeiraData);
     else if (name === 'analytics') loadAnalytics();
     else if (name === 'visitas') loadVisitas();
@@ -117,9 +117,19 @@ function showSection(name) {
     else if (name === 'configuracoes') loadConfiguracoes();
 }
 
+function novoImovel() {
+    resetForm();
+    showSection('adicionar');
+}
+
 function setupNavigation() {
     document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', e => { e.preventDefault(); showSection(item.getAttribute('data-section')); });
+        item.addEventListener('click', e => {
+            e.preventDefault();
+            const sec = item.getAttribute('data-section');
+            if (sec === 'adicionar') novoImovel();
+            else showSection(sec);
+        });
     });
 }
 
@@ -248,6 +258,7 @@ function renderImoveisTable(list) {
             <td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td>
             <td style="color:var(--text-primary);font-weight:500;">${i.titulo}${isDestaque?' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>':''}</td>
             <td>${i.bairro}</td><td>${i.quartos} qts</td><td>${i.area} m²</td>
+            <td><span class="status-badge status-${i.status||'disponivel'}">${({disponivel:'Disponível',vendido:'Vendido',reservado:'Reservado',alugado:'Alugado'})[i.status||'disponivel']||'Disponível'}</span></td>
             <td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td>
             <td>
                 <div class="table-actions">
@@ -663,7 +674,25 @@ function setupFormListeners() {
         e.preventDefault();
         const id = document.getElementById('imovel-id').value;
         const fotos = Array.from(document.querySelectorAll('.foto-input')).map(i=>i.value.trim()).filter(Boolean);
-        const data = { titulo:document.getElementById('imovel-titulo').value, bairro:document.getElementById('imovel-bairro').value, quartos:parseInt(document.getElementById('imovel-quartos').value), area:parseInt(document.getElementById('imovel-area').value), preco:parseFloat(document.getElementById('imovel-preco').value.replace(/[^0-9]/g,'')), descricao:document.getElementById('imovel-descricao').value, imagem:document.getElementById('imovel-imagem').value, fotos:fotos.length?fotos:[document.getElementById('imovel-imagem').value], updatedAt:firebase.firestore.FieldValue.serverTimestamp() };
+        const getVal = id => (document.getElementById(id)?.value || '').trim();
+        const getNum = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+        const data = {
+            titulo: getVal('imovel-titulo'),
+            bairro: getVal('imovel-bairro'),
+            quartos: parseInt(getVal('imovel-quartos')) || 1,
+            area: parseInt(getVal('imovel-area')) || 0,
+            preco: parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0,
+            descricao: getVal('imovel-descricao'),
+            imagem: getVal('imovel-imagem'),
+            fotos: fotos.length ? fotos : [getVal('imovel-imagem')],
+            video: getVal('imovel-video') || null,
+            tipo: getVal('imovel-tipo') || 'Apartamento',
+            status: getVal('imovel-status') || 'disponivel',
+            vagas: getNum('imovel-vagas'),
+            condominio: getNum('imovel-condominio'),
+            iptu: getNum('imovel-iptu'),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
         const btn = document.querySelector('#imovel-form .btn-primary'); btn.innerHTML='<span class="loading"></span>'; btn.disabled=true;
         try {
             if(id){await db.collection('imoveis').doc(id).update(data);showToast('Imóvel atualizado!');}
@@ -675,26 +704,95 @@ function setupFormListeners() {
 }
 
 function resetForm() {
-    document.getElementById('imovel-form')?.reset(); document.getElementById('imovel-id').value='';
-    document.querySelectorAll('.foto-input').forEach(i=>i.value='');
-    const t=document.getElementById('btn-submit-text'); if(t) t.textContent='Salvar Imóvel';
+    document.getElementById('imovel-form')?.reset();
+    document.getElementById('imovel-id').value = '';
+    // Reseta fotos dinâmicas para 2 inputs
+    const container = document.getElementById('fotos-inputs-container');
+    if (container) {
+        container.innerHTML = `<input type="url" class="foto-input" placeholder="Foto 1 — URL">
+            <input type="url" class="foto-input" placeholder="Foto 2 — URL">`;
+    }
+    const btnRemove = document.getElementById('btn-remove-foto');
+    if (btnRemove) btnRemove.style.display = 'none';
+    // Reseta vídeo
+    clearVideo();
+    const t = document.getElementById('btn-submit-text');
+    if (t) t.textContent = 'Salvar Imóvel';
+}
+
+function addFotoInput() {
+    const container = document.getElementById('fotos-inputs-container');
+    if (!container) return;
+    const count = container.querySelectorAll('.foto-input').length + 1;
+    const input = document.createElement('input');
+    input.type = 'url'; input.className = 'foto-input';
+    input.placeholder = `Foto ${count} — URL`;
+    container.appendChild(input);
+    const btnRemove = document.getElementById('btn-remove-foto');
+    if (btnRemove) btnRemove.style.display = count > 2 ? '' : 'none';
+    input.focus();
+}
+
+function removeFotoInput() {
+    const container = document.getElementById('fotos-inputs-container');
+    if (!container) return;
+    const inputs = container.querySelectorAll('.foto-input');
+    if (inputs.length > 1) inputs[inputs.length - 1].remove();
+    const btnRemove = document.getElementById('btn-remove-foto');
+    if (btnRemove) btnRemove.style.display =
+        container.querySelectorAll('.foto-input').length > 2 ? '' : 'none';
+}
+
+// ---- VÍDEO (só URL/YouTube) ----
+function clearVideo() {
+    const urlInput = document.getElementById('imovel-video');
+    if (urlInput) urlInput.value = '';
 }
 
 async function editImovel(id) {
     try {
         const doc = await db.collection('imoveis').doc(id).get(); if(!doc.exists){showToast('Não encontrado','error');return;}
         const d=doc.data();
-        document.getElementById('imovel-id').value=id; document.getElementById('imovel-titulo').value=d.titulo||''; document.getElementById('imovel-bairro').value=d.bairro||'';
-        document.getElementById('imovel-quartos').value=d.quartos||''; document.getElementById('imovel-area').value=d.area||''; document.getElementById('imovel-preco').value=d.preco?Number(d.preco).toLocaleString('pt-BR'):'';
-        document.getElementById('imovel-descricao').value=d.descricao||''; document.getElementById('imovel-imagem').value=d.imagem||'';
-        const fi=document.querySelectorAll('.foto-input'); if(d.fotos?.length>1)d.fotos.slice(0,4).forEach((f,i)=>{if(fi[i])fi[i].value=f;});
-        const t=document.getElementById('btn-submit-text'); if(t)t.textContent='Atualizar Imóvel'; showSection('adicionar');
+        const setF = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+        setF('imovel-id', id);
+        setF('imovel-titulo', d.titulo);
+        setF('imovel-bairro', d.bairro);
+        setF('imovel-quartos', d.quartos);
+        setF('imovel-area', d.area);
+        setF('imovel-preco', d.preco ? Number(d.preco).toLocaleString('pt-BR') : '');
+        setF('imovel-descricao', d.descricao);
+        setF('imovel-imagem', d.imagem);
+        setF('imovel-tipo', d.tipo || 'Apartamento');
+        setF('imovel-status', d.status || 'disponivel');
+        setF('imovel-vagas', d.vagas || 0);
+        setF('imovel-condominio', d.condominio || 0);
+        setF('imovel-iptu', d.iptu || 0);
+
+        // Fotos dinâmicas — carrega todas
+        const container = document.getElementById('fotos-inputs-container');
+        if (container) {
+            const fList = (d.fotos && d.fotos.length > 1) ? d.fotos : [(d.fotos?.[0] || ''), ''];
+            container.innerHTML = fList.map((f, i) =>
+                `<input type="url" class="foto-input" placeholder="Foto ${i+1} — URL" value="${f||''}">`
+            ).join('');
+            const btnRemove = document.getElementById('btn-remove-foto');
+            if (btnRemove) btnRemove.style.display = fList.length > 2 ? '' : 'none';
+        }
+
+        // Vídeo
+        clearVideo();
+        if (d.video) setF('imovel-video', d.video);
+
+        const submitTxt = document.getElementById('btn-submit-text');
+        if (submitTxt) submitTxt.textContent = 'Atualizar Imóvel';
+        showSection('adicionar');
     } catch(e){showToast('Erro ao carregar','error');}
 }
 
 // ========== MOBILE NAVIGATION ==========
 function mobileNav(section, el) {
-    showSection(section);
+    if (section === 'adicionar') novoImovel();
+    else showSection(section);
     document.querySelectorAll('.mobile-nav-item').forEach(b => b.classList.remove('active'));
     if (el) el.classList.add('active');
 }
@@ -796,9 +894,9 @@ function startRealtimeListeners() {
             } else if (activeSection === 'section-imoveis') {
                 renderImoveisTable(imoveisData);
                 updateBairroFilter(imoveisData);
-            } else if (activeSection === 'section-analytics') {
-                loadAnalytics();
             }
+            // Analytics e Visitas NÃO são atualizados automaticamente —
+            // o usuário pode estar lendo o relatório. Só atualiza ao navegar para a seção.
             // Sempre atualiza badge
             setEl('badge-imoveis', imoveisData.length);
             syncMobileBadges();
@@ -832,9 +930,9 @@ function startRealtimeListeners() {
                     const ua = parseUA(v.userAgent || '');
                     showNotification('👀 Novo visitante', `${v.page||'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`, 'blue');
                     updateLastRefreshIndicator();
+                    // Atualiza só o dashboard se estiver visível — NÃO recarrega o relatório de visitas
                     const activeSection = document.querySelector('.admin-section.active')?.id;
                     if (activeSection === 'section-dashboard') loadDashboardVisitas();
-                    else if (activeSection === 'section-visitas') loadVisitas();
                 }
             });
         }, err => console.warn('Listener visitas:', err));
@@ -864,41 +962,61 @@ function stopRealtimeListeners() {
     if (_linksListener)    { _linksListener();     _linksListener    = null; }
 }
 
-// Toast de notificação diferente do toast padrão (não sobrepõe)
+// Toast de notificação em tempo real
 let _notifQueue = [];
-let _notifActive = false;
+let _notifTimer = null;
 
 function showNotification(title, body, color) {
     _notifQueue.push({ title, body, color });
-    if (!_notifActive) processNotifQueue();
+    // Se não há notificação ativa, mostra imediatamente
+    if (!_notifTimer) _processNextNotif();
 }
 
-function processNotifQueue() {
-    if (!_notifQueue.length) { _notifActive = false; return; }
-    _notifActive = true;
+function _processNextNotif() {
+    if (!_notifQueue.length) return;
     const { title, body, color } = _notifQueue.shift();
     const colors = { blue:'var(--accent)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)' };
     const c = colors[color] || colors.blue;
 
+    // Garante que o elemento existe e está completamente fora da tela antes de animar
     let el = document.getElementById('_realtime-notif');
     if (!el) {
         el = document.createElement('div');
         el.id = '_realtime-notif';
-        el.style.cssText = `position:fixed;bottom:5.5rem;right:1.5rem;z-index:9999;min-width:260px;max-width:320px;
+        el.style.cssText = `position:fixed;bottom:5.5rem;right:1.5rem;z-index:9999;
+            min-width:260px;max-width:320px;
             background:var(--bg-elevated);border-radius:var(--radius);padding:.9rem 1.1rem;
             box-shadow:var(--shadow-lg);display:flex;gap:.75rem;align-items:flex-start;
-            border-left:3px solid ${c};transform:translateX(120%);transition:transform .35s cubic-bezier(.22,1,.36,1);`;
+            border-left:3px solid ${c};
+            transform:translateX(calc(100% + 2rem));
+            transition:transform .35s cubic-bezier(.22,1,.36,1);`;
         document.body.appendChild(el);
     }
+
+    // Reseta para fora da tela sem transição, depois anima entrada
+    el.style.transition = 'none';
+    el.style.transform = 'translateX(calc(100% + 2rem))';
     el.style.borderLeftColor = c;
     el.innerHTML = `
-        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.3rem;flex-shrink:0;box-shadow:0 0 8px ${c};animation:pulse 1.2s infinite;"></div>
-        <div><div style="font-weight:600;font-size:.82rem;color:var(--text-primary);">${title}</div>
-        <div style="font-size:.75rem;color:var(--text-secondary);margin-top:.15rem;">${body}</div></div>`;
-    requestAnimationFrame(() => { el.style.transform = 'translateX(0)'; });
-    setTimeout(() => {
-        el.style.transform = 'translateX(120%)';
-        setTimeout(processNotifQueue, 400);
+        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.3rem;
+            flex-shrink:0;box-shadow:0 0 8px ${c};animation:pulse 1.2s infinite;"></div>
+        <div>
+            <div style="font-weight:600;font-size:.82rem;color:var(--text-primary);">${title}</div>
+            <div style="font-size:.75rem;color:var(--text-secondary);margin-top:.15rem;">${body}</div>
+        </div>`;
+
+    // Força reflow para garantir que o navegador processa o estado inicial antes de animar
+    void el.offsetWidth;
+    el.style.transition = 'transform .35s cubic-bezier(.22,1,.36,1)';
+    el.style.transform = 'translateX(0)';
+
+    // Agenda saída após 4s + próxima notificação após animação de saída (350ms)
+    _notifTimer = setTimeout(() => {
+        el.style.transform = 'translateX(calc(100% + 2rem))';
+        _notifTimer = setTimeout(() => {
+            _notifTimer = null;
+            _processNextNotif();
+        }, 370);
     }, 4000);
 }
 
