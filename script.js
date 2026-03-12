@@ -669,8 +669,7 @@ function showVideoCard(mainWrap, ifrEl, originalSrc, ytId) {
     div.style.cursor = 'pointer';
     div.onclick = () => window.open(originalSrc, '_blank', 'noopener');
     div.innerHTML = thumb
-        ? `<img src="${thumb}" class="vef-thumb" alt="Capa do vídeo">
-           <div class="vef-play"><i class="fab fa-youtube"></i></div>`
+        ? `<img src="${thumb}" class="vef-thumb" alt="Capa do vídeo">`
         : `<div class="vef-icon"><i class="fas fa-play-circle"></i></div>
            <p class="vef-title">Clique para assistir o vídeo</p>`;
     mainWrap.appendChild(div);
