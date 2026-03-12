@@ -3,12 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Imóveis - Leandro Bomfim</title>
+    <title>Imóveis à Venda no Rio de Janeiro | Leandro Bomfim</title>
+    <meta name="description" content="Veja todos os imóveis disponíveis em Ipanema, Leblon, Barra da Tijuca, Recreio e mais. Filtre por bairro, quartos e faixa de preço.">
+    <meta name="keywords" content="imóveis à venda Rio de Janeiro, apartamento Ipanema, apartamento Leblon, corretor RJ">
+    <meta name="author" content="Leandro Bomfim">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Imóveis à Venda no Rio de Janeiro | Leandro Bomfim">
+    <meta property="og:description" content="Veja todos os imóveis disponíveis em Ipanema, Leblon, Barra da Tijuca, Recreio e mais.">
+    <meta property="og:image" content="https://files.catbox.moe/nqdyup.png">
+    <meta property="og:url" content="https://leandrobomfim.com.br/imoveis.html">
+    <meta property="og:locale" content="pt_BR">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- Firebase rastreador de visitas -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="tracker.js"></script>
@@ -36,25 +48,26 @@
     <main>
         <section class="filters fade-in">
             <h2>Filtrar Imóveis</h2>
+            <!-- Busca por texto -->
+            <div class="search-text-wrap">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="busca-texto" placeholder="Buscar por título, bairro, tipo...">
+            </div>
             <div class="filter-container">
                 <div class="filter-group fade-in delay-1">
                     <label for="bairro">Bairro:</label>
                     <select id="bairro">
                         <option value="">Todos</option>
-                        <option value="Ipanema">Ipanema</option>
-                        <option value="Leblon">Leblon</option>
-                        <option value="Barra da Tijuca">Barra da Tijuca</option>
-                        <option value="Barra Olímpica">Barra Olímpica</option>
-                        <option value="Recreio dos Bandeirantes">Recreio dos Bandeirantes</option>
                     </select>
                 </div>
                 <div class="filter-group fade-in delay-2">
-                    <label for="quartos">Número de Quartos:</label>
+                    <label for="quartos">Quartos:</label>
                     <select id="quartos">
                         <option value="">Todos</option>
                         <option value="1">1</option>
                         <option value="2">2</option>
                         <option value="3">3</option>
+                        <option value="4">4+</option>
                     </select>
                 </div>
                 <div class="filter-group fade-in delay-3">
@@ -62,12 +75,47 @@
                     <select id="preco">
                         <option value="">Todos</option>
                         <option value="0-600000">Até 600.000</option>
-                        <option value="600001-1000000">600.001 - 1.000.000</option>
+                        <option value="600001-1000000">600.001 – 1.000.000</option>
                         <option value="1000001+">Acima de 1.000.000</option>
                     </select>
                 </div>
+                <div class="filter-group fade-in delay-4">
+                    <label for="tipo">Tipo:</label>
+                    <select id="tipo">
+                        <option value="">Todos</option>
+                        <option value="Apartamento">Apartamento</option>
+                        <option value="Casa">Casa</option>
+                        <option value="Cobertura">Cobertura</option>
+                        <option value="Comercial">Comercial</option>
+                    </select>
+                </div>
+                <div class="filter-group fade-in delay-4">
+                    <label for="ordenar">Ordenar por:</label>
+                    <select id="ordenar">
+                        <option value="destaque">Destaques primeiro</option>
+                        <option value="recentes">Mais recentes</option>
+                        <option value="menor-preco">Menor preço</option>
+                        <option value="maior-preco">Maior preço</option>
+                        <option value="maior-area">Maior área</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Checkbox mostrar vendidos/alugados -->
+            <div class="filter-extra-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="mostrar-vendidos">
+                    <span>Mostrar vendidos / alugados</span>
+                </label>
             </div>
         </section>
+
+        <!-- Barra de resultados -->
+        <div id="results-bar" class="results-bar" style="display:none;">
+            <span id="results-count"></span>
+            <button id="btn-limpar-filtros" onclick="limparFiltros()" style="display:none;">
+                <i class="fas fa-times-circle"></i> Limpar filtros
+            </button>
+        </div>
 
         <section class="gallery" id="gallery">
             <!-- Galeria populada pelo JS -->
@@ -97,7 +145,7 @@
 
             <div class="modal-info">
                 <h2 id="modal-title"></h2>
-                <div class="modal-tags">
+                <div class="modal-tags" id="modal-tags">
                     <span class="modal-tag"><i class="fas fa-map-marker-alt"></i> <span id="modal-bairro"></span></span>
                     <span class="modal-tag"><i class="fas fa-bed"></i> <span id="modal-quartos"></span> quartos</span>
                     <span class="modal-tag"><i class="fas fa-ruler-combined"></i> <span id="modal-area"></span></span>
@@ -105,7 +153,7 @@
                 <p class="modal-preco" id="modal-preco"></p>
                 <p class="modal-descricao" id="modal-descricao"></p>
                 <div class="modal-cta-group">
-                    <a id="modal-whatsapp" href="https://wa.me/5521981424469" class="modal-cta" target="_blank" rel="noopener">
+                    <a href="https://wa.me/5521981424469" id="modal-whatsapp" class="modal-cta" target="_blank" rel="noopener">
                         <i class="fab fa-whatsapp"></i>
                         <span>Tenho Interesse</span>
                     </a>
@@ -113,7 +161,7 @@
                         <i class="fas fa-address-card"></i>
                         <span>Ver Contatos</span>
                     </a>
-                    <button id="modal-share-btn" class="modal-cta modal-cta-share" type="button">
+                    <button id="modal-share-btn" class="modal-cta modal-cta-share">
                         <i class="fas fa-share-alt"></i>
                         <span>Compartilhar</span>
                     </button>
@@ -125,6 +173,16 @@
     <footer>
         <p>&copy; 2026 Leandro Imóveis. Todos os direitos reservados.</p>
     </footer>
+
+    <!-- Botão Flutuante WhatsApp -->
+    <a href="https://wa.me/5521981424469?text=Olá%20Leandro!%20Tenho%20interesse%20em%20imóveis.%20Pode%20me%20ajudar%3F"
+       class="whatsapp-float" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
+        <div class="whatsapp-float-inner">
+            <i class="fab fa-whatsapp"></i>
+            <span class="whatsapp-float-label">Falar com Leandro</span>
+        </div>
+        <span class="whatsapp-float-pulse"></span>
+    </a>
 
     <script src="script.js"></script>
 </body>
