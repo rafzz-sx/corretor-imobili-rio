@@ -626,7 +626,6 @@ function closeModal() {
     // Parar vídeo e limpar timers ao fechar
     const iframe = document.querySelector('.modal-video-embed');
     if (iframe) {
-        if (iframe._videoFallbackTimer) clearTimeout(iframe._videoFallbackTimer);
         if (iframe._videoFallbackHandler) window.removeEventListener('message', iframe._videoFallbackHandler);
         iframe.src = '';
     }
@@ -659,7 +658,6 @@ function getYouTubeId(url) {
 function showVideoCard(mainWrap, ifrEl, originalSrc, ytId) {
     if (mainWrap.querySelector('.video-embed-fallback')) return;
     if (ifrEl._videoFallbackHandler) { window.removeEventListener('message', ifrEl._videoFallbackHandler); }
-    if (ifrEl._videoFallbackTimer)   { clearTimeout(ifrEl._videoFallbackTimer); }
     ifrEl.style.display = 'none';
 
     const thumb = ytId
@@ -708,7 +706,6 @@ function renderModalPhotos() {
     // Limpar iframe e fallback anteriores
     const oldIfrEl = mainWrap.querySelector('iframe.modal-video-embed');
     if (oldIfrEl) {
-        if (oldIfrEl._videoFallbackTimer) clearTimeout(oldIfrEl._videoFallbackTimer);
         if (oldIfrEl._videoFallbackHandler) window.removeEventListener('message', oldIfrEl._videoFallbackHandler);
         oldIfrEl.remove();
     }
@@ -729,20 +726,15 @@ function renderModalPhotos() {
         ifrEl.style.display = 'block';
         if (mainImg) mainImg.style.display = 'none';
 
-        // Detecta falha via postMessage ou timeout 5s → substitui por card clicável
-        let loaded = false;
+        // Detecta falha via postMessage (onError do YouTube)
         const handler = (e) => {
             try {
                 const d = JSON.parse(e.data);
-                if (d.event === 'onReady') { loaded = true; }
                 if (d.event === 'onError') { showVideoCard(mainWrap, ifrEl, originalSrc, ytId); }
             } catch(_) {}
         };
         window.addEventListener('message', handler);
         ifrEl._videoFallbackHandler = handler;
-        ifrEl._videoFallbackTimer = setTimeout(() => {
-            if (!loaded) showVideoCard(mainWrap, ifrEl, originalSrc, ytId);
-        }, 5000);
     } else {
         if (ifrEl) { ifrEl.src = ''; ifrEl.style.display = 'none'; }
         if (mainImg) {
