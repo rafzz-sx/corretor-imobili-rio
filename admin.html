@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel Administrativo - Leandro Imóveis</title>
-    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="admin.css">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -19,7 +18,7 @@
                 <h1>Painel Admin</h1>
                 <p>Leandro Imóveis</p>
             </div>
-            <form id="login-form" class="login-form" onsubmit="return false;">
+            <form id="login-form" class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label for="login-email">Email</label>
                     <input type="email" id="login-email" placeholder="seu@email.com" required>
@@ -33,7 +32,7 @@
                         </button>
                     </div>
                 </div>
-                <button type="submit" class="btn-login">
+                <button type="button" class="btn-login" onclick="handleLogin(event)">
                     <i class="fas fa-sign-in-alt"></i><span>Entrar</span>
                 </button>
                 <div id="login-error" class="login-error"></div>
@@ -188,7 +187,7 @@
                     </div>
                     <div class="filter-actions">
                         <select id="filter-bairro"><option value="">Todos os bairros</option></select>
-                        <button onclick="showSection('adicionar')" class="btn-primary"><i class="fas fa-plus"></i> Novo Imóvel</button>
+                        <button onclick="novoImovel()" class="btn-primary"><i class="fas fa-plus"></i> Novo Imóvel</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -232,12 +231,46 @@
                         </div>
                         <div class="form-row two-columns">
                             <div class="form-group">
+                                <label for="imovel-tipo">Tipo *</label>
+                                <select id="imovel-tipo" required>
+                                    <option value="Apartamento">Apartamento</option>
+                                    <option value="Casa">Casa</option>
+                                    <option value="Cobertura">Cobertura</option>
+                                    <option value="Comercial">Comercial</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-status">Status *</label>
+                                <select id="imovel-status" required>
+                                    <option value="disponivel">✅ Disponível</option>
+                                    <option value="reservado">⏳ Reservado</option>
+                                    <option value="vendido">🔴 Vendido</option>
+                                    <option value="alugado">🔑 Alugado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row two-columns">
+                            <div class="form-group">
                                 <label for="imovel-area">Área (m²) *</label>
                                 <input type="number" id="imovel-area" min="10" placeholder="80" required>
                             </div>
                             <div class="form-group">
                                 <label for="imovel-preco">Preço (R$) *</label>
                                 <input type="text" id="imovel-preco" placeholder="850.000" required>
+                            </div>
+                        </div>
+                        <div class="form-row three-columns">
+                            <div class="form-group">
+                                <label for="imovel-vagas">Vagas</label>
+                                <input type="number" id="imovel-vagas" min="0" max="10" placeholder="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-condominio">Condomínio (R$/mês)</label>
+                                <input type="number" id="imovel-condominio" min="0" placeholder="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-iptu">IPTU (R$/mês)</label>
+                                <input type="number" id="imovel-iptu" min="0" placeholder="0" value="0">
                             </div>
                         </div>
                         <div class="form-row">
@@ -255,16 +288,32 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label>URLs das Fotos Adicionais (até 4)</label>
-                                <div class="fotos-inputs">
+                                <label>Fotos Adicionais <small style="font-weight:400;color:var(--text-muted)">(adicione quantas quiser)</small></label>
+                                <div class="fotos-inputs" id="fotos-inputs-container">
                                     <input type="url" class="foto-input" placeholder="Foto 1 — URL">
                                     <input type="url" class="foto-input" placeholder="Foto 2 — URL">
-                                    <input type="url" class="foto-input" placeholder="Foto 3 — URL">
-                                    <input type="url" class="foto-input" placeholder="Foto 4 — URL">
                                 </div>
-                                <small>Fotos que aparecem no modal de detalhes</small>
+                                <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+                                    <button type="button" onclick="addFotoInput()" class="btn-add-foto">
+                                        <i class="fas fa-plus"></i> Adicionar Foto
+                                    </button>
+                                    <button type="button" onclick="removeFotoInput()" class="btn-remove-foto" id="btn-remove-foto" style="display:none;">
+                                        <i class="fas fa-minus"></i> Remover Última
+                                    </button>
+                                </div>
+                                <small>URLs das fotos que aparecem na galeria do modal</small>
                             </div>
                         </div>
+
+                        <!-- VÍDEO -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Vídeo do Imóvel <small style="font-weight:400;color:var(--text-muted)">(opcional)</small></label>
+                                <input type="url" id="imovel-video" placeholder="https://youtube.com/watch?v=... ou https://youtube.com/shorts/...">
+                                <small>Cole um link do YouTube. Aparece como primeira mídia na galeria do imóvel.</small>
+                            </div>
+                        </div>
+
                         <div class="form-actions">
                             <button type="button" onclick="showSection('imoveis')" class="btn-secondary">
                                 <i class="fas fa-times"></i> Cancelar
@@ -444,6 +493,56 @@
         <span id="toast-message">Operação realizada!</span>
     </div>
 
+    <script>
+    // ── Login blindado: funciona independente do Firebase estar pronto ──
+    function handleLogin(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+
+        const email    = (document.getElementById('login-email')?.value || '').trim();
+        const password = (document.getElementById('login-senha')?.value || '').trim();
+        const errorDiv = document.getElementById('login-error');
+        const btn      = document.querySelector('.btn-login');
+
+        if (!email || !password) {
+            if (errorDiv) errorDiv.textContent = 'Preencha email e senha';
+            return false;
+        }
+
+        // Firebase pode não estar pronto ainda
+        if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
+            if (errorDiv) errorDiv.textContent = 'Aguardando conexão. Tente novamente.';
+            return false;
+        }
+
+        if (btn) { btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true; }
+        if (errorDiv) errorDiv.textContent = '';
+
+        firebase.auth().signInWithEmailAndPassword(email, password)
+            .then(() => { if (errorDiv) errorDiv.textContent = ''; })
+            .catch(err => {
+                const msgs = {
+                    'auth/invalid-credential': 'Email ou senha incorretos.',
+                    'auth/user-not-found':     'Usuário não encontrado.',
+                    'auth/wrong-password':     'Senha incorreta.',
+                    'auth/invalid-email':      'Email inválido.',
+                    'auth/too-many-requests':  'Muitas tentativas. Aguarde.'
+                };
+                if (errorDiv) errorDiv.textContent = msgs[err.code] || 'Erro ao entrar.';
+                if (btn) { btn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>Entrar</span>'; btn.disabled = false; }
+            });
+
+        return false;
+    }
+
+    function togglePassword(id) {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+        const icon = input.parentElement.querySelector('.toggle-password i');
+        if (icon) icon.className = input.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+    }
+    </script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
