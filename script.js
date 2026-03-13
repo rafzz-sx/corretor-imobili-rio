@@ -17,12 +17,7 @@ let imoveisCarregados = false;
 const FAVORITOS_KEY = '_lb_favoritos';
 
 function safeId(id) {
-    const el = document.getElementById(id);
-    if (!el) {
-        console.warn(`⚠️ Elemento não encontrado: #${id}`);
-        return null;
-    }
-    return el;
+    return document.getElementById(id) || null;
 }
 
 function safeText(id, value) {
@@ -735,7 +730,7 @@ function renderModalPhotos() {
         window.addEventListener('message', handler);
         ifrEl._videoFallbackHandler = handler;
     } else {
-        if (ifrEl) { ifrEl.src = ''; ifrEl.style.display = 'none'; }
+        if (oldIfrEl) { oldIfrEl.style.display = 'none'; }
         if (mainImg) {
             mainImg.style.display = 'block';
             mainImg.src = media.src;
