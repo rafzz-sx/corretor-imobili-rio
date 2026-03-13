@@ -77,6 +77,10 @@
                     <i class="fas fa-users"></i><span>Perfil de Visitante</span>
                 </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
+                <a href="#" class="nav-item" data-section="seguranca">
+                    <i class="fas fa-shield-alt"></i><span>Segurança</span>
+                    <span class="nav-badge nav-badge-red" id="badge-seguranca" style="display:none;background:var(--red)">!</span>
+                </a>
                 <a href="#" class="nav-item" data-section="site">
                     <i class="fas fa-sliders-h"></i><span>Config. do Site</span>
                 </a>
@@ -107,6 +111,13 @@
 
             <!-- DASHBOARD -->
             <section id="section-dashboard" class="admin-section active">
+                <!-- Banner de alerta de segurança (oculto por padrão) -->
+                <div id="security-alert-banner" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:var(--radius);padding:.75rem 1.1rem;margin-bottom:1.2rem;display:none;align-items:center;gap:.8rem;flex-wrap:wrap;">
+                    <i class="fas fa-shield-alt" style="color:var(--red);font-size:1.1rem;"></i>
+                    <span style="color:var(--red);font-weight:600;font-size:.85rem;">Alerta de Segurança:</span>
+                    <span id="security-alert-msg" style="color:var(--text-secondary);font-size:.83rem;">Há logins suspeitos detectados.</span>
+                    <a href="#" onclick="showSection('seguranca');return false;" style="margin-left:auto;color:var(--red);font-size:.8rem;font-weight:600;text-decoration:none;">Ver Segurança <i class="fas fa-arrow-right"></i></a>
+                </div>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon blue"><i class="fas fa-building"></i></div>
@@ -305,12 +316,22 @@
                             </div>
                         </div>
 
-                        <!-- VÍDEO -->
+                        <!-- VÍDEOS ILIMITADOS -->
                         <div class="form-row">
                             <div class="form-group">
-                                <label>Vídeo do Imóvel <small style="font-weight:400;color:var(--text-muted)">(opcional)</small></label>
-                                <input type="url" id="imovel-video" placeholder="https://youtube.com/watch?v=... ou https://youtube.com/shorts/...">
-                                <small>Cole um link do YouTube. Aparece como primeira mídia na galeria do imóvel.</small>
+                                <label>Vídeos do Imóvel <small style="font-weight:400;color:var(--text-muted)">(opcional — adicione quantos quiser)</small></label>
+                                <div class="fotos-inputs" id="videos-inputs-container">
+                                    <input type="url" class="video-input" placeholder="Vídeo 1 — URL do YouTube (watch, shorts ou youtu.be)">
+                                </div>
+                                <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;">
+                                    <button type="button" onclick="addVideoInput()" class="btn-add-foto">
+                                        <i class="fas fa-plus"></i> Adicionar Vídeo
+                                    </button>
+                                    <button type="button" onclick="removeVideoInput()" class="btn-remove-foto" id="btn-remove-video" style="display:none;">
+                                        <i class="fas fa-minus"></i> Remover Último
+                                    </button>
+                                </div>
+                                <small>Links do YouTube aparecem como mídia na galeria do imóvel.</small>
                             </div>
                         </div>
 
@@ -379,6 +400,14 @@
                 <div id="site-content"></div>
             </section>
 
+            <!-- SEGURANÇA — HISTÓRICO DE LOGINS -->
+            <section id="section-seguranca" class="admin-section">
+                <div id="seguranca-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando histórico...
+                </div>
+                <div id="seguranca-content"></div>
+            </section>
+
             <!-- CONFIGURAÇÕES -->
             <section id="section-configuracoes" class="admin-section">
                 <div class="settings-grid">
@@ -405,7 +434,7 @@
                     </div>
                     <div class="settings-card">
                         <div class="settings-card-header"><i class="fas fa-info-circle"></i><h4>Informações</h4></div>
-                        <div class="settings-row"><span class="settings-label">Versão do painel</span><span class="settings-value">3.1.0</span></div>
+                        <div class="settings-row"><span class="settings-label">Versão do painel</span><span class="settings-value">3.2.0</span></div>
                         <div class="settings-row"><span class="settings-label">Firebase SDK</span><span class="settings-value">9.22.0 (compat)</span></div>
                         <div class="settings-row"><span class="settings-label">Data atual</span><span class="settings-value" id="settings-date">—</span></div>
                     </div>
@@ -455,6 +484,10 @@
                 <button class="mobile-more-item" onclick="mobileNavMore('perfil')">
                     <span class="mobile-more-icon purple"><i class="fas fa-users"></i></span>
                     <span>Visitantes</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('seguranca')">
+                    <span class="mobile-more-icon" style="background:rgba(239,68,68,.15);color:var(--red);"><i class="fas fa-shield-alt"></i></span>
+                    <span>Segurança</span>
                 </button>
                 <button class="mobile-more-item" onclick="mobileNavMore('site')">
                     <span class="mobile-more-icon amber"><i class="fas fa-sliders-h"></i></span>
