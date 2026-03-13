@@ -528,7 +528,9 @@ function openModal(imovelId) {
 
     currentImovel = imo;
     currentImovelFotos = imo.fotos && imo.fotos.length ? imo.fotos : [imo.imagem];
-    currentImovelVideo = imo.video || null;
+    // Suporte a múltiplos vídeos (novo) ou vídeo único (legado)
+    const videoList = Array.isArray(imo.videos) && imo.videos.length ? imo.videos : (imo.video ? [imo.video] : []);
+    currentImovelVideo = videoList.length ? videoList : null; // agora é array ou null
     currentPhotoIndex = 0;
 
     // USANDO AS FUNÇÕES SEGURAS - NENHUM ERRO VAI APARECER
@@ -688,9 +690,11 @@ function renderModalPhotos() {
     const counter = safeId('modal-photo-counter');
     if (!mainWrap || !thumbsContainer) return;
 
-    // mídias: vídeo (se existir) primeiro, depois fotos
+    // mídias: todos os vídeos (se existirem) primeiro, depois fotos
     const medias = [];
-    if (currentImovelVideo) medias.push({ type: 'video', src: currentImovelVideo });
+    if (currentImovelVideo && currentImovelVideo.length) {
+        currentImovelVideo.forEach(v => medias.push({ type: 'video', src: v }));
+    }
     currentImovelFotos.forEach(f => medias.push({ type: 'foto', src: f }));
     if (!medias.length) return;
 
@@ -736,7 +740,8 @@ function renderModalPhotos() {
             mainImg.src = media.src;
             mainImg.onerror = function() { this.src = 'https://via.placeholder.com/800x500/1a1a2e/fff?text=Imóvel'; };
             // Clique para lightbox
-            const fotoIdx = currentPhotoIndex - (currentImovelVideo ? 1 : 0);
+            const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
+            const fotoIdx = currentPhotoIndex - videoCount;
             mainImg.style.cursor = 'zoom-in';
             mainImg.onclick = () => openLightbox(fotoIdx);
         }
@@ -748,7 +753,11 @@ function renderModalPhotos() {
         const thumb = document.createElement('div');
         thumb.className = 'modal-thumb' + (idx === currentPhotoIndex ? ' active' : '');
         if (m.type === 'video') {
-            thumb.innerHTML = '<div class="thumb-video-icon"><i class="fas fa-play-circle"></i></div>';
+            const ytId = getYouTubeId(m.src);
+            thumb.innerHTML = ytId
+                ? `<img src="https://img.youtube.com/vi/${ytId}/mqdefault.jpg" alt="Vídeo ${idx+1}" style="object-fit:cover;width:100%;height:100%;"><div class="thumb-video-icon" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);"><i class="fas fa-play-circle"></i></div>`
+                : '<div class="thumb-video-icon"><i class="fas fa-play-circle"></i></div>';
+            thumb.style.position = 'relative';
         } else {
             const img = document.createElement('img');
             img.src = m.src; img.alt = `Foto ${idx + 1}`;
@@ -761,14 +770,16 @@ function renderModalPhotos() {
 }
 
 function prevPhoto() {
-    const total = currentImovelFotos.length + (currentImovelVideo ? 1 : 0);
+    const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
+    const total = currentImovelFotos.length + videoCount;
     if (!total) return;
     currentPhotoIndex = (currentPhotoIndex - 1 + total) % total;
     renderModalPhotos();
 }
 
 function nextPhoto() {
-    const total = currentImovelFotos.length + (currentImovelVideo ? 1 : 0);
+    const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
+    const total = currentImovelFotos.length + videoCount;
     if (!total) return;
     currentPhotoIndex = (currentPhotoIndex + 1) % total;
     renderModalPhotos();
