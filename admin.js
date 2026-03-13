@@ -19,7 +19,7 @@ let sessionTimer = null;
 
 // ========== AUTENTICAÇÃO ==========
 function setupAuthListener() {
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
         if (user) {
             // Verifica se a sessão expirou
             const sessionStart = localStorage.getItem(SESSION_KEY);
@@ -31,15 +31,207 @@ function setupAuthListener() {
                 return;
             }
             currentUser = user;
+            const isNewSession = !sessionStart;
             if (!sessionStart) localStorage.setItem(SESSION_KEY, now.toString());
             startSessionTimer();
             showAdminPanel();
             loadDashboard();
+
+            // Registra login no histórico apenas em novas sessões
+            if (isNewSession) {
+                await registrarLoginHistorico(user);
+            }
         } else {
             clearSessionTimer();
             showLoginScreen();
         }
     });
+}
+
+// ── Coleta informações ricas do dispositivo para o histórico ──
+async function coletarInfoDispositivo() {
+    const ua = navigator.userAgent || '';
+    const info = {
+        ua,
+        browser:        detectBrowser(ua),
+        browserVer:     detectBrowserVersion(ua),
+        os:             detectOS(ua),
+        device:         detectDevice(ua),
+        language:       navigator.language || '—',
+        languages:      (navigator.languages || []).join(', ') || '—',
+        screenW:        screen.width,
+        screenH:        screen.height,
+        screenDepth:    screen.colorDepth ? screen.colorDepth + ' bits' : '—',
+        viewport:       window.innerWidth + '×' + window.innerHeight,
+        timezone:       Intl.DateTimeFormat().resolvedOptions().timeZone || '—',
+        timezoneOffset: new Date().getTimezoneOffset() + ' min',
+        platform:       navigator.platform || '—',
+        cookiesEnabled: navigator.cookieEnabled,
+        onLine:         navigator.onLine,
+        cores:          navigator.hardwareConcurrency || '—',
+        ram:            navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '—',
+        touchPoints:    navigator.maxTouchPoints || 0,
+        doNotTrack:     navigator.doNotTrack === '1' ? 'Ativado' : 'Desativado',
+        connectionType: '—',
+        connectionSpeed:'—',
+        ip:             '—',
+        cidade: '—', regiao: '—', pais: '—', paisCode: '—',
+        isp:    '—', asn: '—', org: '—',
+        isVPN: '—', isProxy: '—', isMobile: '—', isHosting: '—',
+        lat: '—', lon: '—', cep: '—',
+        riskScore: 0,
+        mac: 'Indisponível — bloqueado pelo navegador por segurança',
+    };
+
+    // Tipo de conexão (Network Info API)
+    try {
+        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn) {
+            info.connectionType  = conn.effectiveType || conn.type || '—';
+            info.connectionSpeed = conn.downlink ? conn.downlink + ' Mbps' : '—';
+        }
+    } catch(_) {}
+
+    // IP via ipify
+    try {
+        const r = await fetch('https://api.ipify.org?format=json');
+        const d = await r.json();
+        info.ip = d.ip || '—';
+    } catch(_) { info.ip = '—'; }
+
+    // Geolocalização + ISP + ASN + VPN/Proxy via ip-api.com
+    if (info.ip !== '—') {
+        try {
+            const fields = 'status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,mobile,proxy,hosting,query';
+            const r2 = await fetch('https://ip-api.com/json/' + info.ip + '?fields=' + fields);
+            const d2 = await r2.json();
+            if (d2.status === 'success') {
+                info.cidade    = d2.city        || '—';
+                info.regiao    = d2.regionName  || d2.region || '—';
+                info.pais      = d2.country     || '—';
+                info.paisCode  = d2.countryCode || '—';
+                info.isp       = d2.isp         || '—';
+                info.asn       = d2.as          || '—';
+                info.org       = d2.org         || '—';
+                info.lat       = d2.lat         || '—';
+                info.lon       = d2.lon         || '—';
+                info.cep       = d2.zip         || '—';
+                info.isMobile  = d2.mobile  ? '⚠️ Rede móvel'       : '✅ Não';
+                info.isProxy   = d2.proxy   ? '🔴 SIM'              : '✅ Não detectado';
+                info.isHosting = d2.hosting ? '⚠️ SIM (data center)' : '✅ Não';
+                info.isVPN     = d2.proxy   ? '🔴 Possível VPN/Proxy': '✅ Não detectado';
+                // Score de risco automático
+                let risk = 0;
+                if (d2.proxy)   risk += 50;
+                if (d2.hosting) risk += 25;
+                if (d2.mobile)  risk += 5;
+                info.riskScore = risk;
+            }
+        } catch(_) {}
+        // Fallback ipapi.co
+        if (info.isp === '—') {
+            try {
+                const r3 = await fetch('https://ipapi.co/' + info.ip + '/json/');
+                const d3 = await r3.json();
+                if (!d3.error) {
+                    info.cidade = info.cidade !== '—' ? info.cidade : (d3.city         || '—');
+                    info.regiao = info.regiao !== '—' ? info.regiao : (d3.region        || '—');
+                    info.pais   = info.pais   !== '—' ? info.pais   : (d3.country_name  || '—');
+                    info.isp    = info.isp    !== '—' ? info.isp    : (d3.org           || '—');
+                    info.asn    = info.asn    !== '—' ? info.asn    : (d3.asn           || '—');
+                }
+            } catch(_) {}
+        }
+    }
+    return info;
+}
+
+function detectBrowser(ua) {
+    if (!ua) return 'Desconhecido';
+    if (/Edg\//i.test(ua))                          return 'Microsoft Edge';
+    if (/OPR\//i.test(ua) || /Opera\//i.test(ua))   return 'Opera';
+    if (/YaBrowser\//i.test(ua))                    return 'Yandex Browser';
+    if (/SamsungBrowser\//i.test(ua))               return 'Samsung Internet';
+    if (/UCBrowser\//i.test(ua))                    return 'UC Browser';
+    if (/Brave\//i.test(ua))                        return 'Brave';
+    if (/Vivaldi\//i.test(ua))                      return 'Vivaldi';
+    if (/Chrome\/[0-9]/i.test(ua))                  return 'Google Chrome';
+    if (/Firefox\/[0-9]/i.test(ua))                 return 'Mozilla Firefox';
+    if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) return 'Apple Safari';
+    if (/MSIE|Trident\//i.test(ua))                 return 'Internet Explorer';
+    return 'Outro';
+}
+
+function detectBrowserVersion(ua) {
+    if (!ua) return '';
+    let m;
+    if ((m = ua.match(/Edg\/([0-9.]+)/i)))          return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/OPR\/([0-9.]+)/i)))           return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/SamsungBrowser\/([0-9.]+)/i)))return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Chrome\/([0-9.]+)/i)))        return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Firefox\/([0-9.]+)/i)))       return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Version\/([0-9.]+).*Safari/i)))return 'v' + m[1].split('.')[0];
+    return '';
+}
+
+function detectOS(ua) {
+    if (!ua) return 'Desconhecido';
+    if (/Windows NT 10/i.test(ua)) return 'Windows 10/11';
+    if (/Windows NT 6\.3/i.test(ua)) return 'Windows 8.1';
+    if (/Windows NT 6\.1/i.test(ua)) return 'Windows 7';
+    if (/Windows/i.test(ua)) return 'Windows';
+    if (/iPhone/i.test(ua)) return 'iOS (iPhone)';
+    if (/iPad/i.test(ua)) return 'iPadOS';
+    if (/Mac OS X/i.test(ua)) return 'macOS';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Linux/i.test(ua)) return 'Linux';
+    if (/CrOS/i.test(ua)) return 'Chrome OS';
+    return 'Outro';
+}
+
+function detectDevice(ua) {
+    if (!ua) return 'Desktop';
+    if (/iPad/i.test(ua)) return 'Tablet';
+    if (/Mobi|Android|iPhone/i.test(ua)) return 'Smartphone';
+    if (/Smart-TV|SmartTV|TV/i.test(ua)) return 'Smart TV';
+    return 'Desktop/Notebook';
+}
+
+async function registrarLoginHistorico(user) {
+    if (!db) return;
+    try {
+        const info = await coletarInfoDispositivo();
+        const sessionStart = parseInt(localStorage.getItem(SESSION_KEY) || Date.now());
+        const sessionExpires = sessionStart + SESSION_DURATION_MS;
+        const loginId = user.uid + '_' + sessionStart;
+        await db.collection('login_historico').doc(loginId).set({
+            uid: user.uid,
+            email: user.email,
+            loginAt: firebase.firestore.Timestamp.fromMillis(sessionStart),
+            expiresAt: firebase.firestore.Timestamp.fromMillis(sessionExpires),
+            loginAtStr: new Date(sessionStart).toLocaleString('pt-BR'),
+            expiresAtStr: new Date(sessionExpires).toLocaleString('pt-BR'),
+            sessionId: loginId,
+            status: 'ativo',
+            ...info,
+        });
+        console.log('✅ Login registrado no histórico');
+    } catch(e) { console.warn('⚠️ Não foi possível registrar login:', e); }
+}
+
+// Marca sessão como encerrada no Firestore ao fazer logout
+async function encerrarSessaoHistorico() {
+    if (!db || !currentUser) return;
+    try {
+        const sessionStart = localStorage.getItem(SESSION_KEY);
+        if (!sessionStart) return;
+        const loginId = currentUser.uid + '_' + sessionStart;
+        await db.collection('login_historico').doc(loginId).update({
+            status: 'encerrado',
+            logoutAt: firebase.firestore.FieldValue.serverTimestamp(),
+            logoutAtStr: new Date().toLocaleString('pt-BR'),
+        });
+    } catch(_) {}
 }
 
 function startSessionTimer() {
@@ -55,7 +247,12 @@ function startSessionTimer() {
     }
     sessionTimer = setTimeout(() => {
         showToast('Sessão expirada por segurança. Faça login novamente.', 'error');
-        setTimeout(() => { localStorage.removeItem(SESSION_KEY); auth.signOut(); }, 2500);
+        setTimeout(() => {
+            encerrarSessaoHistorico().finally(() => {
+                localStorage.removeItem(SESSION_KEY);
+                auth.signOut();
+            });
+        }, 2500);
     }, remaining);
 }
 
@@ -83,7 +280,13 @@ function setupLoginForm() {
     });
 }
 
-function logout() { localStorage.removeItem(SESSION_KEY); clearSessionTimer(); auth.signOut().then(() => showToast('Sessão encerrada.')); }
+function logout() {
+    encerrarSessaoHistorico().finally(() => {
+        localStorage.removeItem(SESSION_KEY);
+        clearSessionTimer();
+        auth.signOut().then(() => showToast('Sessão encerrada.'));
+    });
+}
 
 function togglePassword(id) {
     const input = document.getElementById(id); if (!input) return;
@@ -104,7 +307,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', perfil:'Perfil de Visitante' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
@@ -115,6 +318,8 @@ function showSection(name) {
     else if (name === 'site') loadSiteConfig();
     else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
+    else if (name === 'seguranca') { loadSeguranca().then(() => carregarIPSessaoAtual()); return; }
+    else stopSessaoCountdown();
 }
 
 function novoImovel() {
@@ -185,6 +390,17 @@ async function loadDashboard() {
         const lCount = lSnap.size;
         const badgeEl = document.getElementById('badge-lixeira');
         if (badgeEl) { badgeEl.textContent = lCount > 0 ? lCount : ''; badgeEl.style.display = lCount > 0 ? '' : 'none'; }
+        // Verifica logins suspeitos para o badge de segurança
+        try {
+            const secSnap = await db.collection('login_historico').where('status','==','suspeito').get();
+            const secBadge = document.getElementById('badge-seguranca');
+            if (secBadge) { secBadge.style.display = secSnap.size > 0 ? '' : 'none'; secBadge.textContent = secSnap.size > 0 ? secSnap.size : '!'; }
+            const banner = document.getElementById('security-alert-banner');
+            const bannerMsg = document.getElementById('security-alert-msg');
+            if (banner) banner.style.display = secSnap.size > 0 ? 'flex' : 'none';
+            if (bannerMsg && secSnap.size > 0) bannerMsg.textContent = `${secSnap.size} login(s) marcado(s) como suspeito. Revise agora.`;
+            if (secSnap.size > 0) showNotification('⚠️ Alerta de segurança', secSnap.size + ' login(s) marcado(s) como suspeito', 'red');
+        } catch(_) {}
     } catch (e) { console.error(e); }
 }
 
@@ -364,6 +580,8 @@ async function confirmDelete() {
         if (mode === 'empty') {
             const batch = db.batch(); lixeiraData.forEach(i => batch.delete(db.collection('lixeira').doc(i.id)));
             await batch.commit(); showToast('Lixeira esvaziada.');
+        } else if (mode === 'revogar' && deleteId) {
+            await confirmarRevogacao(deleteId);
         } else if (deleteId) {
             await db.collection('lixeira').doc(deleteId).delete(); showToast('Excluído permanentemente.');
         }
@@ -374,7 +592,11 @@ async function confirmDelete() {
 function closeDeleteModal() {
     deleteId = null; document.getElementById('delete-modal').classList.remove('active');
     const p = document.querySelector('#delete-modal .modal-confirm p');
+    const h3 = document.querySelector('#delete-modal .modal-confirm h3');
     if (p) p.textContent = 'Tem certeza? Esta ação não pode ser desfeita.';
+    if (h3) h3.textContent = 'Confirmar Ação';
+    const btn = document.getElementById('confirm-delete-fn');
+    if (btn) btn.dataset.mode = 'perma';
 }
 
 // ========== RELATÓRIO DE VISITAS ==========
@@ -637,6 +859,460 @@ function renderTopList(id,list,tipo) {
     el.innerHTML = list.map(i=>`<div class="recent-item"><img src="${i.imagem}" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"><div class="recent-info"><strong>${i.titulo}</strong><span>${i.bairro}</span></div><span class="recent-price">${tipo==='preco'?'R$ '+Number(i.preco).toLocaleString('pt-BR'):i.area+' m²'}</span></div>`).join('');
 }
 
+// ========== SEGURANÇA & HISTÓRICO DE LOGINS ==========
+
+// Timer ao vivo para countdown da sessão
+let _segurancaLiveTimer = null;
+
+function startSessaoCountdown() {
+    stopSessaoCountdown();
+    _segurancaLiveTimer = setInterval(() => {
+        const el = document.getElementById('sessao-countdown');
+        const barEl = document.getElementById('sessao-progress-bar');
+        const statusEl = document.getElementById('sessao-status-live');
+        if (!el) { stopSessaoCountdown(); return; }
+        const sessionStart = parseInt(localStorage.getItem(SESSION_KEY) || Date.now());
+        const expires = sessionStart + SESSION_DURATION_MS;
+        const remaining = expires - Date.now();
+        const elapsed = Date.now() - sessionStart;
+        const pct = Math.max(0, Math.min(100, (remaining / SESSION_DURATION_MS) * 100));
+        if (remaining <= 0) {
+            el.textContent = 'Expirada';
+            el.style.color = 'var(--red)';
+            if (barEl) { barEl.style.width = '0%'; barEl.style.background = 'var(--red)'; }
+            stopSessaoCountdown();
+            return;
+        }
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        el.style.color = h < 1 ? 'var(--amber)' : 'var(--green)';
+        if (barEl) {
+            barEl.style.width = pct + '%';
+            barEl.style.background = h < 1 ? 'var(--amber)' : 'var(--green)';
+        }
+        if (statusEl) {
+            const elapsedH = Math.floor(elapsed / 3600000);
+            const elapsedM = Math.floor((elapsed % 3600000) / 60000);
+            statusEl.textContent = `Sessão ativa há ${elapsedH}h ${elapsedM}min`;
+        }
+    }, 1000);
+}
+
+function stopSessaoCountdown() {
+    if (_segurancaLiveTimer) { clearInterval(_segurancaLiveTimer); _segurancaLiveTimer = null; }
+}
+
+async function loadSeguranca() {
+    if (!db) return;
+    stopSessaoCountdown();
+    const loading = document.getElementById('seguranca-loading');
+    const content = document.getElementById('seguranca-content');
+    if (loading) loading.style.display = 'flex';
+    if (content) content.style.display = 'none';
+
+    try {
+        await marcarSessoesExpiradas();
+        const snap = await db.collection('login_historico')
+            .orderBy('loginAt', 'desc').limit(50).get();
+        const logins = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+
+        if (loading) loading.style.display = 'none';
+        if (content) { content.style.display = 'block'; renderSeguranca(logins); }
+
+        const suspeitos = logins.filter(l => l.status === 'suspeito').length;
+        const badge = document.getElementById('badge-seguranca');
+        if (badge) { badge.style.display = suspeitos > 0 ? '' : 'none'; badge.textContent = suspeitos > 0 ? suspeitos : '!'; }
+
+        // Inicia o countdown ao vivo após renderizar
+        startSessaoCountdown();
+    } catch(e) {
+        if (loading) loading.style.display = 'none';
+        if (content) { content.style.display = 'block'; content.innerHTML = '<div class="empty-state"><i class="fas fa-shield-alt"></i><h3>Erro ao carregar</h3><p>' + e.message + '</p></div>'; }
+        console.error('loadSeguranca:', e);
+    }
+}
+
+async function marcarSessoesExpiradas() {
+    try {
+        const agora = firebase.firestore.Timestamp.now();
+        const snap = await db.collection('login_historico')
+            .where('status', '==', 'ativo').where('expiresAt', '<', agora).get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.update(d.ref, { status: 'expirado' }));
+        if (snap.size > 0) await batch.commit();
+    } catch(_) {}
+}
+
+function riskBadge(score) {
+    if (score >= 50) return `<span style="background:rgba(239,68,68,.2);color:#ef4444;padding:.2rem .7rem;border-radius:20px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:.3rem;"><i class="fas fa-exclamation-triangle"></i> RISCO ALTO (${score})</span>`;
+    if (score >= 25) return `<span style="background:rgba(245,158,11,.2);color:#f59e0b;padding:.2rem .7rem;border-radius:20px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:.3rem;"><i class="fas fa-shield-alt"></i> RISCO MÉDIO (${score})</span>`;
+    return `<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:.2rem .7rem;border-radius:20px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:.3rem;"><i class="fas fa-check-shield"></i> Baixo (${score})</span>`;
+}
+
+function statusLoginBadge(status) {
+    const map = {
+        ativo:     { bg:'rgba(34,197,94,.15)',   color:'#22c55e', label:'🟢 Ativo' },
+        encerrado: { bg:'rgba(148,163,184,.15)', color:'#94a3b8', label:'⚪ Encerrado' },
+        expirado:  { bg:'rgba(245,158,11,.15)',  color:'#f59e0b', label:'🟡 Expirado' },
+        suspeito:  { bg:'rgba(239,68,68,.15)',   color:'#ef4444', label:'🔴 Suspeito' },
+        removido:  { bg:'rgba(239,68,68,.2)',    color:'#ef4444', label:'🚫 Removido' },
+    };
+    const s = map[status] || map.encerrado;
+    return `<span style="background:${s.bg};color:${s.color};padding:.2rem .65rem;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap;">${s.label}</span>`;
+}
+
+function deviceIcon(device) {
+    if (!device) return '💻';
+    const d = device.toLowerCase();
+    if (d.includes('smartphone') || d.includes('iphone')) return '📱';
+    if (d.includes('tablet') || d.includes('ipad')) return '📲';
+    if (d.includes('tv')) return '📺';
+    return '💻';
+}
+
+function renderSeguranca(logins) {
+    const content = document.getElementById('seguranca-content');
+    if (!content) return;
+    const sessionStart = localStorage.getItem(SESSION_KEY);
+    const currentLoginId = currentUser ? currentUser.uid + '_' + sessionStart : null;
+    const total = logins.length;
+    const ativos = logins.filter(l => l.status === 'ativo').length;
+    const suspeitos = logins.filter(l => l.status === 'suspeito').length;
+
+    content.innerHTML = `
+    <div class="stats-grid" style="margin-bottom:1.5rem;">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="fas fa-history"></i></div>
+            <div class="stat-info"><span class="stat-value">${total}</span><span class="stat-label">Logins registrados</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-info"><span class="stat-value">${ativos}</span><span class="stat-label">Sessões ativas</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:var(--red-soft);color:var(--red);"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-info"><span class="stat-value" style="color:${suspeitos>0?'var(--red)':'inherit'}">${suspeitos}</span><span class="stat-label">Suspeitos marcados</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
+            <div class="stat-info"><span class="stat-value" style="font-size:.85rem;">${logins[0]?.loginAtStr || '—'}</span><span class="stat-label">Último acesso</span></div>
+        </div>
+    </div>
+
+    <!-- SESSÃO ATUAL COM COUNTDOWN AO VIVO -->
+    <div class="dashboard-card sessao-atual-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;margin-bottom:1.1rem;">
+            <div style="display:flex;align-items:center;gap:.6rem;">
+                <span style="width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.5s infinite;display:inline-block;flex-shrink:0;"></span>
+                <h3 style="margin:0;">Sessão Atual</h3>
+            </div>
+            <div style="display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;">
+                <span id="sessao-status-live" style="font-size:.75rem;color:var(--text-muted);"></span>
+                <div style="display:flex;align-items:center;gap:.5rem;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:.3rem .8rem;">
+                    <i class="fas fa-hourglass-half" style="color:var(--green);font-size:.8rem;"></i>
+                    <span style="font-size:.72rem;color:var(--text-muted);">expira em</span>
+                    <span id="sessao-countdown" style="font-size:1rem;font-weight:700;font-family:monospace;color:var(--green);min-width:70px;">—</span>
+                </div>
+            </div>
+        </div>
+        <!-- Barra de progresso da sessão -->
+        <div style="background:var(--bg-elevated);border-radius:99px;height:4px;margin-bottom:1.1rem;overflow:hidden;">
+            <div id="sessao-progress-bar" style="height:100%;border-radius:99px;background:var(--green);transition:width .9s linear;width:100%;"></div>
+        </div>
+        ${renderSessaoAtualCompleto()}
+    </div>
+
+    <!-- Ações rápidas -->
+    <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1.5rem;align-items:center;">
+        <button onclick="encerrarTodasSessoes()" class="btn-danger" style="gap:.5rem;">
+            <i class="fas fa-ban"></i> Encerrar outras sessões
+        </button>
+        <button onclick="limparHistoricoAntigo()" class="btn-secondary" style="gap:.5rem;">
+            <i class="fas fa-broom"></i> Limpar histórico antigo
+        </button>
+        <button onclick="loadSeguranca()" class="btn-secondary" style="gap:.5rem;">
+            <i class="fas fa-sync-alt"></i> Atualizar
+        </button>
+    </div>
+
+    <!-- Legenda -->
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;padding:.7rem 1rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <span style="font-size:.75rem;color:var(--text-muted);font-weight:600;">STATUS:</span>
+        ${statusLoginBadge('ativo')} ${statusLoginBadge('expirado')} ${statusLoginBadge('encerrado')} ${statusLoginBadge('suspeito')} ${statusLoginBadge('removido')}
+    </div>
+
+    <!-- Histórico -->
+    <div style="display:flex;flex-direction:column;gap:.8rem;">
+        ${logins.map(l => renderLoginCard(l, currentLoginId)).join('')}
+    </div>`;
+}
+
+function renderSessaoAtualCompleto() {
+    const sessionStart = parseInt(localStorage.getItem(SESSION_KEY) || Date.now());
+    const ua = navigator.userAgent;
+    // Pega IP/localização do registro salvo no Firestore (se disponível)
+    const sessionId = currentUser ? currentUser.uid + '_' + localStorage.getItem(SESSION_KEY) : null;
+    // Tenta pegar dados do login atual da imoveisData (já carregado)
+    return `
+    <div class="login-hist-grid">
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-user"></i> Usuário</span>
+            <span class="seguranca-info-val">${currentUser?.email || '—'}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-sign-in-alt"></i> Entrada</span>
+            <span class="seguranca-info-val">${new Date(sessionStart).toLocaleString('pt-BR')}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-calendar-times"></i> Expira em</span>
+            <span class="seguranca-info-val">${new Date(sessionStart + SESSION_DURATION_MS).toLocaleString('pt-BR')}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-globe"></i> Navegador</span>
+            <span class="seguranca-info-val">${detectBrowser(ua)} ${detectBrowserVersion(ua)}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-desktop"></i> Sistema</span>
+            <span class="seguranca-info-val">${detectOS(ua)}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-mobile-alt"></i> Dispositivo</span>
+            <span class="seguranca-info-val">${detectDevice(ua)}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-expand-arrows-alt"></i> Tela / Janela</span>
+            <span class="seguranca-info-val">${screen.width}×${screen.height} / ${window.innerWidth}×${window.innerHeight}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-clock"></i> Fuso horário</span>
+            <span class="seguranca-info-val">${Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-language"></i> Idioma</span>
+            <span class="seguranca-info-val">${navigator.language}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-microchip"></i> CPU cores</span>
+            <span class="seguranca-info-val">${navigator.hardwareConcurrency || '—'}</span>
+        </div>
+        <div class="seguranca-info-item">
+            <span class="seguranca-info-label"><i class="fas fa-memory"></i> RAM</span>
+            <span class="seguranca-info-val">${navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '—'}</span>
+        </div>
+        <div class="seguranca-info-item" id="sessao-ip-box">
+            <span class="seguranca-info-label"><i class="fas fa-network-wired"></i> IP / Localização</span>
+            <span class="seguranca-info-val" style="color:var(--text-muted);font-size:.72rem;">Carregando...</span>
+        </div>
+    </div>`;
+}
+
+// Carrega IP da sessão atual de forma assíncrona após renderizar
+async function carregarIPSessaoAtual() {
+    const box = document.getElementById('sessao-ip-box');
+    if (!box) return;
+    // Primeiro tenta buscar do Firestore (registro de login)
+    if (db && currentUser) {
+        try {
+            const sessionStart = localStorage.getItem(SESSION_KEY);
+            const loginId = currentUser.uid + '_' + sessionStart;
+            const doc = await db.collection('login_historico').doc(loginId).get();
+            if (doc.exists) {
+                const d = doc.data();
+                if (d.ip && d.ip !== '—') {
+                    const loc = [d.cidade, d.regiao, d.pais].filter(x => x && x !== '—').join(', ');
+                    box.querySelector('.seguranca-info-val').innerHTML = `
+                        <strong style="font-size:.82rem;">${d.ip}</strong>
+                        ${d.isProxy && d.isProxy.includes('SIM') ? '<span style="color:var(--red);font-size:.7rem;margin-left:.3rem;">⚠️ Proxy/VPN</span>' : ''}
+                        <br><span style="font-size:.72rem;color:var(--text-muted);">${loc || '—'}</span>
+                        <br><span style="font-size:.7rem;color:var(--text-muted);">${d.isp || '—'}</span>
+                        ${d.ip !== '—' ? '<a href="https://ipinfo.io/' + d.ip + '" target="_blank" style="font-size:.68rem;color:var(--accent);display:block;margin-top:.2rem;"><i class="fas fa-external-link-alt"></i> Ver detalhes</a>' : ''}
+                    `;
+                    return;
+                }
+            }
+        } catch(_) {}
+    }
+    // Fallback: busca ao vivo
+    try {
+        const r = await fetch('https://api.ipify.org?format=json');
+        const d = await r.json();
+        const ip = d.ip || '—';
+        box.querySelector('.seguranca-info-val').innerHTML = `<strong>${ip}</strong> <a href="https://ipinfo.io/${ip}" target="_blank" style="font-size:.68rem;color:var(--accent);"><i class="fas fa-external-link-alt"></i></a>`;
+    } catch(_) {
+        const val = box.querySelector('.seguranca-info-val');
+        if (val) val.textContent = '—';
+    }
+}
+
+function renderLoginCard(l, currentLoginId) {
+    const isCurrentSession = l._docId === currentLoginId || l.sessionId === currentLoginId;
+    const isSuspeito = l.status === 'suspeito';
+    const risk = l.riskScore || 0;
+    const borderColor = isCurrentSession ? 'var(--green)' : isSuspeito ? 'var(--red)' : risk >= 50 ? 'var(--amber)' : 'var(--border)';
+    const bgColor = isCurrentSession ? 'rgba(34,197,94,.04)' : isSuspeito ? 'rgba(239,68,68,.04)' : '';
+    const loc = [l.cidade, l.regiao, l.pais].filter(x => x && x !== '—').join(', ');
+
+    return `
+    <div class="login-hist-card" style="border-left:3px solid ${borderColor};background:${bgColor};">
+        <div class="login-hist-header">
+            <div style="display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
+                <span style="font-size:1.5rem;">${deviceIcon(l.device)}</span>
+                <div>
+                    <div style="font-weight:600;font-size:.88rem;color:var(--text-primary);display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">
+                        ${l.browser || '—'} ${l.browserVer || ''} · ${l.os || '—'}
+                        ${isCurrentSession ? '<span style="background:rgba(34,197,94,.2);color:var(--green);font-size:.68rem;padding:.1rem .5rem;border-radius:20px;font-weight:700;">★ Esta sessão</span>' : ''}
+                    </div>
+                    <div style="font-size:.74rem;color:var(--text-muted);margin-top:.15rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+                        <span>${l.device || '—'}</span>
+                        ${l.ip && l.ip !== '—' ? `<span>· <strong style="color:var(--text-secondary);">${l.ip}</strong></span>` : ''}
+                        ${loc ? `<span>· ${loc}</span>` : ''}
+                        <span>· ${l.loginAtStr || '—'}</span>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">
+                ${risk > 0 ? riskBadge(risk) : ''}
+                ${statusLoginBadge(l.status || 'encerrado')}
+                ${!isCurrentSession ? `
+                <button onclick="marcarSuspeito('${l._docId}', '${l.status}')" class="btn-secondary" style="padding:.25rem .6rem;font-size:.72rem;gap:.3rem;">
+                    <i class="fas fa-${isSuspeito ? 'check' : 'exclamation-triangle'}" style="color:${isSuspeito ? 'var(--green)' : 'var(--amber)'}"></i>
+                    ${isSuspeito ? 'Desmarcar' : 'Suspeito'}
+                </button>
+                <button onclick="revogarAcesso('${l._docId}')" class="btn-danger" style="padding:.25rem .6rem;font-size:.72rem;gap:.3rem;">
+                    <i class="fas fa-ban"></i> Revogar
+                </button>` : ''}
+            </div>
+        </div>
+
+        <div class="login-hist-grid">
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-sign-in-alt"></i> Login em</span><span class="seguranca-info-val">${l.loginAtStr || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-sign-out-alt"></i> Logout / Expirou</span><span class="seguranca-info-val">${l.logoutAtStr || l.expiresAtStr || '—'}</span></div>
+            <div class="seguranca-info-item">
+                <span class="seguranca-info-label"><i class="fas fa-network-wired"></i> Endereço IP</span>
+                <span class="seguranca-info-val" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">
+                    <strong>${l.ip || '—'}</strong>
+                    ${l.ip && l.ip !== '—' ? `<a href="https://ipinfo.io/${l.ip}" target="_blank" style="color:var(--accent);font-size:.7rem;" title="Ver detalhes do IP"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                </span>
+            </div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-map-marker-alt"></i> Localização</span><span class="seguranca-info-val">${loc || '—'}${l.cep && l.cep !== '—' ? ' <span style="color:var(--text-muted);font-size:.7rem;">CEP ' + l.cep + '</span>' : ''}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-wifi"></i> Provedor (ISP)</span><span class="seguranca-info-val">${l.isp || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-server"></i> ASN / Org</span><span class="seguranca-info-val" style="font-size:.74rem;">${l.asn || l.org || '—'}</span></div>
+            <div class="seguranca-info-item">
+                <span class="seguranca-info-label"><i class="fas fa-user-secret"></i> VPN / Proxy</span>
+                <span class="seguranca-info-val">${l.isProxy || l.isVPN || '—'}</span>
+            </div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-building"></i> Data center</span><span class="seguranca-info-val">${l.isHosting || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-signal"></i> Conexão</span><span class="seguranca-info-val">${l.connectionType || '—'} ${l.connectionSpeed && l.connectionSpeed !== '—' ? '· ' + l.connectionSpeed : ''}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-clock"></i> Fuso horário</span><span class="seguranca-info-val">${l.timezone || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-language"></i> Idioma(s)</span><span class="seguranca-info-val">${l.languages || l.language || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-expand-arrows-alt"></i> Tela / Janela</span><span class="seguranca-info-val">${l.screenW && l.screenH ? l.screenW + '×' + l.screenH : '—'}${l.viewport ? ' / ' + l.viewport : ''}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-microchip"></i> CPU cores</span><span class="seguranca-info-val">${l.cores || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-memory"></i> RAM</span><span class="seguranca-info-val">${l.ram || '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-hand-pointer"></i> Touch</span><span class="seguranca-info-val">${l.touchPoints !== undefined ? (l.touchPoints > 0 ? l.touchPoints + ' pontos' : 'Não') : '—'}</span></div>
+            <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-ethernet"></i> MAC Address</span><span class="seguranca-info-val" style="color:var(--text-muted);font-size:.7rem;">Bloqueado pelo navegador</span></div>
+        </div>
+
+        ${l.lat && l.lat !== '—' ? `
+        <div style="margin-top:.6rem;display:flex;align-items:center;gap:.5rem;font-size:.74rem;color:var(--text-muted);">
+            <i class="fas fa-map-pin" style="color:var(--accent);"></i>
+            Coordenadas: ${l.lat}, ${l.lon}
+            <a href="https://www.google.com/maps?q=${l.lat},${l.lon}" target="_blank" style="color:var(--accent);"><i class="fas fa-external-link-alt"></i> Ver no mapa</a>
+        </div>` : ''}
+
+        <details style="margin-top:.6rem;">
+            <summary style="font-size:.72rem;color:var(--text-muted);cursor:pointer;user-select:none;">▶ Ver User Agent completo</summary>
+            <div style="margin-top:.4rem;font-size:.68rem;color:var(--text-muted);word-break:break-all;font-family:monospace;background:var(--bg-elevated);padding:.5rem;border-radius:4px;border:1px solid var(--border);">${l.ua || '—'}</div>
+        </details>
+
+        ${l.revokedAt ? `<div style="margin-top:.6rem;padding:.4rem .8rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;font-size:.75rem;color:var(--red);"><i class="fas fa-ban"></i> Acesso revogado em ${l.revokedAtStr || '—'}</div>` : ''}
+        ${isSuspeito && l.suspeitoNote ? `<div style="margin-top:.6rem;padding:.4rem .8rem;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:6px;font-size:.75rem;color:var(--amber);"><i class="fas fa-exclamation-triangle"></i> ${l.suspeitoNote}</div>` : ''}
+    </div>`;
+}
+
+async function marcarSuspeito(docId, statusAtual) {
+    if (!db) return;
+    try {
+        const novoStatus = statusAtual === 'suspeito' ? 'encerrado' : 'suspeito';
+        await db.collection('login_historico').doc(docId).update({
+            status: novoStatus,
+            suspeitoNote: novoStatus === 'suspeito' ? 'Marcado manualmente pelo admin em ' + new Date().toLocaleString('pt-BR') : null,
+        });
+        showToast(novoStatus === 'suspeito' ? '⚠️ Login marcado como suspeito' : '✅ Marcação removida');
+        loadSeguranca();
+    } catch(e) { showToast('Erro ao atualizar','error'); }
+}
+
+async function revogarAcesso(docId) {
+    if (!db) return;
+    deleteId = docId;
+    const modal = document.getElementById('delete-modal');
+    const p = document.querySelector('#delete-modal .modal-confirm p');
+    const h3 = document.querySelector('#delete-modal .modal-confirm h3');
+    const btn = document.getElementById('confirm-delete-fn');
+    if (h3) h3.textContent = 'Revogar Acesso';
+    if (p) p.textContent = 'Isso marcará esta sessão como removida/revogada no histórico.';
+    if (btn) btn.dataset.mode = 'revogar';
+    if (modal) modal.classList.add('active');
+}
+
+async function confirmarRevogacao(docId) {
+    if (!db) return;
+    try {
+        await db.collection('login_historico').doc(docId).update({
+            status: 'removido',
+            revokedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            revokedAtStr: new Date().toLocaleString('pt-BR'),
+        });
+        await db.collection('config').doc('security').set({
+            blockedSessions: firebase.firestore.FieldValue.arrayUnion(docId),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        showToast('🚫 Acesso revogado!');
+        loadSeguranca();
+    } catch(e) { showToast('Erro ao revogar','error'); }
+}
+
+async function encerrarTodasSessoes() {
+    if (!db || !currentUser) return;
+    const sessionStart = localStorage.getItem(SESSION_KEY);
+    const currentId = currentUser.uid + '_' + sessionStart;
+    try {
+        const snap = await db.collection('login_historico').where('status', '==', 'ativo').get();
+        const batch = db.batch();
+        let count = 0;
+        snap.docs.forEach(d => {
+            if (d.id !== currentId) {
+                batch.update(d.ref, { status: 'encerrado', logoutAtStr: new Date().toLocaleString('pt-BR'), forcedLogout: true });
+                count++;
+            }
+        });
+        if (count > 0) { await batch.commit(); showToast('✅ ' + count + ' sessão(ões) encerrada(s)!'); }
+        else showToast('Nenhuma outra sessão ativa.');
+        loadSeguranca();
+    } catch(e) { showToast('Erro ao encerrar sessões','error'); }
+}
+
+async function limparHistoricoAntigo() {
+    if (!db) return;
+    const limite = new Date();
+    limite.setDate(limite.getDate() - 30);
+    const ts = firebase.firestore.Timestamp.fromDate(limite);
+    try {
+        const snap = await db.collection('login_historico')
+            .where('loginAt', '<', ts)
+            .where('status', 'in', ['encerrado', 'expirado'])
+            .get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.delete(d.ref));
+        if (snap.size > 0) { await batch.commit(); showToast('🗑️ ' + snap.size + ' registro(s) antigo(s) removido(s).'); }
+        else showToast('Nenhum histórico antigo para limpar.');
+        loadSeguranca();
+    } catch(e) { showToast('Erro ao limpar histórico','error'); }
+}
+
+
 // ========== CONFIGURAÇÕES ==========
 function loadConfiguracoes() {
     if (currentUser) {
@@ -674,6 +1350,7 @@ function setupFormListeners() {
         e.preventDefault();
         const id = document.getElementById('imovel-id').value;
         const fotos = Array.from(document.querySelectorAll('.foto-input')).map(i=>i.value.trim()).filter(Boolean);
+        const videos = Array.from(document.querySelectorAll('.video-input')).map(i=>i.value.trim()).filter(Boolean);
         const getVal = id => (document.getElementById(id)?.value || '').trim();
         const getNum = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
         const data = {
@@ -685,7 +1362,8 @@ function setupFormListeners() {
             descricao: getVal('imovel-descricao'),
             imagem: getVal('imovel-imagem'),
             fotos: fotos.length ? fotos : [getVal('imovel-imagem')],
-            video: getVal('imovel-video') || null,
+            videos: videos,
+            video: videos[0] || null,
             tipo: getVal('imovel-tipo') || 'Apartamento',
             status: getVal('imovel-status') || 'disponivel',
             vagas: getNum('imovel-vagas'),
@@ -714,8 +1392,8 @@ function resetForm() {
     }
     const btnRemove = document.getElementById('btn-remove-foto');
     if (btnRemove) btnRemove.style.display = 'none';
-    // Reseta vídeo
-    clearVideo();
+    // Reseta vídeos ilimitados
+    clearVideos();
     const t = document.getElementById('btn-submit-text');
     if (t) t.textContent = 'Salvar Imóvel';
 }
@@ -743,10 +1421,37 @@ function removeFotoInput() {
         container.querySelectorAll('.foto-input').length > 2 ? '' : 'none';
 }
 
-// ---- VÍDEO (só URL/YouTube) ----
-function clearVideo() {
-    const urlInput = document.getElementById('imovel-video');
-    if (urlInput) urlInput.value = '';
+// ---- VÍDEOS (ilimitados, igual às fotos) ----
+function clearVideos() {
+    const container = document.getElementById('videos-inputs-container');
+    if (container) {
+        container.innerHTML = '<input type="url" class="video-input" placeholder="Vídeo 1 — URL do YouTube (watch, shorts ou youtu.be)">';
+    }
+    const btnRemove = document.getElementById('btn-remove-video');
+    if (btnRemove) btnRemove.style.display = 'none';
+}
+
+function addVideoInput() {
+    const container = document.getElementById('videos-inputs-container');
+    if (!container) return;
+    const count = container.querySelectorAll('.video-input').length + 1;
+    const input = document.createElement('input');
+    input.type = 'url'; input.className = 'video-input';
+    input.placeholder = 'Vídeo ' + count + ' — URL do YouTube';
+    container.appendChild(input);
+    const btnRemove = document.getElementById('btn-remove-video');
+    if (btnRemove) btnRemove.style.display = count > 1 ? '' : 'none';
+    input.focus();
+}
+
+function removeVideoInput() {
+    const container = document.getElementById('videos-inputs-container');
+    if (!container) return;
+    const inputs = container.querySelectorAll('.video-input');
+    if (inputs.length > 1) inputs[inputs.length - 1].remove();
+    const btnRemove = document.getElementById('btn-remove-video');
+    if (btnRemove) btnRemove.style.display =
+        container.querySelectorAll('.video-input').length > 1 ? '' : 'none';
 }
 
 async function editImovel(id) {
@@ -779,9 +1484,19 @@ async function editImovel(id) {
             if (btnRemove) btnRemove.style.display = fList.length > 2 ? '' : 'none';
         }
 
-        // Vídeo
-        clearVideo();
-        if (d.video) setF('imovel-video', d.video);
+        // Vídeos (suporte a array ou string legada)
+        clearVideos();
+        const videoList = Array.isArray(d.videos) && d.videos.length ? d.videos : (d.video ? [d.video] : []);
+        if (videoList.length) {
+            const vContainer = document.getElementById('videos-inputs-container');
+            if (vContainer) {
+                vContainer.innerHTML = videoList.map((v, i) =>
+                    '<input type="url" class="video-input" placeholder="Vídeo ' + (i+1) + ' — URL do YouTube" value="' + (v||'') + '">'
+                ).join('');
+                const btnRemoveV = document.getElementById('btn-remove-video');
+                if (btnRemoveV) btnRemoveV.style.display = videoList.length > 1 ? '' : 'none';
+            }
+        }
 
         const submitTxt = document.getElementById('btn-submit-text');
         if (submitTxt) submitTxt.textContent = 'Atualizar Imóvel';
