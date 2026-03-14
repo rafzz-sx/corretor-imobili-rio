@@ -1,15 +1,16 @@
 // ============================================================
 //  ADMIN.JS v3.1 — Leandro Imóveis
 // ============================================================
-console.log('🚀 Admin.js v3.1');
+
 
 let auth, db;
 function initFirebase() {
     try {
-        if (typeof firebase === 'undefined' || !firebase.apps.length) { console.error('❌ Firebase não inicializado'); return false; }
+        if (typeof firebase === 'undefined' || !firebase.apps.length) { return false; }
         auth = firebase.auth(); db = firebase.firestore();
-        console.log('✅ Firebase pronto'); return true;
-    } catch (e) { console.error('❌', e); return false; }
+        if (window._secureLog) window._secureLog('✅ Firebase admin pronto');
+        return true;
+    } catch (e) { return false; }
 }
 
 let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], deleteId = null;
@@ -25,7 +26,7 @@ function setupAuthListener() {
             const sessionStart = localStorage.getItem(SESSION_KEY);
             const now = Date.now();
             if (sessionStart && (now - parseInt(sessionStart)) > SESSION_DURATION_MS) {
-                console.log('⏰ Sessão expirada — fazendo logout automático');
+                
                 localStorage.removeItem(SESSION_KEY);
                 auth.signOut();
                 return;
@@ -215,8 +216,8 @@ async function registrarLoginHistorico(user) {
             status: 'ativo',
             ...info,
         });
-        console.log('✅ Login registrado no histórico');
-    } catch(e) { console.warn('⚠️ Não foi possível registrar login:', e); }
+        
+    } catch(e) {  }
 }
 
 // Marca sessão como encerrada no Firestore ao fazer logout
@@ -258,23 +259,76 @@ function startSessionTimer() {
 
 function clearSessionTimer() { if (sessionTimer) { clearTimeout(sessionTimer); sessionTimer = null; } }
 
+// ── Rate limit local: bloqueia após 5 falhas por 60s ──
+const _LOGIN_ATTEMPTS_KEY = '_lb_login_attempts';
+const _LOGIN_BLOCK_KEY    = '_lb_login_block';
+const _LOGIN_MAX_ATTEMPTS = 5;
+const _LOGIN_BLOCK_MS     = 60 * 1000; // 60 segundos
+
+// Usa localStorage para que o bloqueio persista mesmo ao fechar e reabrir a aba
+function _getLoginAttempts() { return parseInt(localStorage.getItem(_LOGIN_ATTEMPTS_KEY) || '0'); }
+function _incLoginAttempts() { localStorage.setItem(_LOGIN_ATTEMPTS_KEY, _getLoginAttempts() + 1); }
+function _resetLoginAttempts() { localStorage.removeItem(_LOGIN_ATTEMPTS_KEY); localStorage.removeItem(_LOGIN_BLOCK_KEY); }
+function _blockLogin() { localStorage.setItem(_LOGIN_BLOCK_KEY, Date.now().toString()); }
+function _isLoginBlocked() {
+    const blockedAt = parseInt(localStorage.getItem(_LOGIN_BLOCK_KEY) || '0');
+    if (!blockedAt) return false;
+    if (Date.now() - blockedAt > _LOGIN_BLOCK_MS) { _resetLoginAttempts(); return false; }
+    return true;
+}
+function _blockSecondsLeft() {
+    const blockedAt = parseInt(localStorage.getItem(_LOGIN_BLOCK_KEY) || '0');
+    return Math.ceil((_LOGIN_BLOCK_MS - (Date.now() - blockedAt)) / 1000);
+}
+
 function setupLoginForm() {
     const form = document.getElementById('login-form');
     if (!form) return;
     form.addEventListener('submit', async e => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
+        const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-senha').value;
         const errorDiv = document.getElementById('login-error');
         const btn = form.querySelector('.btn-login');
+
+        // Verificar bloqueio por tentativas excessivas
+        if (_isLoginBlocked()) {
+            const secs = _blockSecondsLeft();
+            errorDiv.textContent = `🔒 Acesso bloqueado. Aguarde ${secs}s para tentar novamente.`;
+            // Atualiza o contador a cada segundo
+            if (!btn._countdownInterval) {
+                btn._countdownInterval = setInterval(() => {
+                    if (!_isLoginBlocked()) {
+                        clearInterval(btn._countdownInterval);
+                        btn._countdownInterval = null;
+                        errorDiv.textContent = '';
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>Entrar</span>';
+                    } else {
+                        errorDiv.textContent = `🔒 Acesso bloqueado. Aguarde ${_blockSecondsLeft()}s para tentar novamente.`;
+                    }
+                }, 1000);
+            }
+            return;
+        }
         if (!email || !password) { errorDiv.textContent = 'Preencha email e senha'; return; }
+
         btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true;
         try {
             await auth.signInWithEmailAndPassword(email, password);
+            _resetLoginAttempts();
             errorDiv.textContent = '';
         } catch (err) {
-            const msgs = { 'auth/invalid-credential':'Email ou senha incorretos.', 'auth/user-not-found':'Usuário não encontrado.', 'auth/wrong-password':'Senha incorreta.', 'auth/invalid-email':'Email inválido.', 'auth/too-many-requests':'Muitas tentativas.' };
-            errorDiv.textContent = msgs[err.code] || 'Erro ao entrar.';
+            _incLoginAttempts();
+            const attempts = _getLoginAttempts();
+            if (attempts >= _LOGIN_MAX_ATTEMPTS) {
+                _blockLogin();
+                errorDiv.textContent = `Conta bloqueada por ${_LOGIN_BLOCK_MS/1000}s por segurança.`;
+            } else {
+                const msgs = { 'auth/invalid-credential':'Email ou senha incorretos.', 'auth/user-not-found':'Usuário não encontrado.', 'auth/wrong-password':'Senha incorreta.', 'auth/invalid-email':'Email inválido.', 'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.' };
+                const remaining = _LOGIN_MAX_ATTEMPTS - attempts;
+                errorDiv.textContent = (msgs[err.code] || 'Erro ao entrar.') + (remaining <= 2 ? ` (${remaining} tentativa${remaining>1?'s':''} restante${remaining>1?'s':''})` : '');
+            }
             btn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>Entrar</span>'; btn.disabled = false;
         }
     });
@@ -356,7 +410,7 @@ async function seedStaticImoveis() {
             batch.set(ref, { ...im, createdAt: ts, updatedAt: ts });
         });
         await batch.commit();
-        console.log('✅ Imóveis estáticos migrados para o Firestore!');
+        
         showToast('✅ Imóveis de exemplo importados para o banco de dados!');
     } catch(e) {
         console.error('Erro ao fazer seed:', e);
@@ -1556,7 +1610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('delete-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeDeleteModal();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDeleteModal();});
     updateLastRefreshIndicator();
-    console.log('✅ Admin v3.1 iniciado');
+    
 });
 
 // ========== INDICADOR DE ÚLTIMA ATUALIZAÇÃO ==========
@@ -2020,3 +2074,76 @@ async function saveSiteConfig() {
     try { await db.collection('config').doc('site').set(cfg); showToast('✅ Configurações salvas!'); }
     catch(e) { showToast('Erro ao salvar','error'); }
 }
+// ========================================================
+//  MELHORIAS SSS — BACKUP, EXPORT E SEGURANÇA
+// ========================================================
+
+// ── EXPORTAR BACKUP JSON DOS IMÓVEIS ──
+async function exportarBackupJSON() {
+    if (!db) return;
+    try {
+        showToast('Gerando backup...', 'info');
+        const [imSnap, lxSnap] = await Promise.all([
+            db.collection('imoveis').get(),
+            db.collection('lixeira').get()
+        ]);
+        const backup = {
+            exportedAt: new Date().toISOString(),
+            version: '1.0',
+            imoveis: imSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+            lixeira: lxSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+            totalImoveis: imSnap.size,
+            totalLixeira: lxSnap.size
+        };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup-imoveis-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`✅ Backup exportado — ${imSnap.size} imóveis`);
+    } catch(e) {
+        showToast('Erro ao exportar backup', 'error');
+    }
+}
+
+// ── EXPORTAR CSV DE VISITAS ──
+async function exportarCSVVisitas() {
+    if (!db) return;
+    try {
+        showToast('Gerando CSV...', 'info');
+        const snap = await db.collection('visitas').orderBy('timestamp','desc').get();
+        const rows = [['Data', 'Página', 'Device ID', 'User Agent']];
+        snap.docs.forEach(d => {
+            const v = d.data();
+            rows.push([
+                v.date || '',
+                v.page || '',
+                v.deviceId || '',
+                (v.userAgent || '').slice(0, 80)
+            ]);
+        });
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `visitas-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`✅ CSV exportado — ${snap.size} visitas`);
+    } catch(e) {
+        showToast('Erro ao exportar CSV', 'error');
+    }
+}
+
+// ── EXPORTAR RELATÓRIO PDF (via print) ──
+function exportarRelatorioPDF() {
+    window.print();
+}
+
+// Expor globalmente
+window.exportarBackupJSON = exportarBackupJSON;
+window.exportarCSVVisitas = exportarCSVVisitas;
+window.exportarRelatorioPDF = exportarRelatorioPDF;
