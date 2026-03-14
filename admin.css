@@ -212,14 +212,28 @@
    .btn-login:active { transform: translateY(0); }
    
    .login-error {
-       color: var(--red); font-size: 0.85rem; text-align: center;
-       min-height: 18px; animation: shake 0.3s ease both;
+       color: var(--red);
+       font-size: 0.84rem;
+       text-align: center;
+       min-height: 18px;
+       padding: 0;
+       border-radius: var(--radius-sm);
+       transition: all 0.25s ease;
+   }
+
+   .login-error:not(:empty) {
+       background: rgba(239,68,68,0.08);
+       border: 1px solid rgba(239,68,68,0.2);
+       padding: 0.6rem 1rem;
+       animation: shake 0.35s ease both;
    }
    
    @keyframes shake {
        0%,100% { transform: translateX(0); }
-       25% { transform: translateX(-6px); }
-       75% { transform: translateX(6px); }
+       20% { transform: translateX(-7px); }
+       40% { transform: translateX(7px); }
+       60% { transform: translateX(-4px); }
+       80% { transform: translateX(4px); }
    }
    
    .login-footer { margin-top: 1.8rem; text-align: center; }
