@@ -3,50 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contato - Imóveis com Leandro</title>
+    <title>Contato | Leandro Bomfim Corretor de Imóveis RJ</title>
+    <meta name="description" content="Entre em contato com Leandro Bomfim — corretor de imóveis especialista em Ipanema, Leblon e Barra da Tijuca. WhatsApp, e-mail e Instagram.">
+    <meta name="author" content="Leandro Bomfim">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Contato | Leandro Bomfim Corretor de Imóveis">
+    <meta property="og:description" content="Entre em contato com Leandro Bomfim — corretor especialista no Rio de Janeiro.">
+    <meta property="og:image" content="https://files.catbox.moe/nqdyup.png">
+    <meta property="og:url" content="https://leandrobomfim.com.br/contato.html">
+    <meta property="og:locale" content="pt_BR">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3498db">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="LB Imóveis">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Leandro Bomfim",
+      "jobTitle": "Corretor de Imóveis",
+      "telephone": "+55-21-98142-4469",
+      "email": "leandromorenno007@gmail.com",
+      "image": "https://files.catbox.moe/nqdyup.png",
+      "sameAs": ["https://instagram.com/leopbomfim"],
+      "address": { "@type": "PostalAddress", "addressLocality": "Rio de Janeiro", "addressRegion": "RJ", "addressCountry": "BR" }
+    }
+    </script>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Firebase rastreador de visitas -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="tracker.js"></script>
+    <style>
+        .contato-hero { padding: 4rem 0 2rem; text-align: center; }
+        .contato-hero h1 { font-family: var(--font-title); font-size: clamp(2rem,5vw,3.2rem); font-weight: 700; background: linear-gradient(135deg,#fff 30%,var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: .75rem; }
+        .contato-hero p { color: var(--text-muted); font-size: 1.05rem; max-width: 480px; margin: 0 auto; line-height: 1.7; }
+        .contato-layout { display: grid; grid-template-columns: 1fr 1.6fr; gap: 2.5rem; align-items: start; margin-top: 2.5rem; }
+        .contato-profile-card { background: var(--bg-card); border: 1px solid var(--border-medium); border-radius: var(--radius-xl); padding: 2rem 1.5rem; text-align: center; position: sticky; top: 100px; }
+        .contato-profile-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary); box-shadow: 0 0 0 6px rgba(52,152,219,.15); margin: 0 auto 1rem; display: block; }
+        .contato-profile-name { font-family: var(--font-title); font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: .25rem; }
+        .contato-profile-creci { font-size: .8rem; color: var(--text-muted); background: rgba(52,152,219,.1); border: 1px solid rgba(52,152,219,.2); display: inline-block; padding: .2rem .8rem; border-radius: 99px; margin-bottom: 1.2rem; }
+        .contato-profile-bio { color: var(--text-muted); font-size: .88rem; line-height: 1.7; margin-bottom: 1.5rem; }
+        .contato-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; margin-bottom: 1.5rem; }
+        .contato-stat { background: rgba(255,255,255,.03); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: .75rem .5rem; }
+        .contato-stat-num { font-size: 1.3rem; font-weight: 700; color: var(--primary); display: block; }
+        .contato-stat-label { font-size: .7rem; color: var(--text-muted); margin-top: .1rem; }
+        .contato-channels { display: flex; flex-direction: column; gap: 1rem; }
+        .contato-channel-card { background: var(--bg-card); border: 1px solid var(--border-medium); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 1.2rem; text-decoration: none; transition: transform .2s,border-color .2s,box-shadow .2s; }
+        .contato-channel-card:hover { transform: translateY(-3px); border-color: var(--channel-color,var(--primary)); box-shadow: 0 8px 32px rgba(0,0,0,.25); }
+        .contato-channel-icon { width: 52px; height: 52px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; background: var(--channel-bg,rgba(52,152,219,.1)); color: var(--channel-color,var(--primary)); }
+        .contato-channel-info { flex: 1; min-width: 0; }
+        .contato-channel-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: .15rem; }
+        .contato-channel-value { font-size: 1rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contato-channel-sub { font-size: .78rem; color: var(--text-muted); margin-top: .1rem; }
+        .contato-channel-arrow { color: var(--text-muted); font-size: .85rem; flex-shrink: 0; }
+        .contato-hours-card { background: var(--bg-card); border: 1px solid var(--border-medium); border-radius: var(--radius-lg); padding: 1.5rem; margin-top: 0; }
+        .contato-hours-title { font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+        .contato-hours-row { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--border-light); font-size: .88rem; }
+        .contato-hours-row:last-child { border-bottom: none; }
+        .contato-hours-day { color: var(--text-muted); }
+        .contato-hours-time { color: #fff; font-weight: 600; }
+        .contato-hours-time.closed { color: var(--warning); font-weight: 400; }
+        @media (max-width: 768px) {
+            .contato-layout { grid-template-columns: 1fr; }
+            .contato-profile-card { position: static; }
+        }
+    </style>
 </head>
-<body>
-    <body class="contato-page">
+<body class="contato-page">
     <header>
         <nav>
-            <div class="logo">Imóveis com Leandro</div>
+            <div class="logo">
+                <span class="logo-text">LB</span>
+                <span class="logo-full">Leandro Bomfim</span>
+            </div>
             <ul>
                 <li><a href="index.html">Início</a></li>
                 <li><a href="imoveis.html">Imóveis</a></li>
-                <li><a href="contato.html">Contato</a></li>
+                <li><a href="contato.html" class="active">Contato</a></li>
             </ul>
+            <div class="menu-toggle" id="menu-toggle">
+                <span></span><span></span><span></span>
+            </div>
         </nav>
     </header>
 
     <main>
-        <section class="contact fade-in">
-            <h1 class="fade-in">Entre em Contato</h1>
-            <div class="contact-container">
-                <div class="profile-section fade-in delay-1">
-                    <img src="https://files.catbox.moe/nqdyup.png" alt="Leandro Bomfim" class="profile-photo">
-                    <h2 class="fade-in delay-1">Leandro Bomfim</h2>
+        <div class="contato-hero fade-in">
+            <h1>Vamos Conversar?</h1>
+            <p>Estou disponível para ajudá-lo a encontrar o imóvel perfeito ou valorizar o seu patrimônio.</p>
+        </div>
+
+        <div class="contato-layout">
+            <aside class="contato-profile-card fade-in delay-1">
+                <img src="https://files.catbox.moe/nqdyup.png" alt="Leandro Bomfim — Corretor de Imóveis RJ"
+                     class="contato-profile-photo" loading="lazy" width="120" height="120">
+                <div class="contato-profile-name">Leandro Bomfim</div>
+                <div class="contato-profile-creci">CRECI-RJ 123456-F</div>
+                <p class="contato-profile-bio">Mais de 6 anos especializando em imóveis de alto padrão na Zona Sul e Barra da Tijuca. Atendimento personalizado e documentação 100% segura.</p>
+                <div class="contato-stats">
+                    <div class="contato-stat">
+                        <span class="contato-stat-num">6+</span>
+                        <span class="contato-stat-label">Anos</span>
+                    </div>
+                    <div class="contato-stat">
+                        <span class="contato-stat-num">60+</span>
+                        <span class="contato-stat-label">Negociados</span>
+                    </div>
+                    <div class="contato-stat">
+                        <span class="contato-stat-num">100%</span>
+                        <span class="contato-stat-label">Satisfação</span>
+                    </div>
                 </div>
-                <div class="contact-info fade-in delay-2">
-                    <p><a href="https://wa.me/5521981424469" target="_blank" rel="noopener">WhatsApp</a></p>
-                    <p><strong>E-mail:</strong> <a href="mailto:leandromorenno007@gmail.com">leandromorenno007@gmail.com </a></p>
-                    <p><strong>Instagram:</strong> <a href="https://instagram.com/leopbomfim" target="_blank" rel="noopener">@leopbomfim</a></p>
-                    <p><strong>Telefone:</strong> (21) 98142-4469</p>
+                <a href="imoveis.html" class="cta-primary" style="width:100%;justify-content:center;text-decoration:none;display:flex;box-sizing:border-box;">
+                    <span>Ver Imóveis</span>
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </aside>
+
+            <div class="contato-channels fade-in delay-2">
+                <a href="https://wa.me/5521981424469?text=Olá%20Leandro!%20Tenho%20interesse%20em%20imóveis.%20Pode%20me%20ajudar%3F"
+                   class="contato-channel-card" target="_blank" rel="noopener"
+                   style="--channel-color:#25d366;--channel-bg:rgba(37,211,102,.1);"
+                   onclick="if(typeof trackEvent==='function') trackEvent('contato_whatsapp_click')">
+                    <div class="contato-channel-icon"><i class="fab fa-whatsapp"></i></div>
+                    <div class="contato-channel-info">
+                        <div class="contato-channel-label">WhatsApp — Resposta rápida</div>
+                        <div class="contato-channel-value">(21) 98142-4469</div>
+                        <div class="contato-channel-sub">Geralmente responde em menos de 1h</div>
+                    </div>
+                    <i class="fas fa-arrow-right contato-channel-arrow"></i>
+                </a>
+
+                <a href="https://instagram.com/leopbomfim" class="contato-channel-card" target="_blank" rel="noopener"
+                   style="--channel-color:#e1306c;--channel-bg:rgba(225,48,108,.1);"
+                   onclick="if(typeof trackEvent==='function') trackEvent('contato_instagram_click')">
+                    <div class="contato-channel-icon"><i class="fab fa-instagram"></i></div>
+                    <div class="contato-channel-info">
+                        <div class="contato-channel-label">Instagram</div>
+                        <div class="contato-channel-value">@leopbomfim</div>
+                        <div class="contato-channel-sub">Imóveis, novidades e dicas</div>
+                    </div>
+                    <i class="fas fa-arrow-right contato-channel-arrow"></i>
+                </a>
+
+                <a href="mailto:leandromorenno007@gmail.com" class="contato-channel-card"
+                   style="--channel-color:#3498db;--channel-bg:rgba(52,152,219,.1);"
+                   onclick="if(typeof trackEvent==='function') trackEvent('contato_email_click')">
+                    <div class="contato-channel-icon"><i class="fas fa-envelope"></i></div>
+                    <div class="contato-channel-info">
+                        <div class="contato-channel-label">E-mail</div>
+                        <div class="contato-channel-value">leandromorenno007@gmail.com</div>
+                        <div class="contato-channel-sub">Para propostas e documentação</div>
+                    </div>
+                    <i class="fas fa-arrow-right contato-channel-arrow"></i>
+                </a>
+
+                <a href="tel:+5521981424469" class="contato-channel-card"
+                   style="--channel-color:#9b59b6;--channel-bg:rgba(155,89,182,.1);"
+                   onclick="if(typeof trackEvent==='function') trackEvent('contato_telefone_click')">
+                    <div class="contato-channel-icon"><i class="fas fa-phone"></i></div>
+                    <div class="contato-channel-info">
+                        <div class="contato-channel-label">Telefone / Ligação</div>
+                        <div class="contato-channel-value">(21) 98142-4469</div>
+                        <div class="contato-channel-sub">Seg–Sáb das 8h às 20h</div>
+                    </div>
+                    <i class="fas fa-arrow-right contato-channel-arrow"></i>
+                </a>
+
+                <div class="contato-hours-card">
+                    <div class="contato-hours-title"><i class="fas fa-clock"></i> Horário de Atendimento</div>
+                    <div class="contato-hours-row">
+                        <span class="contato-hours-day">Segunda – Sexta</span>
+                        <span class="contato-hours-time">08:00 – 20:00</span>
+                    </div>
+                    <div class="contato-hours-row">
+                        <span class="contato-hours-day">Sábado</span>
+                        <span class="contato-hours-time">09:00 – 18:00</span>
+                    </div>
+                    <div class="contato-hours-row">
+                        <span class="contato-hours-day">Domingo</span>
+                        <span class="contato-hours-time closed">Sob agendamento</span>
+                    </div>
                 </div>
             </div>
-        </section>
+        </div>
     </main>
 
-    <footer>
-        <p>&copy; 2026 Imóveis com Leandro. Todos os direitos reservados.</p>
+    <footer class="footer-rich">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <span class="logo-text">LB</span>
+                    <span class="footer-logo-name">Leandro Bomfim</span>
+                </div>
+                <p class="footer-tagline">Corretor de imóveis especialista em alto padrão no Rio de Janeiro. CRECI-RJ 123456-F.</p>
+                <div class="footer-socials">
+                    <a href="https://wa.me/5521981424469" target="_blank" rel="noopener" aria-label="WhatsApp" class="footer-social-link"><i class="fab fa-whatsapp"></i></a>
+                    <a href="https://instagram.com/leopbomfim" target="_blank" rel="noopener" aria-label="Instagram" class="footer-social-link"><i class="fab fa-instagram"></i></a>
+                    <a href="mailto:leandromorenno007@gmail.com" aria-label="E-mail" class="footer-social-link"><i class="fas fa-envelope"></i></a>
+                </div>
+            </div>
+            <div class="footer-links">
+                <h4>Navegação</h4>
+                <ul>
+                    <li><a href="index.html">Início</a></li>
+                    <li><a href="imoveis.html">Imóveis</a></li>
+                    <li><a href="contato.html">Contato</a></li>
+                </ul>
+            </div>
+            <div class="footer-links">
+                <h4>Regiões</h4>
+                <ul>
+                    <li><span>Ipanema</span></li>
+                    <li><span>Leblon</span></li>
+                    <li><span>Barra da Tijuca</span></li>
+                    <li><span>Recreio</span></li>
+                    <li><span>Copacabana</span></li>
+                </ul>
+            </div>
+            <div class="footer-contact">
+                <h4>Contato</h4>
+                <a href="https://wa.me/5521981424469" class="footer-contact-item" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i><span>(21) 98142-4469</span></a>
+                <a href="mailto:leandromorenno007@gmail.com" class="footer-contact-item"><i class="fas fa-envelope"></i><span>leandromorenno007@gmail.com</span></a>
+                <a href="https://instagram.com/leopbomfim" class="footer-contact-item" target="_blank" rel="noopener"><i class="fab fa-instagram"></i><span>@leopbomfim</span></a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 Leandro Bomfim Imóveis. Todos os direitos reservados.</p>
+            <p class="footer-creci">CRECI-RJ 123456-F &nbsp;·&nbsp; Rio de Janeiro, RJ</p>
+        </div>
     </footer>
 
+    <a href="https://wa.me/5521981424469?text=Olá%20Leandro!%20Tenho%20interesse%20em%20imóveis.%20Pode%20me%20ajudar%3F"
+       class="whatsapp-float" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
+        <div class="whatsapp-float-inner">
+            <i class="fab fa-whatsapp"></i>
+            <span class="whatsapp-float-label">Falar com Leandro</span>
+        </div>
+        <span class="whatsapp-float-pulse"></span>
+    </a>
     <script src="script.js"></script>
 </body>
 </html>
