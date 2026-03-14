@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel Administrativo - Leandro Imóveis</title>
+    <!-- Segurança -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="admin.css">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -18,21 +23,23 @@
                 <h1>Painel Admin</h1>
                 <p>Leandro Imóveis</p>
             </div>
-            <form id="login-form" class="login-form" onsubmit="handleLogin(event)">
+            <form id="login-form" class="login-form" onsubmit="handleLogin(event)" autocomplete="on">
                 <div class="form-group">
                     <label for="login-email">Email</label>
-                    <input type="email" id="login-email" placeholder="seu@email.com" required>
+                    <input type="email" id="login-email" placeholder="seu@email.com" required
+                           autocomplete="email" inputmode="email">
                 </div>
                 <div class="form-group">
                     <label for="login-senha">Senha</label>
                     <div class="password-input">
-                        <input type="password" id="login-senha" placeholder="Sua senha" required>
+                        <input type="password" id="login-senha" placeholder="Sua senha" required
+                               autocomplete="current-password">
                         <button type="button" class="toggle-password" onclick="togglePassword('login-senha')">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
                 </div>
-                <button type="button" class="btn-login" onclick="handleLogin(event)">
+                <button type="submit" class="btn-login">
                     <i class="fas fa-sign-in-alt"></i><span>Entrar</span>
                 </button>
                 <div id="login-error" class="login-error"></div>
@@ -427,8 +434,9 @@
                     <div class="settings-card">
                         <div class="settings-card-header"><i class="fas fa-tools"></i><h4>Ações de Manutenção</h4></div>
                         <div style="display:flex;flex-direction:column;gap:.7rem;margin-top:.5rem;">
-                            <button class="btn-secondary" onclick="exportarDados()" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-file-export" style="color:var(--accent)"></i> Exportar imóveis como JSON</button>
-                            <button class="btn-secondary" onclick="loadDashboard();showToast('Dashboard atualizado!')" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-sync-alt" style="color:var(--green)"></i> Atualizar dashboard</button>
+                            <button class="btn-secondary" onclick="exportarBackupJSON()" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-download" style="color:var(--accent)"></i> Backup completo (JSON)</button>
+                            <button class="btn-secondary" onclick="exportarCSVVisitas()" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-file-csv" style="color:var(--green)"></i> Exportar visitas (CSV)</button>
+                            <button class="btn-secondary" onclick="loadDashboard();showToast('Dashboard atualizado!')" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-sync-alt" style="color:var(--amber)"></i> Atualizar dashboard</button>
                             <button class="btn-secondary" onclick="showSection('lixeira')" style="justify-content:flex-start;gap:.7rem;"><i class="fas fa-trash-alt" style="color:var(--red)"></i> Ver lixeira</button>
                         </div>
                     </div>
