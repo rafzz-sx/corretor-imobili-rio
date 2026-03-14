@@ -18,6 +18,43 @@
     <meta name="twitter:description" content="Corretor especialista em imóveis de alto padrão no Rio de Janeiro.">
     <meta name="twitter:image" content="https://files.catbox.moe/nqdyup.png">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3498db">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="LB Imóveis">
+    <!-- Segurança: impede clickjacking via iframe -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <!-- Preconnect para performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <!-- Schema.org LocalBusiness -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "RealEstateAgent",
+      "name": "Leandro Bomfim Corretor de Imóveis",
+      "description": "Corretor especialista em imóveis de alto padrão na Zona Sul e Barra da Tijuca do Rio de Janeiro.",
+      "url": "https://leandrobomfim.com.br",
+      "telephone": "+55-21-98142-4469",
+      "email": "leandromorenno007@gmail.com",
+      "image": "https://files.catbox.moe/nqdyup.png",
+      "priceRange": "R$400.000 – R$3.000.000",
+      "areaServed": ["Ipanema","Leblon","Barra da Tijuca","Recreio dos Bandeirantes","Copacabana","Botafogo"],
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Rio de Janeiro",
+        "addressRegion": "RJ",
+        "addressCountry": "BR"
+      },
+      "sameAs": ["https://instagram.com/leopbomfim"]
+    }
+    </script>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -98,13 +135,15 @@
                 </div>
                 
                 <div class="hero-visual">
+                  <div class="hero-visual-inner">
                     <div class="profile-container">
                         <div class="profile-ring"></div>
                         <div class="profile-ring-outer"></div>
                         
                         <img src="https://files.catbox.moe/nqdyup.png" 
                              alt="Leandro Bomfim" 
-                             id="cfg-foto" class="profile-image">
+                             id="cfg-foto" class="profile-image"
+                             loading="eager" decoding="async">
                         
                         <div class="floating-elements">
                             <div class="floating-element element-1">
@@ -150,92 +189,79 @@
                         
                     <!-- CARROSSEL DE DEPOIMENTOS -->
                     <div class="testimonials-carousel">
-                            <div class="testimonial-track" id="cfg-depoimentos">
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        O Leandro não apenas vendeu nosso apartamento, 
-                                        ele realizou nosso sonho do primeiro lar.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Carlos e Ana Lima</span>
-                                        <span class="author-location">• Ipanema</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        Profissional incrível! Conseguiu vender minha cobertura 
-                                        em apenas 15 dias pelo valor que eu queria.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Roberto Fonseca</span>
-                                        <span class="author-location">• Barra da Tijuca</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        Atendimento personalizado e muita transparência. 
-                                        Recomendo a todos que buscam um imóvel com segurança.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Juliana Martins</span>
-                                        <span class="author-location">• Recreio</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        Encontramos o apartamento dos nossos sonhos graças 
-                                        à dedicação e profissionalismo do Leandro.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Marcos e Fernanda</span>
-                                        <span class="author-location">• Leblon</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        O melhor corretor que já conheci. Resolveu todos os 
-                                        problemas burocráticos e nos deu total suporte.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Patrícia Souza</span>
-                                        <span class="author-location">• Barra Olímpica</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="testimonial-card">
-                                    <div class="testimonial-quote">"</div>
-                                    <p class="testimonial-text">
-                                        Compramos nosso primeiro imóvel com o Leandro e foi 
-                                        uma experiência maravilhosa do início ao fim.
-                                    </p>
-                                    <div class="testimonial-author">
-                                        <span>Diego e Camila Ramos</span>
-                                        <span class="author-location">• Recreio</span>
-                                    </div>
+                        <div class="testimonial-track" id="cfg-depoimentos">
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">
+                                    Profissional incrível! Vendeu minha cobertura 
+                                    em apenas 15 dias pelo valor que eu queria.
+                                </p>
+                                <div class="testimonial-author">
+                                    <span>Roberto Fonseca</span>
+                                    <span class="author-location">• Barra da Tijuca</span>
                                 </div>
                             </div>
-                            
-                            <div class="carousel-dots">
-                                <span class="dot active"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
+
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">
+                                    Atendimento personalizado e muita transparência. 
+                                    Recomendo a todos que buscam um imóvel com segurança.
+                                </p>
+                                <div class="testimonial-author">
+                                    <span>Juliana Martins</span>
+                                    <span class="author-location">• Recreio</span>
+                                </div>
+                            </div>
+
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">
+                                    O Leandro encontrou exatamente o que eu precisava. 
+                                    Todo o processo foi rápido e sem dor de cabeça.
+                                </p>
+                                <div class="testimonial-author">
+                                    <span>Thiago Azevedo</span>
+                                    <span class="author-location">• Leblon</span>
+                                </div>
+                            </div>
+
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">
+                                    Indicação certeira! Resolveu toda a burocracia 
+                                    e me deixou tranquila do começo ao fim.
+                                </p>
+                                <div class="testimonial-author">
+                                    <span>Patrícia Souza</span>
+                                    <span class="author-location">• Barra Olímpica</span>
+                                </div>
+                            </div>
+
+                            <div class="testimonial-card">
+                                <div class="testimonial-quote">"</div>
+                                <p class="testimonial-text">
+                                    Comprei meu primeiro apê com o Leandro e foi 
+                                    uma experiência incrível do início ao fim.
+                                </p>
+                                <div class="testimonial-author">
+                                    <span>Lucas Drummond</span>
+                                    <span class="author-location">• Ipanema</span>
+                                </div>
                             </div>
                         </div>
+
+                        <div class="carousel-dots">
+                            <span class="dot active"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
                     </div>
-                </div>
-            </div>
+                  </div><!-- /.hero-visual-inner -->
+                </div><!-- /.hero-visual -->
+            </div><!-- /.hero-grid -->
             
             <div class="scroll-indicator">
                 <span class="scroll-text">Descubra mais</span>
@@ -284,8 +310,64 @@
         </section>
     </main>
 
-    <footer>
-        <p>&copy; 2026 Leandro Imóveis. Todos os direitos reservados.</p>
+    <footer class="footer-rich">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <span class="logo-text">LB</span>
+                    <span class="footer-logo-name">Leandro Bomfim</span>
+                </div>
+                <p class="footer-tagline">Corretor de imóveis especialista em alto padrão no Rio de Janeiro. CRECI-RJ 123456-F.</p>
+                <div class="footer-socials">
+                    <a href="https://wa.me/5521981424469" target="_blank" rel="noopener" aria-label="WhatsApp" class="footer-social-link">
+                        <i class="fab fa-whatsapp"></i>
+                    </a>
+                    <a href="https://instagram.com/leopbomfim" target="_blank" rel="noopener" aria-label="Instagram" class="footer-social-link">
+                        <i class="fab fa-instagram"></i>
+                    </a>
+                    <a href="mailto:leandromorenno007@gmail.com" aria-label="E-mail" class="footer-social-link">
+                        <i class="fas fa-envelope"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="footer-links">
+                <h4>Navegação</h4>
+                <ul>
+                    <li><a href="index.html">Início</a></li>
+                    <li><a href="imoveis.html">Imóveis</a></li>
+                    <li><a href="contato.html">Contato</a></li>
+                </ul>
+            </div>
+            <div class="footer-links">
+                <h4>Regiões</h4>
+                <ul>
+                    <li><span>Ipanema</span></li>
+                    <li><span>Leblon</span></li>
+                    <li><span>Barra da Tijuca</span></li>
+                    <li><span>Recreio dos Bandeirantes</span></li>
+                    <li><span>Copacabana</span></li>
+                </ul>
+            </div>
+            <div class="footer-contact">
+                <h4>Contato</h4>
+                <a href="https://wa.me/5521981424469" class="footer-contact-item" target="_blank" rel="noopener">
+                    <i class="fab fa-whatsapp"></i>
+                    <span>(21) 98142-4469</span>
+                </a>
+                <a href="mailto:leandromorenno007@gmail.com" class="footer-contact-item">
+                    <i class="fas fa-envelope"></i>
+                    <span>leandromorenno007@gmail.com</span>
+                </a>
+                <a href="https://instagram.com/leopbomfim" class="footer-contact-item" target="_blank" rel="noopener">
+                    <i class="fab fa-instagram"></i>
+                    <span>@leopbomfim</span>
+                </a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 Leandro Bomfim Imóveis. Todos os direitos reservados.</p>
+            <p class="footer-creci">CRECI-RJ 123456-F &nbsp;·&nbsp; Rio de Janeiro, RJ</p>
+        </div>
     </footer>
 
     <!-- Botão Flutuante WhatsApp -->
