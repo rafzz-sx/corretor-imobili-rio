@@ -6,7 +6,7 @@ function initFirebase() {
         firebase.initializeApp(firebaseConfig);
     }
     db = firebase.firestore();
-    console.log('🔥 Firebase inicializado no script.js');
+    if (window._secureLog) window._secureLog('🔥 Firebase pronto');
 }
 
 initFirebase();
@@ -91,7 +91,7 @@ function getFavoritos() {
         const favs = localStorage.getItem(FAVORITOS_KEY);
         return favs ? JSON.parse(favs) : [];
     } catch (e) {
-        console.error('Erro ao ler favoritos:', e);
+        // silent
         return [];
     }
 }
@@ -101,7 +101,7 @@ function saveFavoritos(favoritos) {
     try {
         localStorage.setItem(FAVORITOS_KEY, JSON.stringify(favoritos));
     } catch (e) {
-        console.error('Erro ao salvar favoritos:', e);
+        // silent
     }
 }
 
@@ -224,8 +224,8 @@ async function carregarImoveis() {
             return timeB - timeA;
         });
 
-        console.log(`📊 Total de imóveis carregados: ${imoveis.length}`);
-        console.log('🏠 Imóveis:', imoveis.map(i => ({ titulo: i.titulo, status: i.status })));
+        if (window._secureLog) window._secureLog(`📊 ${imoveis.length} imóveis carregados`);
+        
 
         imoveisCarregados = true;
         popularFiltros(imoveis);
@@ -234,7 +234,7 @@ async function carregarImoveis() {
         return imoveis;
 
     } catch (error) {
-        console.error('❌ Erro ao carregar imóveis:', error);
+        if (window._secureLog) window._secureLog('Erro ao carregar imóveis:', error);
         showToast('Erro ao carregar imóveis. Usando dados locais.', 'error');
         carregarImoveisEstaticos();
     }
@@ -516,12 +516,12 @@ let currentImovel = null;
 let lightboxIndex = 0;
 
 function openModal(imovelId) {
-    console.log('🔍 Abrindo modal do imóvel:', imovelId);
+    
     
     const imo = imoveis.find(i => i.id === imovelId || String(i.id) === String(imovelId));
     
     if (!imo) {
-        console.error('❌ Imóvel não encontrado:', imovelId);
+        
         showToast('Erro ao carregar imóvel', 'error');
         return;
     }
@@ -839,7 +839,7 @@ function loadSiteConfig() {
                             document.getElementById('cfg-foto');
     
     if (!hasHeroElements) {
-        console.log('⏭️ Não é página inicial, pulando loadSiteConfig');
+        
         return;
     }
     
@@ -932,6 +932,12 @@ function loadSiteConfig() {
                         ).join('');
                     }
                 }
+
+                // Re-inicializa o carrossel para sincronizar totalSlides e dots
+                if (window._carousel) {
+                    window._carousel.destroy();
+                }
+                window._carousel = new TestimonialsCarousel();
             }
 
             // Bairros - com verificação
@@ -944,7 +950,7 @@ function loadSiteConfig() {
                 bairrosTrack.innerHTML = items + items;
             }
         })
-        .catch(err => console.error('Erro ao carregar config:', err));
+        .catch(() => {})
 }
 
 // ========== FUNÇÃO SEGURA PARA ALTERAR ELEMENTOS ==========
@@ -1047,6 +1053,10 @@ class TestimonialsCarousel {
     stopAutoPlay() {
         clearInterval(this.autoPlayInterval);
         this.autoPlayInterval = null;
+    }
+
+    destroy() {
+        this.stopAutoPlay();
     }
 }
 
@@ -1168,7 +1178,7 @@ function setupWhatsAppTracking() {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Script.js inicializado');
+    
     
     // Carregar configurações do site
     loadSiteConfig();
@@ -1347,4 +1357,90 @@ window.closeLightbox = closeLightbox;
 window.lbPrev = lbPrev;
 window.lbNext = lbNext;
 
-console.log('✅ Script.js carregado com sucesso!');
+
+// ============================================================
+// MELHORIAS SSS — LEANDRO IMÓVEIS
+// Skeleton control, modal-aware WhatsApp, page-hidden,
+// gallery show/hide, decoding async
+// ============================================================
+
+// ── Skeleton: mostrar quando carregando, ocultar quando pronto ──
+function hideSkeleton() {
+    const skel = document.getElementById('gallery-skeleton');
+    const gal  = document.getElementById('gallery');
+    if (skel) { skel.style.display = 'none'; }
+    if (gal)  { gal.style.display = ''; }
+}
+
+// Patch renderGallery para esconder skeleton ao renderizar
+const _origRenderGallery = window.renderGallery || renderGallery;
+function renderGalleryWithSkeleton(list, containerId) {
+    hideSkeleton();
+    _origRenderGallery(list, containerId);
+}
+// Override global se na página de imóveis
+if (document.getElementById('gallery-skeleton')) {
+    window.renderGallery = renderGalleryWithSkeleton;
+}
+
+// ── Modal: adiciona/remove body.modal-open para ocultar WhatsApp ──
+(function patchModalOpenClose() {
+    const _open  = window.openModal;
+    const _close = window.closeModal;
+    if (_open) window.openModal = function(id) {
+        document.body.classList.add('modal-open');
+        _open(id);
+    };
+    if (_close) window.closeModal = function() {
+        document.body.classList.remove('modal-open');
+        _close();
+    };
+})();
+
+// ── Pause animations when tab is hidden ──
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        document.body.classList.add('page-hidden');
+    } else {
+        document.body.classList.remove('page-hidden');
+    }
+});
+
+// ── Keyboard nav: fechar modal com ESC ──
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('imovel-modal');
+        if (modal && modal.classList.contains('active')) {
+            if (window.closeModal) window.closeModal();
+        }
+        // fechar lightbox
+        const lb = document.getElementById('lightbox-overlay');
+        if (lb && lb.classList.contains('active')) {
+            if (window.closeLightbox) window.closeLightbox();
+        }
+    }
+});
+
+// ── Menu mobile: fechar ao clicar em link ──
+document.querySelectorAll('nav ul li a').forEach(function(link) {
+    link.addEventListener('click', function() {
+        const nav = document.querySelector('nav ul');
+        const toggle = document.querySelector('.menu-toggle');
+        if (nav) nav.classList.remove('active', 'open');
+        if (toggle) toggle.classList.remove('active', 'open');
+        document.body.classList.remove('no-scroll');
+    });
+});
+
+// ── Menu toggle: suporte a teclado (Enter/Space) ──
+(function() {
+    const toggle = document.querySelector('.menu-toggle');
+    if (toggle) {
+        toggle.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle.click();
+            }
+        });
+    }
+})();
