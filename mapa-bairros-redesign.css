@@ -1,0 +1,244 @@
+/* ============================================================
+   MAPA DE BAIRROS — REDESIGN VISUAL
+   Substitui o bloco "2. MAPA VISUAL DE BAIRROS" do
+   melhorias-visuais.css original
+   ============================================================ */
+
+/* ── Seção container ── */
+.lb-bairros-map-section {
+    padding: .75rem 0 1rem;
+  }
+  
+  /* ── Label de seção ── */
+  .lb-bairros-map-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: rgba(255,255,255,.28);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .lb-bairros-map-title::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 1px;
+    background: rgba(255,255,255,.12);
+    flex-shrink: 0;
+  }
+  
+  /* ── Grade de zonas ── */
+  .lb-zonas-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+  
+  /* ── Card de zona ── */
+  .lb-zona-card {
+    position: relative;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.03);
+    padding: 16px 16px 14px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color .2s, transform .18s, background .2s;
+    user-select: none;
+  }
+  
+  .lb-zona-card:hover {
+    transform: translateY(-2px);
+    background: rgba(255,255,255,.05);
+  }
+  
+  /* Faixa colorida no topo */
+  .lb-zona-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--zona-color, rgba(52,152,219,.7));
+    border-radius: 14px 14px 0 0;
+    opacity: .7;
+    transition: opacity .2s, height .2s;
+  }
+  .lb-zona-card:hover::before,
+  .lb-zona-card.active::before {
+    opacity: 1;
+    height: 4px;
+  }
+  
+  /* Brilho de fundo ao ativar */
+  .lb-zona-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--zona-color, rgba(52,152,219,.1));
+    opacity: 0;
+    border-radius: 14px;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .lb-zona-card.active {
+    border-color: rgba(255,255,255,.18);
+  }
+  .lb-zona-card.active::after { opacity: .08; }
+  .lb-zona-card:hover::after  { opacity: .04; }
+  
+  /* Ícone grande decorativo (fundo) */
+  .lb-zona-icon-bg {
+    position: absolute;
+    right: -8px; bottom: -8px;
+    font-size: 56px;
+    line-height: 1;
+    opacity: .1;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+  }
+  .lb-zona-card:hover .lb-zona-icon-bg,
+  .lb-zona-card.active .lb-zona-icon-bg {
+    opacity: .18;
+    transform: scale(1.1) rotate(-4deg);
+  }
+  
+  /* Topo do card: ícone + contador */
+  .lb-zona-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  
+  .lb-zona-icon-wrap {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  
+  /* Contador de imóveis */
+  .lb-zona-count-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+  .lb-zona-count-num {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--zona-color-text, rgba(52,152,219,.9));
+    letter-spacing: -.5px;
+    transition: color .2s;
+  }
+  .lb-zona-count-label {
+    font-size: 10px;
+    color: rgba(255,255,255,.3);
+    letter-spacing: .04em;
+  }
+  
+  /* Nome da zona */
+  .lb-zona-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,.85);
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+    letter-spacing: -.01em;
+  }
+  
+  /* Bairros como mini-pills */
+  .lb-zona-bairros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    position: relative;
+    z-index: 1;
+  }
+  .lb-zona-bairros span {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    font-size: 10.5px;
+    color: rgba(255,255,255,.45);
+    transition: border-color .15s, color .15s, background .15s;
+    white-space: nowrap;
+  }
+  .lb-zona-card:hover .lb-zona-bairros span,
+  .lb-zona-card.active .lb-zona-bairros span {
+    border-color: var(--zona-color, rgba(52,152,219,.4));
+    color: rgba(255,255,255,.7);
+    background: rgba(255,255,255,.07);
+  }
+  
+  
+  /* ── Pills individuais de bairro ── */
+  .lb-bairros-map {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0;
+  }
+  
+  .lb-bairro-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border-radius: 20px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,.5);
+    cursor: pointer;
+    transition: all .17s cubic-bezier(.22,1,.36,1);
+    user-select: none;
+    white-space: nowrap;
+  }
+  .lb-bairro-pill:hover {
+    border-color: rgba(255,255,255,.2);
+    color: rgba(255,255,255,.85);
+    transform: translateY(-1px);
+    background: rgba(255,255,255,.07);
+  }
+  .lb-bairro-pill.active {
+    background: rgba(52,152,219,.15);
+    border-color: rgba(52,152,219,.5);
+    color: #7dd3fc;
+    box-shadow: 0 2px 10px rgba(52,152,219,.15);
+  }
+  
+  .lb-bairro-pill .pill-count {
+    font-size: 10.5px;
+    font-weight: 600;
+    opacity: .6;
+  }
+  .lb-bairro-pill.active .pill-count {
+    opacity: .85;
+  }
+  
+  /* ── Responsive mobile ── */
+  @media (max-width: 500px) {
+    .lb-zonas-grid {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .lb-zona-count-num { font-size: 20px; }
+    .lb-zona-card { padding: 13px 13px 11px; }
+    .lb-zona-icon-bg { font-size: 44px; }
+    .lb-bairro-pill { font-size: 11.5px; padding: 5px 10px; }
+  }
