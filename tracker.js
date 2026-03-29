@@ -8,11 +8,13 @@
 
     function waitForFirebase(cb, attempts) {
         attempts = attempts || 0;
-        if (attempts > 40) return;
+        // 100 tentativas x 150ms = até 15s de espera
+        // Mobile 3G/4G lento pode demorar mais que os 4s originais (40x100ms)
+        if (attempts > 100) return;
         if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
             cb();
         } else {
-            setTimeout(function() { waitForFirebase(cb, attempts + 1); }, 100);
+            setTimeout(function() { waitForFirebase(cb, attempts + 1); }, 150);
         }
     }
 
