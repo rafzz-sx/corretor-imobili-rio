@@ -1,448 +1,456 @@
-// ========== INICIALIZAR FIREBASE ==========
-let db;
+// ============================================================
+//  SCRIPT.JS v4.0 — Leandro Imóveis
+//  Região cards, tempo real, notificações corrigidas
+// ============================================================
 
+// ── Firebase ──────────────────────────────────────────────
+let db;
 function initFirebase() {
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
     if (window._secureLog) window._secureLog('🔥 Firebase pronto');
 }
-
 initFirebase();
 
-// ========== VARIÁVEIS GLOBAIS ==========
+// ── Globais ────────────────────────────────────────────────
 let imoveis = [];
 let imoveisCarregados = false;
 const FAVORITOS_KEY = '_lb_favoritos';
 
-function safeId(id) {
-    return document.getElementById(id) || null;
-}
+// Estado dos filtros de região/bairro
+const filtroState = {
+    region: null,      // 'zona-sul' | 'barra-recreio' | null
+    bairro: null,      // nome exato do bairro ou null
+};
 
-function safeText(id, value) {
-    const el = safeId(id);
-    if (el) el.textContent = value;
-}
+// Mapa de bairros por região
+const REGIOES = {
+    'zona-sul': ['Ipanema','Leblon','Copacabana','Botafogo','Flamengo'],
+    'barra-recreio': ['Barra da Tijuca','Barra Olímpica','Recreio dos Bandeirantes'],
+};
 
-function safeHTML(id, value) {
-    const el = safeId(id);
-    if (el) el.innerHTML = value;
-}
+// ══════════════════════════════════════════════════════════
+//  UTILITÁRIOS
+// ══════════════════════════════════════════════════════════
+function safeEl(id) { return document.getElementById(id) || null; }
+function safeText(id, v) { const el = safeEl(id); if (el) el.textContent = v; }
+function safeHTML(id, v) { const el = safeEl(id); if (el) el.innerHTML = v; }
+function safeAttr(id, attr, v) { const el = safeEl(id); if (el) el.setAttribute(attr, v); }
 
-function safeAttr(id, attr, value) {
-    const el = safeId(id);
-    if (el) el.setAttribute(attr, value);
-}
-
-// Versão que aceita null sem erro
-function safeOptional(id, callback) {
-    const el = document.getElementById(id);
-    if (el && callback) callback(el);
-}
-// ========== SISTEMA DE TOAST ==========
+// ══════════════════════════════════════════════════════════
+//  TOAST SYSTEM
+// ══════════════════════════════════════════════════════════
 function showToast(message, type = 'success', duration = 3000) {
-    // Criar container se não existir
     let container = document.querySelector('.toast-container');
     if (!container) {
         container = document.createElement('div');
         container.className = 'toast-container';
         document.body.appendChild(container);
     }
-    
-    // Criar toast
+    const icons = { success:'fa-check-circle', error:'fa-exclamation-circle', warning:'fa-exclamation-triangle', info:'fa-info-circle', 'favorito-toast':'fa-heart' };
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
-    // Ícone baseado no tipo
-    let icon = 'fa-check-circle';
-    if (type === 'error') icon = 'fa-exclamation-circle';
-    if (type === 'warning') icon = 'fa-exclamation-triangle';
-    if (type === 'info') icon = 'fa-info-circle';
-    if (type === 'favorito-toast') icon = 'fa-heart';
-    
-    toast.innerHTML = `
-        <i class="fas ${icon}"></i>
-        <span>${message}</span>
-    `;
-    
+    toast.innerHTML = `<i class="fas ${icons[type]||icons.success}"></i><span>${message}</span>`;
     container.appendChild(toast);
-    
-    // Remover após duration
     setTimeout(() => {
         toast.style.animation = 'toastOut 0.3s ease forwards';
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.remove();
-            }
-            // Remover container se vazio
-            if (container.children.length === 0) {
-                container.remove();
-            }
-        }, 300);
+        setTimeout(() => { toast.remove(); if (!container.children.length) container.remove(); }, 300);
     }, duration);
 }
 
-// ========== SISTEMA DE FAVORITOS ==========
+// ══════════════════════════════════════════════════════════
+//  NOTIFICAÇÕES TEMPO REAL — SEM BUG (fila gerenciada)
+// ══════════════════════════════════════════════════════════
+const _notifQ = [];
+let _notifActive = false;
 
-// Buscar favoritos do localStorage
-function getFavoritos() {
-    try {
-        const favs = localStorage.getItem(FAVORITOS_KEY);
-        return favs ? JSON.parse(favs) : [];
-    } catch (e) {
-        // silent
-        return [];
-    }
+function showNotification(title, body, color = 'blue') {
+    _notifQ.push({ title, body, color });
+    if (!_notifActive) _nextNotif();
 }
 
-// Salvar favoritos no localStorage
-function saveFavoritos(favoritos) {
-    try {
-        localStorage.setItem(FAVORITOS_KEY, JSON.stringify(favoritos));
-    } catch (e) {
-        // silent
+function _nextNotif() {
+    if (!_notifQ.length) { _notifActive = false; return; }
+    _notifActive = true;
+    const { title, body, color } = _notifQ.shift();
+    const colors = { blue:'var(--primary)', green:'#22c55e', amber:'#f59e0b', red:'#ef4444', purple:'#a855f7' };
+    const c = colors[color] || colors.blue;
+
+    let el = document.getElementById('_realtime-notif');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = '_realtime-notif';
+        Object.assign(el.style, {
+            position:'fixed', bottom:'5.5rem', right:'1.5rem', zIndex:'9999',
+            minWidth:'260px', maxWidth:'320px',
+            background:'var(--bg-card, #111)', borderRadius:'14px',
+            padding:'.9rem 1.1rem',
+            boxShadow:'0 8px 32px rgba(0,0,0,.6)',
+            display:'flex', gap:'.75rem', alignItems:'flex-start',
+            transform:'translateX(calc(100% + 2.5rem))',
+            transition:'transform .35s cubic-bezier(.22,1,.36,1)',
+            willChange:'transform',
+        });
+        document.body.appendChild(el);
     }
+
+    // Reset sem transição → animação de entrada
+    el.style.transition = 'none';
+    el.style.transform = 'translateX(calc(100% + 2.5rem))';
+    el.style.borderLeft = `3px solid ${c}`;
+    el.innerHTML = `
+        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.3rem;
+            flex-shrink:0;box-shadow:0 0 6px ${c};animation:pulse 1.2s infinite;"></div>
+        <div>
+            <div style="font-weight:600;font-size:.82rem;color:#f1f5f9;">${title}</div>
+            <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-top:.1rem;">${body}</div>
+        </div>`;
+
+    void el.offsetWidth; // force reflow
+    el.style.transition = 'transform .35s cubic-bezier(.22,1,.36,1)';
+    el.style.transform = 'translateX(0)';
+
+    const hideTimer = setTimeout(() => {
+        el.style.transform = 'translateX(calc(100% + 2.5rem))';
+        setTimeout(() => {
+            _notifActive = false;
+            _nextNotif();
+        }, 380);
+    }, 4200);
+
+    // Clique fecha imediatamente
+    el.onclick = () => {
+        clearTimeout(hideTimer);
+        el.style.transform = 'translateX(calc(100% + 2.5rem))';
+        setTimeout(() => { _notifActive = false; _nextNotif(); }, 380);
+    };
 }
 
-// Verificar se imóvel é favorito
-function isFavorito(imovelId) {
-    return getFavoritos().includes(String(imovelId));
-}
+// ══════════════════════════════════════════════════════════
+//  FAVORITOS
+// ══════════════════════════════════════════════════════════
+function getFavoritos() { try { return JSON.parse(localStorage.getItem(FAVORITOS_KEY)||'[]'); } catch { return []; } }
+function saveFavoritos(f) { try { localStorage.setItem(FAVORITOS_KEY, JSON.stringify(f)); } catch {} }
+function isFavorito(id) { return getFavoritos().includes(String(id)); }
 
-// Alternar favorito
-function toggleFavorito(imovelId, event) {
-    // Prevenir propagação do evento se existir
-    if (event) {
-        event.stopPropagation();
-    }
-    
-    const favoritos = getFavoritos();
-    const id = String(imovelId);
-    const index = favoritos.indexOf(id);
-    
-    if (index === -1) {
-        favoritos.push(id);
-        showToast('❤️ Imóvel adicionado aos favoritos!', 'favorito-toast');
-        
-        // Rastrear evento de favorito
-        if (typeof window.trackEvent === 'function') {
-            window.trackEvent('favorito_adicionado', { imovelId: id });
-        }
+function toggleFavorito(id, event) {
+    if (event) event.stopPropagation();
+    const favs = getFavoritos();
+    const sid = String(id);
+    const idx = favs.indexOf(sid);
+    if (idx === -1) {
+        favs.push(sid);
+        showToast('❤️ Adicionado aos favoritos!', 'favorito-toast');
     } else {
-        favoritos.splice(index, 1);
-        showToast('🗑️ Imóvel removido dos favoritos', 'info');
-        
-        // Rastrear evento de remoção
-        if (typeof window.trackEvent === 'function') {
-            window.trackEvent('favorito_removido', { imovelId: id });
+        favs.splice(idx, 1);
+        showToast('🗑️ Removido dos favoritos', 'info');
+    }
+    saveFavoritos(favs);
+    updateFavBtn(id);
+    return favs.includes(sid);
+}
+
+function updateFavBtn(id) {
+    const btn = document.querySelector(`.favorito-btn[data-id="${id}"]`);
+    if (!btn) return;
+    const fav = isFavorito(id);
+    btn.innerHTML = fav ? '<i class="fas fa-heart"></i>' : '<i class="far fa-heart"></i>';
+    btn.classList.toggle('favorito-ativo', fav);
+}
+
+// ══════════════════════════════════════════════════════════
+//  CARREGAR IMÓVEIS + TEMPO REAL
+// ══════════════════════════════════════════════════════════
+let _imoveisUnsubscribe = null;
+
+function startImoveisListener() {
+    if (_imoveisUnsubscribe) return;
+    _imoveisUnsubscribe = db.collection('imoveis').onSnapshot(snap => {
+        const novos = snap.docs.map(d => ({
+            id: d.id, ...d.data(),
+            status: d.data().status || 'disponivel',
+            tipo: d.data().tipo || 'Apartamento',
+            vagas: d.data().vagas || 0,
+            condominio: d.data().condominio || 0,
+            iptu: d.data().iptu || 0,
+            createdAt: d.data().createdAt || { seconds: 0 },
+        }));
+
+        // Notifica mudanças após carregamento inicial
+        if (imoveisCarregados) {
+            snap.docChanges().forEach(change => {
+                if (change.type === 'added')    showNotification('🏠 Novo imóvel!', change.doc.data().titulo || '', 'green');
+                if (change.type === 'modified') showNotification('✏️ Imóvel atualizado', change.doc.data().titulo || '', 'amber');
+                if (change.type === 'removed')  showNotification('🗑️ Imóvel removido', change.doc.data().titulo || '', 'red');
+            });
         }
-    }
-    
-    saveFavoritos(favoritos);
-    updateFavoritoButton(imovelId);
-    return favoritos.includes(id);
-}
 
-// Atualizar UI do botão de favorito
-function updateFavoritoButton(imovelId) {
-    const btn = document.querySelector(`.favorito-btn[data-id="${imovelId}"]`);
-    if (btn) {
-        const isFav = isFavorito(imovelId);
-        btn.innerHTML = isFav ? '<i class="fas fa-heart"></i>' : '<i class="far fa-heart"></i>';
-        btn.classList.toggle('favorito-ativo', isFav);
-    }
-}
-
-// Limpar todos os favoritos
-function limparTodosFavoritos() {
-    if (getFavoritos().length === 0) {
-        showToast('Nenhum favorito para limpar', 'info');
-        return;
-    }
-    
-    if (confirm('Tem certeza que deseja remover todos os favoritos?')) {
-        localStorage.removeItem(FAVORITOS_KEY);
-        showToast('🗑️ Todos os favoritos foram removidos', 'info');
-        
-        // Atualizar todos os botões na página atual
-        document.querySelectorAll('.favorito-btn').forEach(btn => {
-            const id = btn.getAttribute('data-id');
-            btn.innerHTML = '<i class="far fa-heart"></i>';
-            btn.classList.remove('favorito-ativo');
-        });
-        
-        // Se estiver na página de favoritos, recarregar
-        if (window.location.pathname.includes('favoritos.html')) {
-            carregarFavoritos();
-        }
-    }
-}
-
-// ========== CARREGAR IMÓVEIS DO FIREBASE (SEM ÍNDICE) ==========
-async function carregarImoveis() {
-    try {
-        const gallery = document.getElementById('gallery');
-        if (!gallery) return;
-
-        // Skeleton loading
-        gallery.innerHTML = Array(6).fill(0).map(() => `
-            <div class="imovel skeleton-card">
-                <div class="skeleton-img"></div>
-                <div class="imovel-content">
-                    <div class="skeleton-line w80"></div>
-                    <div class="skeleton-line w50" style="margin-top:.5rem"></div>
-                    <div class="skeleton-line w40" style="margin-top:.5rem"></div>
-                    <div class="skeleton-line w60" style="margin-top:.5rem"></div>
-                    <div class="skeleton-btn"></div>
-                </div>
-            </div>`).join('');
-
-        // Buscar sem ordenação (não precisa de índice)
-        const snapshot = await db.collection('imoveis').get();
-        
-        // Mapear imóveis e ordenar no JavaScript
-        imoveis = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return { 
-                id: doc.id, 
-                ...data,
-                status: data.status || 'disponivel',
-                tipo: data.tipo || 'Apartamento',
-                vagas: data.vagas || 0,
-                condominio: data.condominio || 0,
-                iptu: data.iptu || 0,
-                // Garantir que createdAt existe para ordenação
-                createdAt: data.createdAt || { seconds: 0 }
-            };
-        });
-
-        // Ordenar no JavaScript por createdAt (mais recentes primeiro)
-        imoveis.sort((a, b) => {
-            const timeA = a.createdAt?.seconds || 0;
-            const timeB = b.createdAt?.seconds || 0;
-            return timeB - timeA;
-        });
-
-        if (window._secureLog) window._secureLog(`📊 ${imoveis.length} imóveis carregados`);
-        
-
+        imoveis = novos.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
         imoveisCarregados = true;
-        popularFiltros(imoveis);
+        atualizarContadoresRegiao();
+        popularChipsBairros();
         aplicarFiltros();
-        
-        return imoveis;
-
-    } catch (error) {
-        if (window._secureLog) window._secureLog('Erro ao carregar imóveis:', error);
-        showToast('Erro ao carregar imóveis. Usando dados locais.', 'error');
+        hideSkeleton();
+    }, err => {
+        console.error('imoveis listener:', err);
         carregarImoveisEstaticos();
-    }
+    });
 }
 
-// ========== DADOS ESTÁTICOS DE FALLBACK ==========
+async function carregarImoveis() {
+    const gallery = safeEl('gallery');
+    if (!gallery) return;
+    startImoveisListener();
+}
+
+// Dados estáticos fallback
 function carregarImoveisEstaticos() {
     imoveis = [
-        {
-            id: '1',
-            bairro: 'Ipanema',
-            quartos: 2,
-            preco: 850000,
-            area: 80,
-            vagas: 1,
-            condominio: 850,
-            iptu: 350,
-            tipo: 'Apartamento',
-            status: 'disponivel',
-            titulo: 'Apartamento Moderno em Ipanema',
-            descricao: 'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.',
-            imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-            fotos: [
-                'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg',
-                'https://files.catbox.moe/ihe3p5.png',
-                'https://files.catbox.moe/ta8pp6.png',
-                'https://files.catbox.moe/0tg1le.png'
-            ]
-        },
-        {
-            id: '2',
-            bairro: 'Barra da Tijuca',
-            quartos: 3,
-            preco: 1200000,
-            area: 140,
-            vagas: 2,
-            condominio: 1200,
-            iptu: 500,
-            tipo: 'Cobertura',
-            status: 'disponivel',
-            titulo: 'Cobertura na Barra da Tijuca',
-            descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.',
-            imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
-            fotos: [
-                'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg',
-                'https://files.catbox.moe/o4xhj9.png',
-                'https://files.catbox.moe/ta8pp6.png',
-                'https://files.catbox.moe/ihe3p5.png'
-            ]
-        },
-        {
-            id: '3',
-            bairro: 'Recreio dos Bandeirantes',
-            quartos: 2,
-            preco: 520000,
-            area: 70,
-            vagas: 1,
-            condominio: 600,
-            iptu: 250,
-            tipo: 'Apartamento',
-            status: 'vendido',
-            titulo: 'Apartamento Moderno no Recreio',
-            descricao: 'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.',
-            imagem: 'https://files.catbox.moe/ihe3p5.png',
-            fotos: [
-                'https://files.catbox.moe/ihe3p5.png',
-                'https://files.catbox.moe/0tg1le.png'
-            ]
-        }
+        { id:'1', bairro:'Ipanema', quartos:2, preco:850000, area:80, vagas:1, condominio:850, iptu:350, tipo:'Apartamento', status:'disponivel', titulo:'Apartamento Moderno em Ipanema', descricao:'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.', imagem:'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg', fotos:['https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg','https://files.catbox.moe/ihe3p5.png','https://files.catbox.moe/ta8pp6.png'], createdAt:{seconds:Date.now()/1000} },
+        { id:'2', bairro:'Barra da Tijuca', quartos:3, preco:1200000, area:140, vagas:2, condominio:1200, iptu:500, tipo:'Cobertura', status:'disponivel', titulo:'Cobertura na Barra da Tijuca', descricao:'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.', imagem:'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg', fotos:['https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg','https://files.catbox.moe/o4xhj9.png'], createdAt:{seconds:Date.now()/1000-100} },
+        { id:'3', bairro:'Recreio dos Bandeirantes', quartos:2, preco:520000, area:70, vagas:1, condominio:600, iptu:250, tipo:'Apartamento', status:'vendido', titulo:'Apartamento no Recreio', descricao:'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.', imagem:'https://files.catbox.moe/ihe3p5.png', fotos:['https://files.catbox.moe/ihe3p5.png'], createdAt:{seconds:Date.now()/1000-200} },
     ];
-    
-    popularFiltros(imoveis);
+    imoveisCarregados = true;
+    atualizarContadoresRegiao();
+    popularChipsBairros();
     aplicarFiltros();
-    
-    showToast('Mostrando imóveis de exemplo', 'info');
+    hideSkeleton();
+    showToast('Usando dados de exemplo', 'info');
 }
 
-// ========== FILTROS ==========
-function popularFiltros(lista) {
-    const sel = document.getElementById('bairro');
-    if (!sel) return;
-    
-    const bairros = [...new Set(lista.map(i => i.bairro).filter(Boolean))].sort();
-    sel.innerHTML = '<option value="">Todos os bairros</option>' +
-        bairros.map(b => `<option value="${b}">${b}</option>`).join('');
+// ══════════════════════════════════════════════════════════
+//  CONTADORES DAS REGIÕES
+// ══════════════════════════════════════════════════════════
+function atualizarContadoresRegiao() {
+    const mostrarVendidos = safeEl('mostrar-vendidos')?.checked;
 
-    // Restaurar filtros da URL
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('bairro')) sel.value = params.get('bairro');
-    if (params.get('quartos')) {
-        const q = document.getElementById('quartos');
-        if (q) q.value = params.get('quartos');
-    }
-    if (params.get('preco')) {
-        const p = document.getElementById('preco');
-        if (p) p.value = params.get('preco');
-    }
-    if (params.get('tipo')) {
-        const t = document.getElementById('tipo');
-        if (t) t.value = params.get('tipo');
-    }
+    const lista = imoveis.filter(i => mostrarVendidos || (i.status !== 'vendido' && i.status !== 'alugado'));
+
+    // Conta por região
+    let cZS = 0, cBR = 0;
+    lista.forEach(i => {
+        if (REGIOES['zona-sul'].includes(i.bairro)) cZS++;
+        else if (REGIOES['barra-recreio'].includes(i.bairro)) cBR++;
+    });
+
+    safeText('count-zona-sul', cZS);
+    safeText('count-barra-recreio', cBR);
+
+    // Atualiza chips dentro dos cards com contagem individual
+    ['zona-sul','barra-recreio'].forEach(reg => {
+        const container = safeEl('chips-' + reg);
+        if (!container) return;
+        container.querySelectorAll('.rc-chip').forEach(chip => {
+            const bairroNome = chip.dataset.bairro;
+            if (!bairroNome) return;
+            const n = lista.filter(i => i.bairro === bairroNome).length;
+            // Mostra contagem discreta no chip
+            chip.title = `${n} imóve${n!==1?'is':'l'}`;
+        });
+    });
 }
 
+// ══════════════════════════════════════════════════════════
+//  CHIPS DE BAIRROS DIRETOS
+// ══════════════════════════════════════════════════════════
+function popularChipsBairros() {
+    const row = safeEl('bairros-chips-row');
+    if (!row) return;
+
+    const mostrarVendidos = safeEl('mostrar-vendidos')?.checked;
+    const lista = imoveis.filter(i => mostrarVendidos || (i.status !== 'vendido' && i.status !== 'alugado'));
+
+    const contagem = {};
+    lista.forEach(i => { if (i.bairro) contagem[i.bairro] = (contagem[i.bairro]||0)+1; });
+
+    const bairros = Object.entries(contagem).sort((a,b) => b[1]-a[1]);
+
+    row.innerHTML = bairros.map(([b, n]) => `
+        <span class="bchip ${filtroState.bairro === b ? 'ativo' : ''}" 
+              onclick="selectBairro('${b.replace(/'/g,"\\'")}')">
+            ${b} <span class="bchip-count">${n}</span>
+        </span>
+    `).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+//  LÓGICA DE FILTRO POR REGIÃO / BAIRRO
+// ══════════════════════════════════════════════════════════
+function toggleRegion(reg) {
+    if (filtroState.region === reg && !filtroState.bairro) {
+        // Desativa
+        filtroState.region = null;
+        filtroState.bairro = null;
+    } else {
+        filtroState.region = reg;
+        filtroState.bairro = null;
+    }
+    syncRegionUI();
+    aplicarFiltros();
+}
+
+function selectBairroChip(event, bairro) {
+    event.stopPropagation(); // não ativa o card de região
+    if (filtroState.bairro === bairro) {
+        filtroState.bairro = null;
+        // mantém região ativa
+    } else {
+        filtroState.bairro = bairro;
+        // detecta qual região pertence
+        for (const [reg, lista] of Object.entries(REGIOES)) {
+            if (lista.includes(bairro)) { filtroState.region = reg; break; }
+        }
+    }
+    syncRegionUI();
+    aplicarFiltros();
+}
+
+function selectBairro(bairro) {
+    if (filtroState.bairro === bairro) {
+        filtroState.bairro = null;
+        filtroState.region = null;
+    } else {
+        filtroState.bairro = bairro;
+        for (const [reg, lista] of Object.entries(REGIOES)) {
+            if (lista.includes(bairro)) { filtroState.region = reg; break; }
+        }
+    }
+    syncRegionUI();
+    aplicarFiltros();
+}
+
+function syncRegionUI() {
+    // Cards de região
+    ['zona-sul','barra-recreio'].forEach(reg => {
+        const card = safeEl('card-' + reg);
+        if (card) card.classList.toggle('active', filtroState.region === reg);
+    });
+
+    // Chips dentro dos cards de região
+    document.querySelectorAll('.rc-chip').forEach(chip => {
+        chip.classList.toggle('ativo', chip.dataset.bairro === filtroState.bairro);
+    });
+
+    // Chips diretos
+    document.querySelectorAll('.bchip').forEach(chip => {
+        chip.classList.toggle('ativo', chip.textContent.trim().replace(/\d+/g,'').trim() === filtroState.bairro);
+    });
+}
+
+// ══════════════════════════════════════════════════════════
+//  FILTROS GERAIS
+// ══════════════════════════════════════════════════════════
 function ordenarImoveis(lista, criterio) {
-    const copia = [...lista];
+    const c = [...lista];
     switch (criterio) {
-        case 'destaque':
-            return copia.sort((a, b) => (b.destaque === true ? 1 : 0) - (a.destaque === true ? 1 : 0));
-        case 'recentes':
-            return copia.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        case 'menor-preco':
-            return copia.sort((a, b) => parseFloat(a.preco || 0) - parseFloat(b.preco || 0));
-        case 'maior-preco':
-            return copia.sort((a, b) => parseFloat(b.preco || 0) - parseFloat(a.preco || 0));
-        case 'maior-area':
-            return copia.sort((a, b) => parseFloat(b.area || 0) - parseFloat(a.area || 0));
-        default:
-            return copia;
+        case 'destaque':    return c.sort((a,b) => (b.destaque?1:0)-(a.destaque?1:0));
+        case 'recentes':    return c.sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        case 'menor-preco': return c.sort((a,b) => parseFloat(a.preco||0)-parseFloat(b.preco||0));
+        case 'maior-preco': return c.sort((a,b) => parseFloat(b.preco||0)-parseFloat(a.preco||0));
+        case 'maior-area':  return c.sort((a,b) => parseFloat(b.area||0)-parseFloat(a.area||0));
+        default:            return c;
     }
 }
 
 function aplicarFiltros() {
-    const bairro = document.getElementById('bairro')?.value || '';
-    const quartos = document.getElementById('quartos')?.value || '';
-    const preco = document.getElementById('preco')?.value || '';
-    const tipo = document.getElementById('tipo')?.value || '';
-    const ordem = document.getElementById('ordenar')?.value || 'destaque';
-    const mostrarVendidos = document.getElementById('mostrar-vendidos')?.checked || false;
-    const busca = (document.getElementById('busca-texto')?.value || '').toLowerCase().trim();
+    const quartos = safeEl('quartos')?.value || '';
+    const preco   = safeEl('preco')?.value || '';
+    const tipo    = safeEl('tipo')?.value || '';
+    const ordem   = safeEl('ordenar')?.value || 'destaque';
+    const vendidos= safeEl('mostrar-vendidos')?.checked;
+    const busca   = (safeEl('busca-texto-top')?.value || '').toLowerCase().trim();
 
     let filtrados = imoveis.filter(imo => {
-        if (!mostrarVendidos && (imo.status === 'vendido' || imo.status === 'alugado')) return false;
+        if (!vendidos && (imo.status === 'vendido' || imo.status === 'alugado')) return false;
 
-        const matchBairro = !bairro || imo.bairro === bairro;
-        const matchQuartos = !quartos || (quartos === '4'
-            ? parseInt(imo.quartos) >= 4
-            : imo.quartos?.toString() === quartos);
-        const matchTipo = !tipo || imo.tipo === tipo;
-        const matchBusca = !busca || [imo.titulo, imo.bairro, imo.descricao, imo.tipo]
-            .some(v => (v || '').toLowerCase().includes(busca));
-
-        let matchPreco = true;
-        if (preco) {
-            const n = parseFloat(imo.preco);
-            if (preco === '0-600000') matchPreco = n <= 600000;
-            else if (preco === '600001-1000000') matchPreco = n > 600000 && n <= 1000000;
-            else if (preco === '1000001+') matchPreco = n > 1000000;
+        // Filtro de região/bairro
+        if (filtroState.bairro) {
+            if (imo.bairro !== filtroState.bairro) return false;
+        } else if (filtroState.region) {
+            if (!REGIOES[filtroState.region]?.includes(imo.bairro)) return false;
         }
 
-        return matchBairro && matchQuartos && matchPreco && matchTipo && matchBusca;
+        const matchQ = !quartos || (quartos === '4' ? parseInt(imo.quartos) >= 4 : String(imo.quartos) === quartos);
+        const matchT = !tipo || imo.tipo === tipo;
+        const matchB = !busca || [imo.titulo,imo.bairro,imo.descricao,imo.tipo].some(v=>(v||'').toLowerCase().includes(busca));
+
+        let matchP = true;
+        if (preco) {
+            const n = parseFloat(imo.preco);
+            if (preco === '0-600000') matchP = n <= 600000;
+            else if (preco === '600001-1000000') matchP = n > 600000 && n <= 1000000;
+            else if (preco === '1000001+') matchP = n > 1000000;
+        }
+
+        return matchQ && matchP && matchT && matchB;
     });
 
     filtrados = ordenarImoveis(filtrados, ordem);
 
-    // Contador de resultados
-    const resultsBar = document.getElementById('results-bar');
-    const resultsCount = document.getElementById('results-count');
-    const btnLimpar = document.getElementById('btn-limpar-filtros');
-    const temFiltro = bairro || quartos || preco || tipo || busca || mostrarVendidos;
+    // Atualiza barra de resultados
+    const bar = safeEl('results-bar-new');
+    const txt = safeEl('results-text-new');
+    const temFiltro = !!(filtroState.region || filtroState.bairro || quartos || preco || tipo || busca || vendidos);
 
-    if (resultsBar) resultsBar.style.display = 'flex';
-    if (resultsCount) {
+    if (bar) bar.classList.toggle('vis', true);
+    if (txt) {
         const total = filtrados.length;
-        let texto = total === 0
-            ? 'Nenhum imóvel encontrado'
-            : total === 1 ? '1 imóvel encontrado' : `${total} imóveis encontrados`;
-        if (bairro) texto += ` em <strong>${bairro}</strong>`;
-        resultsCount.innerHTML = texto;
+        let msg = total === 0 ? 'Nenhum imóvel encontrado' : `<strong>${total}</strong> imóve${total !== 1 ? 'is encontrados' : 'l encontrado'}`;
+        if (filtroState.bairro) msg += ` em <strong>${filtroState.bairro}</strong>`;
+        else if (filtroState.region) msg += ` na <strong>${filtroState.region === 'zona-sul' ? 'Zona Sul' : 'Barra & Recreio'}</strong>`;
+        txt.innerHTML = msg;
     }
-    if (btnLimpar) btnLimpar.style.display = temFiltro ? 'inline-flex' : 'none';
 
-    // Sincronizar URL
-    const urlObj = new URL(window.location.href);
-    ['bairro', 'quartos', 'preco', 'tipo'].forEach(k => {
-        const val = document.getElementById(k)?.value;
-        if (val) urlObj.searchParams.set(k, val);
-        else urlObj.searchParams.delete(k);
-    });
-    history.replaceState(null, '', urlObj.toString());
+    // Botão limpar
+    const btnClear = safeEl('btn-clear-all');
+    if (btnClear) btnClear.classList.toggle('vis', temFiltro);
+
+    // URL sync
+    try {
+        const url = new URL(window.location.href);
+        if (filtroState.bairro) url.searchParams.set('bairro', filtroState.bairro);
+        else url.searchParams.delete('bairro');
+        if (filtroState.region) url.searchParams.set('region', filtroState.region);
+        else url.searchParams.delete('region');
+        ['quartos','preco','tipo'].forEach(k => {
+            const v = safeEl(k)?.value;
+            if (v) url.searchParams.set(k, v);
+            else url.searchParams.delete(k);
+        });
+        history.replaceState(null, '', url.toString());
+    } catch {}
 
     renderGallery(filtrados);
+    // Re-popula chips com contagem atualizada
+    popularChipsBairros();
+    atualizarContadoresRegiao();
 }
 
 function limparFiltros() {
-    ['bairro', 'quartos', 'preco', 'tipo'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-    const mvEl = document.getElementById('mostrar-vendidos');
-    if (mvEl) mvEl.checked = false;
-    const buscaEl = document.getElementById('busca-texto');
-    if (buscaEl) buscaEl.value = '';
+    filtroState.region = null;
+    filtroState.bairro = null;
+    ['quartos','preco','tipo'].forEach(id => { const el = safeEl(id); if (el) el.value = ''; });
+    const mv = safeEl('mostrar-vendidos'); if (mv) mv.checked = false;
+    const busca = safeEl('busca-texto-top'); if (busca) busca.value = '';
+    syncRegionUI();
     aplicarFiltros();
 }
 
-// ========== RENDERIZAR GALERIA ==========
-function renderGallery(imoveisList, containerId = 'gallery') {
-    const gallery = document.getElementById(containerId);
+// ══════════════════════════════════════════════════════════
+//  RENDERIZAR GALERIA
+// ══════════════════════════════════════════════════════════
+function renderGallery(lista, containerId = 'gallery') {
+    const gallery = safeEl(containerId);
     if (!gallery) return;
 
-    if (imoveisList.length === 0) {
+    hideSkeleton();
+
+    if (!lista.length) {
         gallery.innerHTML = `
             <div class="empty-state-gallery">
-                <div class="empty-state-icon">
-                    <i class="fas fa-search"></i>
-                </div>
+                <div class="empty-state-icon"><i class="fas fa-search"></i></div>
                 <h3>Nenhum imóvel encontrado</h3>
-                <p>Tente ajustar os filtros ou limpar a busca para ver mais opções.</p>
+                <p>Tente ajustar os filtros ou limpar a busca.</p>
                 <button onclick="limparFiltros()" class="btn-empty-clear">
                     <i class="fas fa-times"></i> Limpar filtros
                 </button>
@@ -450,36 +458,29 @@ function renderGallery(imoveisList, containerId = 'gallery') {
         return;
     }
 
-    gallery.innerHTML = imoveisList.map(imo => {
+    gallery.innerHTML = lista.map(imo => {
         const preco = parseFloat(imo.preco).toLocaleString('pt-BR');
         const isFav = isFavorito(imo.id);
-        const favIcon = isFav ? 'fas fa-heart' : 'far fa-heart';
-        const favClass = isFav ? 'favorito-ativo' : '';
-        
-        // Badge de status
+
         let statusBadge = '';
-        if (imo.status === 'vendido') {
-            statusBadge = '<div class="imovel-vendido-badge"><i class="fas fa-check-circle"></i> Vendido</div>';
-        } else if (imo.status === 'alugado') {
-            statusBadge = '<div class="imovel-vendido-badge" style="border-color: var(--primary); color: var(--primary);"><i class="fas fa-key"></i> Alugado</div>';
-        } else if (imo.status === 'reservado') {
-            statusBadge = '<div class="imovel-vendido-badge" style="border-color: var(--warning); color: var(--warning);"><i class="fas fa-clock"></i> Reservado</div>';
-        }
-        
+        if (imo.status === 'vendido') statusBadge = '<div class="imovel-vendido-badge"><i class="fas fa-check-circle"></i> Vendido</div>';
+        else if (imo.status === 'alugado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--primary);color:var(--primary);"><i class="fas fa-key"></i> Alugado</div>';
+        else if (imo.status === 'reservado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--warning);color:var(--warning);"><i class="fas fa-clock"></i> Reservado</div>';
+
         return `
-            <div class="imovel">
+            <div class="imovel" onclick="openModal('${imo.id}')">
                 <div class="imovel-img-wrap">
                     <img src="${imo.imagem}" alt="${imo.titulo}" loading="lazy"
                          onerror="this.src='https://via.placeholder.com/400x300/1a1a2e/fff?text=Imóvel'">
-                    <button class="favorito-btn ${favClass}" 
-                            data-id="${imo.id}" 
+                    <button class="favorito-btn ${isFav?'favorito-ativo':''}"
+                            data-id="${imo.id}"
                             onclick="toggleFavorito('${imo.id}', event)">
-                        <i class="${favIcon}"></i>
+                        <i class="${isFav?'fas':'far'} fa-heart"></i>
                     </button>
                     <div class="imovel-badge">${imo.bairro}</div>
                     ${imo.destaque ? '<div class="imovel-destaque-badge"><i class="fas fa-star"></i> Destaque</div>' : ''}
                     <div class="imovel-fotos-count">
-                        <i class="fas fa-images"></i> ${imo.fotos ? imo.fotos.length : 1} foto${(imo.fotos?.length || 1) > 1 ? 's' : ''}
+                        <i class="fas fa-images"></i> ${imo.fotos ? imo.fotos.length : 1} foto${(imo.fotos?.length||1) > 1 ? 's' : ''}
                     </div>
                     ${statusBadge}
                 </div>
@@ -487,28 +488,34 @@ function renderGallery(imoveisList, containerId = 'gallery') {
                     <h3>${imo.titulo}</h3>
                     <div class="imovel-details-row">
                         <span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>
-                        <span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} quarto${imo.quartos > 1 ? 's' : ''}</span>
-                        ${imo.vagas ? `<span class="detail-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas > 1 ? 's' : ''}</span>` : ''}
+                        <span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} qto${imo.quartos > 1 ? 's' : ''}</span>
+                        ${imo.vagas ? `<span class="detail-tag"><i class="fas fa-car"></i> ${imo.vagas}</span>` : ''}
                         ${imo.tipo ? `<span class="detail-tag">${imo.tipo}</span>` : ''}
                     </div>
                     <p class="imovel-preco">R$ ${preco}</p>
-                    ${imo.condominio ? `<p class="imovel-condominio"><small>Condomínio: R$ ${imo.condominio.toLocaleString('pt-BR')}</small></p>` : ''}
+                    ${imo.condominio ? `<p class="imovel-condominio"><small>Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}/mês</small></p>` : ''}
                     <p class="imovel-desc">${imo.descricao}</p>
-                    <button class="btn-saiba-mais" onclick="openModal('${imo.id}')">
-                        <span>Saiba Mais</span>
-                        <i class="fas fa-arrow-right"></i>
+                    <button class="btn-saiba-mais" onclick="openModal('${imo.id}');event.stopPropagation()">
+                        <span>Saiba Mais</span><i class="fas fa-arrow-right"></i>
                     </button>
                 </div>
             </div>`;
     }).join('');
-
-    // Animar entrada dos cards
-    gallery.querySelectorAll('.imovel').forEach((el, i) => {
-        setTimeout(() => el.classList.add('animate'), i * 80);
-    });
 }
 
-// ========== MODAL SAIBA MAIS ==========
+// ══════════════════════════════════════════════════════════
+//  SKELETON
+// ══════════════════════════════════════════════════════════
+function hideSkeleton() {
+    const skel = safeEl('gallery-skeleton');
+    const gal  = safeEl('gallery');
+    if (skel) skel.style.display = 'none';
+    if (gal)  gal.style.display = '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  MODAL SAIBA MAIS
+// ══════════════════════════════════════════════════════════
 let currentPhotoIndex = 0;
 let currentImovelFotos = [];
 let currentImovelVideo = null;
@@ -516,230 +523,141 @@ let currentImovel = null;
 let lightboxIndex = 0;
 
 function openModal(imovelId) {
-    
-    
-    const imo = imoveis.find(i => i.id === imovelId || String(i.id) === String(imovelId));
-    
-    if (!imo) {
-        
-        showToast('Erro ao carregar imóvel', 'error');
-        return;
-    }
+    const imo = imoveis.find(i => String(i.id) === String(imovelId));
+    if (!imo) return;
 
     currentImovel = imo;
     currentImovelFotos = imo.fotos && imo.fotos.length ? imo.fotos : [imo.imagem];
-    // Suporte a múltiplos vídeos (novo) ou vídeo único (legado)
     const videoList = Array.isArray(imo.videos) && imo.videos.length ? imo.videos : (imo.video ? [imo.video] : []);
-    currentImovelVideo = videoList.length ? videoList : null; // agora é array ou null
+    currentImovelVideo = videoList.length ? videoList : null;
     currentPhotoIndex = 0;
 
-    // USANDO AS FUNÇÕES SEGURAS - NENHUM ERRO VAI APARECER
     safeText('modal-title', imo.titulo);
-    safeText('modal-bairro', imo.bairro);
-    safeText('modal-quartos', imo.quartos);
-    safeText('modal-area', imo.area + ' m²');
     safeText('modal-preco', 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR'));
     safeText('modal-descricao', imo.descricao);
 
-    // Tags dinâmicas com verificação
-    const modalTags = safeId('modal-tags');
-    if (modalTags) {
-        let tagsHtml = `
+    // Tags
+    const tags = safeEl('modal-tags');
+    if (tags) {
+        let html = `
             <span class="modal-tag"><i class="fas fa-map-marker-alt"></i> ${imo.bairro}</span>
             <span class="modal-tag"><i class="fas fa-bed"></i> ${imo.quartos} quartos</span>
-            <span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>
-        `;
-        if (imo.vagas) {
-            tagsHtml += `<span class="modal-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas > 1 ? 's' : ''}</span>`;
-        }
-        if (imo.condominio) {
-            tagsHtml += `<span class="modal-tag"><i class="fas fa-home"></i> Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}</span>`;
-        }
-        if (imo.iptu) {
-            tagsHtml += `<span class="modal-tag"><i class="fas fa-file-invoice"></i> IPTU R$ ${imo.iptu.toLocaleString('pt-BR')}</span>`;
-        }
-        modalTags.innerHTML = tagsHtml;
+            <span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
+        if (imo.vagas) html += `<span class="modal-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas>1?'s':''}</span>`;
+        if (imo.condominio) html += `<span class="modal-tag"><i class="fas fa-home"></i> Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}</span>`;
+        tags.innerHTML = html;
+    }
+
+    // WhatsApp
+    const waMsg = encodeURIComponent(`Olá Leandro! Tenho interesse no imóvel: *${imo.titulo}* — ${imo.bairro}, R$ ${parseFloat(imo.preco).toLocaleString('pt-BR')}. Pode me dar mais informações?`);
+    const waLink = safeEl('modal-whatsapp');
+    if (waLink) waLink.href = `https://wa.me/5521981424469?text=${waMsg}`;
+
+    // Share
+    const shareBtn = safeEl('modal-share-btn');
+    if (shareBtn) {
+        shareBtn.onclick = function() {
+            const url = window.location.origin + '/imoveis.html?imovel=' + imo.id;
+            navigator.clipboard?.writeText(url).then(() => {
+                shareBtn.innerHTML = '<i class="fas fa-check"></i><span>Copiado!</span>';
+                shareBtn.classList.add('share-copied');
+                setTimeout(() => {
+                    shareBtn.innerHTML = '<i class="fas fa-share-alt"></i><span>Compartilhar</span>';
+                    shareBtn.classList.remove('share-copied');
+                }, 2500);
+                if (typeof window.trackLinkCopiado === 'function') window.trackLinkCopiado(String(imo.id), imo.titulo);
+                // Notificação no admin via tracker
+            });
+        };
     }
 
     renderModalPhotos();
 
-    // WhatsApp com verificação
-    const waMsg = encodeURIComponent(
-        `Olá Leandro! Tenho interesse no imóvel: *${imo.titulo}* — ${imo.bairro}, R$ ${parseFloat(imo.preco).toLocaleString('pt-BR')}. Poderia me dar mais informações?`
-    );
-    const waLink = safeId('modal-whatsapp');
-    if (waLink) waLink.href = `https://wa.me/5521981424469?text=${waMsg}`;
+    const modal = safeEl('imovel-modal');
+    if (modal) { modal.classList.add('active'); document.body.classList.add('modal-open'); }
 
-    // Botão compartilhar com verificação
-    const shareBtn = safeId('modal-share-btn');
-    if (shareBtn) {
-        shareBtn.onclick = function() {
-            const finalUrl = window.location.origin + '/imoveis.html#imovel-' + imo.id;
-            
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(finalUrl).then(() => {
-                    safeHTML('modal-share-btn', '<i class="fas fa-check"></i><span>Link copiado!</span>');
-                    shareBtn.classList.add('share-copied');
-                    setTimeout(() => {
-                        safeHTML('modal-share-btn', '<i class="fas fa-share-alt"></i><span>Compartilhar</span>');
-                        shareBtn.classList.remove('share-copied');
-                    }, 2500);
-                    
-                    if (typeof window.trackLinkCopiado === 'function') {
-                        window.trackLinkCopiado(String(imo.id), imo.titulo);
-                    }
-                });
-            }
-        };
-    }
+    // URL
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('imovel', imo.id);
+        history.replaceState(null, '', url.toString());
+        document.title = `${imo.titulo} | Leandro Bomfim`;
+    } catch {}
 
-    const modal = safeId('imovel-modal');
-    if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-
-    // Atualizar URL
-    const url = new URL(window.location.href);
-    url.searchParams.set('imovel', imo.id);
-    history.replaceState(null, '', url.toString());
-    
-    // Atualizar título da aba
-    document.title = `${imo.titulo} | Leandro Bomfim`;
-
-    // Schema.org para SEO
     injectSchemaOrg(imo);
-
-    // Rastrear visualização
-    if (typeof window.trackImovelView === 'function') {
-        window.trackImovelView(String(imo.id), imo.titulo, imo.bairro);
-    }
-    if (typeof window.startImovelView === 'function') {
-        window.startImovelView(imo.id, imo.titulo);
-    }
+    if (typeof window.trackImovelView === 'function') window.trackImovelView(String(imo.id), imo.titulo, imo.bairro);
+    if (typeof window.startImovelView === 'function') window.startImovelView(imo.id, imo.titulo);
 }
 
 function closeModal() {
-    // Parar vídeo e limpar timers ao fechar
-    const iframe = document.querySelector('.modal-video-embed');
-    if (iframe) {
-        if (iframe._videoFallbackHandler) window.removeEventListener('message', iframe._videoFallbackHandler);
-        iframe.src = '';
-    }
-    // Fechar lightbox se aberto
+    // Limpa vídeo
+    const iframe = document.querySelector('iframe.modal-video-embed');
+    if (iframe) { if (iframe._vfh) window.removeEventListener('message', iframe._vfh); iframe.src = ''; }
     closeLightbox();
-
-    document.getElementById('imovel-modal').classList.remove('active');
-    document.body.style.overflow = '';
-
-    const urlObj = new URL(window.location.href);
-    urlObj.searchParams.delete('imovel');
-    history.replaceState(null, '', urlObj.toString());
-
-    document.title = 'Imóveis à Venda no Rio de Janeiro | Leandro Bomfim';
+    const modal = safeEl('imovel-modal');
+    if (modal) modal.classList.remove('active');
+    document.body.classList.remove('modal-open');
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('imovel');
+        history.replaceState(null, '', url.toString());
+        document.title = 'Imóveis à Venda no Rio de Janeiro | Leandro Bomfim';
+    } catch {}
 }
 
-// ─── YouTube: converte qualquer formato para embed ───────────────────────────
-// ─── Card de vídeo clicável (substitui iframe quando embedding falha) ─────────
+// YouTube helpers
 function getYouTubeId(url) {
     if (!url) return null;
-    let m = url.match(/shorts\/([a-zA-Z0-9_-]{11})/);
-    if (m) return m[1];
-    m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-    if (m) return m[1];
-    m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-    if (m) return m[1];
+    let m;
+    if ((m = url.match(/shorts\/([a-zA-Z0-9_-]{11})/))) return m[1];
+    if ((m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/))) return m[1];
+    if ((m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/))) return m[1];
     return null;
 }
-
-function showVideoCard(mainWrap, ifrEl, originalSrc, ytId) {
-    if (mainWrap.querySelector('.video-embed-fallback')) return;
-    if (ifrEl._videoFallbackHandler) { window.removeEventListener('message', ifrEl._videoFallbackHandler); }
-    ifrEl.style.display = 'none';
-
-    const thumb = ytId
-        ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`
-        : '';
-
-    const div = document.createElement('div');
-    div.className = 'video-embed-fallback';
-    div.style.cursor = 'pointer';
-    div.onclick = () => window.open(originalSrc, '_blank', 'noopener');
-    div.innerHTML = thumb
-        ? `<img src="${thumb}" class="vef-thumb" alt="Capa do vídeo">`
-        : `<div class="vef-icon"><i class="fas fa-play-circle"></i></div>
-           <p class="vef-title">Clique para assistir o vídeo</p>`;
-    mainWrap.appendChild(div);
-}
-
 function getYouTubeEmbedUrl(url) {
-    if (!url) return null;
-    let m = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/);
-    if (m) return `https://www.youtube.com/embed/${m[1]}?rel=0&playsinline=1&enablejsapi=1`;
-    m = url.match(/youtube\.com\/watch[^\s]*[?&]v=([a-zA-Z0-9_-]{11})/);
-    if (m) return `https://www.youtube.com/embed/${m[1]}?rel=0&playsinline=1&enablejsapi=1`;
-    m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-    if (m) return `https://www.youtube.com/embed/${m[1]}?rel=0&playsinline=1&enablejsapi=1`;
-    return null;
+    const id = getYouTubeId(url);
+    return id ? `https://www.youtube.com/embed/${id}?rel=0&playsinline=1&enablejsapi=1` : null;
 }
 
 function renderModalPhotos() {
     const mainWrap = document.querySelector('.modal-main-photo-wrap');
-    const mainImg = safeId('modal-main-photo');
-    const thumbsContainer = safeId('modal-thumbs');
-    const counter = safeId('modal-photo-counter');
-    if (!mainWrap || !thumbsContainer) return;
+    const mainImg  = safeEl('modal-main-photo');
+    const thumbs   = safeEl('modal-thumbs');
+    const counter  = safeEl('modal-photo-counter');
+    if (!mainWrap || !thumbs) return;
 
-    // mídias: todos os vídeos (se existirem) primeiro, depois fotos
     const medias = [];
-    if (currentImovelVideo && currentImovelVideo.length) {
-        currentImovelVideo.forEach(v => medias.push({ type: 'video', src: v }));
-    }
-    currentImovelFotos.forEach(f => medias.push({ type: 'foto', src: f }));
+    if (currentImovelVideo) currentImovelVideo.forEach(v => medias.push({type:'video',src:v}));
+    currentImovelFotos.forEach(f => medias.push({type:'foto',src:f}));
     if (!medias.length) return;
 
     const media = medias[currentPhotoIndex] || medias[0];
-    if (counter) counter.textContent = `${currentPhotoIndex + 1} / ${medias.length}`;
+    if (counter) counter.textContent = `${currentPhotoIndex+1} / ${medias.length}`;
 
-    // Limpar iframe e fallback anteriores
-    const oldIfrEl = mainWrap.querySelector('iframe.modal-video-embed');
-    if (oldIfrEl) {
-        if (oldIfrEl._videoFallbackHandler) window.removeEventListener('message', oldIfrEl._videoFallbackHandler);
-        oldIfrEl.remove();
-    }
-    const oldFallback = mainWrap.querySelector('.video-embed-fallback');
-    if (oldFallback) oldFallback.remove();
+    // Limpar estado anterior
+    const old = mainWrap.querySelector('iframe.modal-video-embed');
+    if (old) { if (old._vfh) window.removeEventListener('message',old._vfh); old.remove(); }
+    const oldF = mainWrap.querySelector('.video-embed-fallback');
+    if (oldF) oldF.remove();
 
     if (media.type === 'video') {
-        // Estratégia: tentar iframe primeiro; se falhar (7s sem onReady), mostra card
         const embedSrc = getYouTubeEmbedUrl(media.src) || media.src;
-        const ytId     = getYouTubeId(media.src);
-        const originalSrc = media.src;
-
-        const ifrEl = document.createElement('iframe');
-        ifrEl.className = 'modal-video-embed';
-        ifrEl.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
-        mainWrap.appendChild(ifrEl);
-        ifrEl.src = embedSrc;
-        ifrEl.style.display = 'block';
+        const ytId = getYouTubeId(media.src);
+        const iframe = document.createElement('iframe');
+        iframe.className = 'modal-video-embed';
+        iframe.allow = 'accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;fullscreen';
+        mainWrap.appendChild(iframe);
+        iframe.src = embedSrc;
+        iframe.style.display = 'block';
         if (mainImg) mainImg.style.display = 'none';
-
-        // Detecta falha via postMessage (onError do YouTube)
-        const handler = (e) => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.event === 'onError') { showVideoCard(mainWrap, ifrEl, originalSrc, ytId); }
-            } catch(_) {}
-        };
+        const handler = e => { try { const d=JSON.parse(e.data); if(d.event==='onError') showVideoFallback(mainWrap,iframe,media.src,ytId); } catch{} };
         window.addEventListener('message', handler);
-        ifrEl._videoFallbackHandler = handler;
+        iframe._vfh = handler;
     } else {
-        if (oldIfrEl) { oldIfrEl.style.display = 'none'; }
         if (mainImg) {
             mainImg.style.display = 'block';
             mainImg.src = media.src;
-            mainImg.onerror = function() { this.src = 'https://via.placeholder.com/800x500/1a1a2e/fff?text=Imóvel'; };
-            // Clique para lightbox
+            mainImg.onerror = function(){this.src='https://via.placeholder.com/800x500/1a1a2e/fff?text=Imóvel';};
             const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
             const fotoIdx = currentPhotoIndex - videoCount;
             mainImg.style.cursor = 'zoom-in';
@@ -748,699 +666,381 @@ function renderModalPhotos() {
     }
 
     // Thumbs
-    thumbsContainer.innerHTML = '';
+    thumbs.innerHTML = '';
     medias.forEach((m, idx) => {
         const thumb = document.createElement('div');
         thumb.className = 'modal-thumb' + (idx === currentPhotoIndex ? ' active' : '');
         if (m.type === 'video') {
             const ytId = getYouTubeId(m.src);
             thumb.innerHTML = ytId
-                ? `<img src="https://img.youtube.com/vi/${ytId}/mqdefault.jpg" alt="Vídeo ${idx+1}" style="object-fit:cover;width:100%;height:100%;"><div class="thumb-video-icon" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);"><i class="fas fa-play-circle"></i></div>`
-                : '<div class="thumb-video-icon"><i class="fas fa-play-circle"></i></div>';
+                ? `<img src="https://img.youtube.com/vi/${ytId}/mqdefault.jpg" alt="Vídeo" style="width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3)"><i class="fas fa-play-circle" style="font-size:1.5rem;color:#fff"></i></div>`
+                : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#111"><i class="fas fa-play-circle" style="color:var(--primary)"></i></div>';
             thumb.style.position = 'relative';
         } else {
             const img = document.createElement('img');
-            img.src = m.src; img.alt = `Foto ${idx + 1}`;
-            img.onerror = function() { this.src = 'https://via.placeholder.com/150x100/1a1a2e/fff?text=Foto'; };
+            img.src = m.src; img.alt = `Foto ${idx+1}`;
+            img.onerror = function(){this.src='https://via.placeholder.com/150x100/1a1a2e/fff?text=Foto';};
             thumb.appendChild(img);
         }
         thumb.addEventListener('click', () => { currentPhotoIndex = idx; renderModalPhotos(); });
-        thumbsContainer.appendChild(thumb);
+        thumbs.appendChild(thumb);
     });
 }
 
+function showVideoFallback(mainWrap, iframe, src, ytId) {
+    if (mainWrap.querySelector('.video-embed-fallback')) return;
+    iframe.style.display = 'none';
+    const div = document.createElement('div');
+    div.className = 'video-embed-fallback';
+    div.onclick = () => window.open(src, '_blank', 'noopener');
+    const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : '';
+    div.innerHTML = thumb
+        ? `<img src="${thumb}" class="vef-thumb" alt=""><div class="vef-play"><i class="fab fa-youtube"></i></div>`
+        : `<div class="vef-icon"><i class="fab fa-youtube"></i></div>`;
+    mainWrap.appendChild(div);
+}
+
 function prevPhoto() {
-    const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
-    const total = currentImovelFotos.length + videoCount;
+    const vc = currentImovelVideo ? currentImovelVideo.length : 0;
+    const total = currentImovelFotos.length + vc;
     if (!total) return;
     currentPhotoIndex = (currentPhotoIndex - 1 + total) % total;
     renderModalPhotos();
 }
-
 function nextPhoto() {
-    const videoCount = currentImovelVideo ? currentImovelVideo.length : 0;
-    const total = currentImovelFotos.length + videoCount;
+    const vc = currentImovelVideo ? currentImovelVideo.length : 0;
+    const total = currentImovelFotos.length + vc;
     if (!total) return;
     currentPhotoIndex = (currentPhotoIndex + 1) % total;
     renderModalPhotos();
 }
 
-// ─── Lightbox ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+//  LIGHTBOX
+// ══════════════════════════════════════════════════════════
 function openLightbox(fotoIdx) {
-    lightboxIndex = Math.max(0, Math.min(fotoIdx, currentImovelFotos.length - 1));
-    let lb = document.getElementById('lightbox-overlay');
+    lightboxIndex = Math.max(0, Math.min(fotoIdx, currentImovelFotos.length-1));
+    let lb = safeEl('lightbox-overlay');
     if (!lb) {
         lb = document.createElement('div');
         lb.id = 'lightbox-overlay';
-        lb.innerHTML = `
-            <button class="lb-close" onclick="closeLightbox()"><i class="fas fa-times"></i></button>
-            <button class="lb-prev"  onclick="lbPrev()"><i class="fas fa-chevron-left"></i></button>
-            <button class="lb-next"  onclick="lbNext()"><i class="fas fa-chevron-right"></i></button>
+        lb.innerHTML = `<button class="lb-close" onclick="closeLightbox()"><i class="fas fa-times"></i></button>
+            <button class="lb-prev" onclick="lbPrev()"><i class="fas fa-chevron-left"></i></button>
+            <button class="lb-next" onclick="lbNext()"><i class="fas fa-chevron-right"></i></button>
             <img id="lb-img" src="" alt="Foto ampliada">
             <div id="lb-counter" class="lb-counter"></div>`;
         lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
         document.body.appendChild(lb);
     }
-    _renderLightbox();
+    _renderLb();
     lb.classList.add('active');
-    document.body.style.overflow = 'hidden';
 }
-
-function _renderLightbox() {
-    const lbImg = document.getElementById('lb-img');
-    const lbCounter = document.getElementById('lb-counter');
-    if (lbImg) {
-        lbImg.src = currentImovelFotos[lightboxIndex] || '';
-        lbImg.onerror = function() { this.src = 'https://via.placeholder.com/1200x800/1a1a2e/fff?text=Imóvel'; };
-    }
-    if (lbCounter) lbCounter.textContent = `${lightboxIndex + 1} / ${currentImovelFotos.length}`;
+function _renderLb() {
+    const img = safeEl('lb-img');
+    const ctr = safeEl('lb-counter');
+    if (img) { img.src = currentImovelFotos[lightboxIndex]||''; img.onerror=function(){this.src='https://via.placeholder.com/1200x800/1a1a2e/fff?text=Imóvel';}; }
+    if (ctr) ctr.textContent = `${lightboxIndex+1} / ${currentImovelFotos.length}`;
 }
+function closeLightbox() { const lb = safeEl('lightbox-overlay'); if (lb) lb.classList.remove('active'); }
+function lbPrev() { lightboxIndex = (lightboxIndex-1+currentImovelFotos.length)%currentImovelFotos.length; _renderLb(); }
+function lbNext() { lightboxIndex = (lightboxIndex+1)%currentImovelFotos.length; _renderLb(); }
 
-function closeLightbox() {
-    const lb = document.getElementById('lightbox-overlay');
-    if (lb) lb.classList.remove('active');
-}
-
-function lbPrev() {
-    lightboxIndex = (lightboxIndex - 1 + currentImovelFotos.length) % currentImovelFotos.length;
-    _renderLightbox();
-}
-
-function lbNext() {
-    lightboxIndex = (lightboxIndex + 1) % currentImovelFotos.length;
-    _renderLightbox();
-}
-
-// ========== CONFIG DO SITE (À PROVA DE ERROS) ==========
+// ══════════════════════════════════════════════════════════
+//  CONFIG DO SITE
+// ══════════════════════════════════════════════════════════
 function loadSiteConfig() {
-    // Verificar se estamos na página inicial (tem elementos do hero)
-    const hasHeroElements = document.getElementById('cfg-hero-title') || 
-                            document.getElementById('cfg-anos') || 
-                            document.getElementById('cfg-foto');
-    
-    if (!hasHeroElements) {
-        
-        return;
-    }
-    
-    db.collection('config').doc('site').get()
-        .then(doc => {
-            if (!doc.exists) return;
-            const cfg = doc.data();
-
-            // Foto de perfil - com verificação
-            const fotoEl = document.getElementById('cfg-foto');
-            if (fotoEl && cfg.fotoPerfil) {
-                fotoEl.src = cfg.fotoPerfil;
-            }
-
-            // Título hero - com verificação
-            const titleEl = document.getElementById('cfg-hero-title');
-            if (titleEl && cfg.heroTitulo) {
-                const words = cfg.heroTitulo.trim().split(' ');
-                let l1, l2, l3;
-                
-                if (words.length <= 3) {
-                    l1 = words[0] || '';
-                    l2 = words[1] || '';
-                    l3 = words[2] || '';
-                } else if (words.length === 4) {
-                    l1 = words[0];
-                    l2 = words[1];
-                    l3 = words[2] + ' ' + words[3];
-                } else {
-                    const a = Math.ceil(words.length / 3);
-                    l1 = words.slice(0, a).join(' ');
-                    l2 = words.slice(a, a * 2).join(' ');
-                    l3 = words.slice(a * 2).join(' ');
-                }
-                
-                titleEl.innerHTML = `
-                    <span class="title-line">${l1}</span>
-                    <span class="title-line gradient-text">${l2}</span>
-                    <span class="title-line">${l3}</span>
-                `;
-            }
-
-            // Descrição hero - com verificação
-            const descEl = document.getElementById('cfg-hero-desc');
-            if (descEl && cfg.heroDesc) {
-                descEl.textContent = cfg.heroDesc;
-            }
-
-            // Números - com verificação
-            function setCounter(id, val) {
-                const el = document.getElementById(id);
-                if (el && val) {
-                    el.setAttribute('data-target', String(val));
-                    el.textContent = '0';
-                }
-            }
-            
-            if (cfg.anosExperiencia) setCounter('cfg-anos', cfg.anosExperiencia);
-            if (cfg.imoveisNegociados) setCounter('cfg-imoveis-neg', cfg.imoveisNegociados);
-            if (cfg.satisfacao) setCounter('cfg-satisfacao', cfg.satisfacao);
-
-            // Velocidade - com verificação
-            if (cfg.velocidade) {
-                const velD = document.getElementById('cfg-velocidade-d');
-                const velM = document.getElementById('cfg-velocidade-m');
-                if (velD) velD.textContent = cfg.velocidade;
-                if (velM) velM.textContent = cfg.velocidade;
-            }
-
-            // Depoimentos - com verificação
-            const depTrack = document.getElementById('cfg-depoimentos');
-            if (depTrack && cfg.depoimentos && cfg.depoimentos.length) {
-                depTrack.innerHTML = cfg.depoimentos.map(d => `
-                    <div class="testimonial-card">
-                        <div class="testimonial-quote">"</div>
-                        <p class="testimonial-text">${d.texto || ''}</p>
-                        <div class="testimonial-author">
-                            <span>${d.autor || ''}</span>
-                            <span class="author-location">• ${d.local || ''}</span>
-                        </div>
-                    </div>
-                `).join('');
-
-                const carousel = depTrack.closest('.testimonials-carousel');
-                if (carousel) {
-                    const dotsEl = carousel.querySelector('.carousel-dots');
-                    if (dotsEl) {
-                        dotsEl.innerHTML = cfg.depoimentos.map((_, i) => 
-                            `<span class="dot${i === 0 ? ' active' : ''}"></span>`
-                        ).join('');
-                    }
-                }
-
-                // Re-inicializa o carrossel para sincronizar totalSlides e dots
-                if (window._carousel) {
-                    window._carousel.destroy();
-                }
-                window._carousel = new TestimonialsCarousel();
-            }
-
-            // Bairros - com verificação
-            const bairrosTrack = document.getElementById('cfg-bairros-track');
-            if (bairrosTrack && cfg.bairros) {
-                const lista = cfg.bairros.split(',').map(b => b.trim()).filter(Boolean);
-                const items = lista.map(b => 
-                    `<span>${b}</span><span class="separator">✦</span>`
-                ).join('');
-                bairrosTrack.innerHTML = items + items;
-            }
-        })
-        .catch(() => {})
+    const hasHero = !!safeEl('cfg-hero-title');
+    if (!hasHero) return;
+    db.collection('config').doc('site').get().then(doc => {
+        if (!doc.exists) return;
+        const cfg = doc.data();
+        const foto = safeEl('cfg-foto'); if (foto && cfg.fotoPerfil) foto.src = cfg.fotoPerfil;
+        const title = safeEl('cfg-hero-title');
+        if (title && cfg.heroTitulo) {
+            const words = cfg.heroTitulo.trim().split(' ');
+            const a = Math.ceil(words.length/3);
+            title.innerHTML = `<span class="title-line">${words.slice(0,a).join(' ')}</span>
+                <span class="title-line gradient-text">${words.slice(a,a*2).join(' ')}</span>
+                <span class="title-line">${words.slice(a*2).join(' ')}</span>`;
+        }
+        const desc = safeEl('cfg-hero-desc'); if (desc && cfg.heroDesc) desc.textContent = cfg.heroDesc;
+        ['anos:anosExperiencia','imoveis-neg:imoveisNegociados','satisfacao:satisfacao'].forEach(pair => {
+            const [id, key] = pair.split(':');
+            const el = safeEl('cfg-'+id); if (el && cfg[key]) { el.setAttribute('data-target', cfg[key]); el.textContent = '0'; }
+        });
+        const velD = safeEl('cfg-velocidade-d'); if (velD && cfg.velocidade) velD.textContent = cfg.velocidade;
+        const velM = safeEl('cfg-velocidade-m'); if (velM && cfg.velocidade) velM.textContent = cfg.velocidade;
+        const depTrack = safeEl('cfg-depoimentos');
+        if (depTrack && cfg.depoimentos?.length) {
+            depTrack.innerHTML = cfg.depoimentos.map(d => `
+                <div class="testimonial-card">
+                    <div class="testimonial-quote">"</div>
+                    <p class="testimonial-text">${d.texto||''}</p>
+                    <div class="testimonial-author"><span>${d.autor||''}</span><span class="author-location">• ${d.local||''}</span></div>
+                </div>`).join('');
+            const dots = document.querySelector('.carousel-dots');
+            if (dots) dots.innerHTML = cfg.depoimentos.map((_,i) => `<span class="dot${i===0?' active':''}"></span>`).join('');
+            if (window._carousel) { window._carousel.destroy(); }
+            window._carousel = new TestimonialsCarousel();
+        }
+        const bairrosTrack = safeEl('cfg-bairros-track');
+        if (bairrosTrack && cfg.bairros) {
+            const lista = cfg.bairros.split(',').map(b=>b.trim()).filter(Boolean);
+            const items = lista.map(b=>`<span>${b}</span><span class="separator">✦</span>`).join('');
+            bairrosTrack.innerHTML = items+items;
+        }
+    }).catch(()=>{});
 }
 
-// ========== FUNÇÃO SEGURA PARA ALTERAR ELEMENTOS ==========
-function safeSetText(id, value) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.textContent = value;
-        return true;
-    }
-    return false;
-}
-
-function safeSetHTML(id, html) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.innerHTML = html;
-        return true;
-    }
-    return false;
-}
-
-function safeSetAttr(id, attr, value) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.setAttribute(attr, value);
-        return true;
-    }
-    return false;
-}
-// ========== CARROSSEL DE DEPOIMENTOS ==========
+// ══════════════════════════════════════════════════════════
+//  CARROSSEL DE DEPOIMENTOS
+// ══════════════════════════════════════════════════════════
 class TestimonialsCarousel {
     constructor() {
-        this.currentIndex = 0;
-        this.totalSlides = document.querySelectorAll('.testimonial-card').length;
-        this.autoPlayInterval = null;
-        this.init();
-    }
-    
-    init() {
+        this.idx = 0;
+        this.total = document.querySelectorAll('.testimonial-card').length;
+        this.timer = null;
         this.track = document.querySelector('.testimonial-track');
-        this.dots = document.querySelectorAll('.dot');
+        this.dots  = document.querySelectorAll('.dot');
         if (!this.track || !this.dots.length) return;
-        
-        this.setupEventListeners();
-        this.startAutoPlay();
+        this.bindEvents();
+        this.autoPlay();
         this.updateDots();
     }
-    
-    setupEventListeners() {
-        this.dots.forEach((dot, index) => {
-            dot.addEventListener('click', () => {
-                this.stopAutoPlay();
-                this.goToSlide(index);
-                this.startAutoPlay();
-            });
-        });
-        
-        const carousel = document.querySelector('.testimonials-carousel');
-        if (carousel) {
-            carousel.addEventListener('mouseenter', () => this.stopAutoPlay());
-            carousel.addEventListener('mouseleave', () => this.startAutoPlay());
-            
-            let touchStartX = 0;
-            carousel.addEventListener('touchstart', (e) => {
-                touchStartX = e.changedTouches[0].screenX;
-                this.stopAutoPlay();
-            }, { passive: true });
-            
-            carousel.addEventListener('touchend', (e) => {
-                const diff = touchStartX - e.changedTouches[0].screenX;
-                if (Math.abs(diff) > 50) {
-                    this.goToSlide(diff > 0
-                        ? (this.currentIndex + 1) % this.totalSlides
-                        : (this.currentIndex - 1 + this.totalSlides) % this.totalSlides);
-                }
-                this.startAutoPlay();
-            }, { passive: true });
+    goto(i) {
+        this.idx = i;
+        this.track.style.transform = `translateX(-${i*100}%)`;
+        this.updateDots();
+    }
+    updateDots() { this.dots.forEach((d,i) => d.classList.toggle('active', i===this.idx)); }
+    autoPlay() {
+        if (this.timer || this.total <= 1) return;
+        this.timer = setInterval(() => { this.idx=(this.idx+1)%this.total; this.goto(this.idx); }, 5000);
+    }
+    stopPlay() { clearInterval(this.timer); this.timer=null; }
+    bindEvents() {
+        this.dots.forEach((dot,i) => dot.addEventListener('click', () => { this.stopPlay(); this.goto(i); this.autoPlay(); }));
+        const c = document.querySelector('.testimonials-carousel');
+        if (c) {
+            c.addEventListener('mouseenter', () => this.stopPlay());
+            c.addEventListener('mouseleave', () => this.autoPlay());
+            let tx=0;
+            c.addEventListener('touchstart', e=>{tx=e.changedTouches[0].screenX;this.stopPlay();},{passive:true});
+            c.addEventListener('touchend', e=>{const dx=tx-e.changedTouches[0].screenX;if(Math.abs(dx)>50)this.goto(dx>0?(this.idx+1)%this.total:(this.idx-1+this.total)%this.total);this.autoPlay();},{passive:true});
         }
     }
-    
-    goToSlide(index) {
-        this.currentIndex = index;
-        this.track.style.transform = `translateX(-${index * 100}%)`;
-        this.updateDots();
-    }
-    
-    updateDots() {
-        this.dots.forEach((dot, i) => dot.classList.toggle('active', i === this.currentIndex));
-    }
-    
-    startAutoPlay() {
-        if (this.autoPlayInterval || this.totalSlides <= 1) return;
-        this.autoPlayInterval = setInterval(() => {
-            this.currentIndex = (this.currentIndex + 1) % this.totalSlides;
-            this.track.style.transform = `translateX(-${this.currentIndex * 100}%)`;
-            this.updateDots();
-        }, 5000);
-    }
-    
-    stopAutoPlay() {
-        clearInterval(this.autoPlayInterval);
-        this.autoPlayInterval = null;
-    }
-
-    destroy() {
-        this.stopAutoPlay();
-    }
+    destroy() { this.stopPlay(); }
 }
 
-// ========== MENU MOBILE ==========
+// ══════════════════════════════════════════════════════════
+//  SETUP MENU MOBILE
+// ══════════════════════════════════════════════════════════
 function setupMobileMenu() {
-    const menuToggle = document.querySelector('.menu-toggle');
-    const navUl = document.querySelector('nav ul');
-    
-    if (!menuToggle || !navUl) return;
-    
-    menuToggle.addEventListener('click', () => {
-        menuToggle.classList.toggle('active');
-        navUl.classList.toggle('active');
-        
-        const spans = menuToggle.querySelectorAll('span');
-        if (menuToggle.classList.contains('active')) {
-            spans[0].style.transform = 'rotate(45deg) translate(8px, 8px)';
+    const toggle = document.querySelector('.menu-toggle');
+    const ul = document.querySelector('nav ul');
+    if (!toggle || !ul) return;
+    toggle.addEventListener('click', () => {
+        toggle.classList.toggle('active');
+        ul.classList.toggle('active');
+        const spans = toggle.querySelectorAll('span');
+        if (toggle.classList.contains('active')) {
+            spans[0].style.transform = 'rotate(45deg) translate(8px,8px)';
             spans[1].style.opacity = '0';
-            spans[2].style.transform = 'rotate(-45deg) translate(8px, -8px)';
+            spans[2].style.transform = 'rotate(-45deg) translate(8px,-8px)';
         } else {
-            spans[0].style.transform = 'none';
-            spans[1].style.opacity = '1';
-            spans[2].style.transform = 'none';
+            spans.forEach(s => { s.style.transform=''; s.style.opacity=''; });
         }
     });
+    ul.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+        toggle.classList.remove('active');
+        ul.classList.remove('active');
+        toggle.querySelectorAll('span').forEach(s => { s.style.transform=''; s.style.opacity=''; });
+    }));
 }
 
-// ========== CONFIGURAR SWIPE NO MODAL ==========
-function setupModalSwipe() {
-    const wrap = document.querySelector('.modal-main-photo-wrap');
-    if (!wrap) return;
-    
-    let startX = 0, startY = 0;
-    
-    wrap.addEventListener('touchstart', e => {
-        startX = e.changedTouches[0].screenX;
-        startY = e.changedTouches[0].screenY;
-    }, { passive: true });
-    
-    wrap.addEventListener('touchend', e => {
-        const dx = startX - e.changedTouches[0].screenX;
-        const dy = Math.abs(startY - e.changedTouches[0].screenY);
-        
-        if (Math.abs(dx) > 40 && dy < 60) {
-            dx > 0 ? nextPhoto() : prevPhoto();
-        }
-    }, { passive: true });
-}
-
-// ========== ANIMAÇÃO DOS NÚMEROS ==========
+// ══════════════════════════════════════════════════════════
+//  CONTADORES HERO ANIMADOS
+// ══════════════════════════════════════════════════════════
 function setupCounters() {
-    const animateCounter = (counter) => {
-        const target = parseInt(counter.getAttribute('data-target'));
-        let current = 0;
-        const increment = target / 50;
-        
-        const updateCounter = () => {
-            if (current < target) {
-                current += increment;
-                counter.textContent = Math.ceil(current);
-                requestAnimationFrame(updateCounter);
-            } else {
-                counter.textContent = target + (counter.dataset.target === '100' ? '%' : '+');
-            }
-        };
-        
-        updateCounter();
-    };
-
-    const observer = new IntersectionObserver((entries) => {
+    const obs = new IntersectionObserver(entries => {
         entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                if (entry.target.classList.contains('trust-number')) {
-                    animateCounter(entry.target);
-                }
-                entry.target.style.animationPlayState = 'running';
-            }
+            if (!entry.isIntersecting) return;
+            const el = entry.target;
+            const target = parseInt(el.getAttribute('data-target'));
+            if (isNaN(target)) return;
+            let current = 0;
+            const inc = target/50;
+            const tick = () => {
+                if (current < target) { current+=inc; el.textContent=Math.ceil(current); requestAnimationFrame(tick); }
+                else { el.textContent = target+(el.dataset.target==='100'?'%':'+'); }
+            };
+            tick();
+            obs.unobserve(el);
         });
-    }, { threshold: 0.5 });
-
-    document.querySelectorAll('.trust-number, .fade-in, .testimonial-card, .stats-card').forEach(el => {
-        observer.observe(el);
-    });
+    }, { threshold:.5 });
+    document.querySelectorAll('.trust-number').forEach(el => obs.observe(el));
 }
 
-// ========== EFEITO PARALLAX ==========
+// ══════════════════════════════════════════════════════════
+//  PARALLAX / PARTÍCULAS
+// ══════════════════════════════════════════════════════════
 function setupParallax() {
-    document.addEventListener('mousemove', (e) => {
-        const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
-        const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
+    document.addEventListener('mousemove', e => {
         const sphere = document.querySelector('.gradient-sphere');
-        
-        if (sphere) {
-            sphere.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px)) scale(1.2)`;
-        }
+        if (!sphere) return;
+        const mx = (e.clientX - window.innerWidth/2) * .01;
+        const my = (e.clientY - window.innerHeight/2) * .01;
+        sphere.style.transform = `translate(calc(-50% + ${mx}px), calc(-50% + ${my}px)) scale(1.2)`;
     });
 }
 
-// ========== RASTREAMENTO DE CLICK NO WHATSAPP ==========
-function setupWhatsAppTracking() {
-    const waFloat = document.querySelector('.whatsapp-float');
-    if (waFloat) {
-        waFloat.addEventListener('click', function() {
-            if (typeof window.trackWhatsAppClick === 'function') {
-                window.trackWhatsAppClick('botao_flutuante');
-            }
-        });
-    }
-    
-    const waModal = document.getElementById('modal-whatsapp');
-    if (waModal) {
-        waModal.addEventListener('click', function() {
-            if (typeof window.trackWhatsAppClick === 'function' && currentImovel) {
-                window.trackWhatsAppClick(`modal_${currentImovel.titulo}`);
-            }
-        });
-    }
-}
-
-// ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', () => {
-    
-    
-    // Carregar configurações do site
-    loadSiteConfig();
-    
-    // Inicializar carrossel se existir
-    if (document.querySelector('.testimonials-carousel')) {
-        window._carousel = new TestimonialsCarousel();
-    }
-    
-    // Configurar menu mobile
-    setupMobileMenu();
-    
-    // Configurar parallax
-    setupParallax();
-    
-    // Configurar contadores
-    setupCounters();
-    
-    // Configurar tracking do WhatsApp
-    setupWhatsAppTracking();
-    
-    // Animar fade-ins
-    document.querySelectorAll('.fade-in').forEach((el, i) => {
-        setTimeout(() => {
-            el.style.animationPlayState = 'running';
-        }, i * 150);
-    });
-    
-    // Se estiver na página de imóveis
-    if (document.getElementById('gallery')) {
-        carregarImoveis().then(() => {
-            // Verificar se há imóvel na URL para abrir
-            const params = new URLSearchParams(window.location.search);
-            const imovelParam = params.get('imovel');
-            const hash = window.location.hash;
-            const imovelId = imovelParam || (hash.startsWith('#imovel-') ? hash.replace('#imovel-', '') : null);
-            
-            if (imovelId) {
-                setTimeout(() => openModal(imovelId), 400);
-            }
-        });
-        
-        // Filtros select
-        ['bairro', 'quartos', 'preco', 'tipo', 'ordenar'].forEach(id => {
-            document.getElementById(id)?.addEventListener('change', aplicarFiltros);
-        });
-        // Checkbox vendidos/alugados
-        document.getElementById('mostrar-vendidos')?.addEventListener('change', aplicarFiltros);
-        // Busca por texto com debounce
-        const buscaEl = document.getElementById('busca-texto');
-        if (buscaEl) {
-            let _buscaTimer;
-            buscaEl.addEventListener('input', () => {
-                clearTimeout(_buscaTimer);
-                _buscaTimer = setTimeout(aplicarFiltros, 280);
-            });
-        }
-    }
-    
-    // Configurar modal
-    setupModalSwipe();
-    
-    const modal = document.getElementById('imovel-modal');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
-    }
-    
-    // Teclado: lightbox tem prioridade, depois modal
-    document.addEventListener('keydown', (e) => {
-        if (document.getElementById('lightbox-overlay')?.classList.contains('active')) {
-            if (e.key === 'Escape') closeLightbox();
-            if (e.key === 'ArrowLeft') lbPrev();
-            if (e.key === 'ArrowRight') lbNext();
-            return;
-        }
-        if (!document.getElementById('imovel-modal')?.classList.contains('active')) return;
-        if (e.key === 'Escape') closeModal();
-        if (e.key === 'ArrowLeft') prevPhoto();
-        if (e.key === 'ArrowRight') nextPhoto();
-    });
-
-    // Swipe para baixo fecha o modal
-    setupModalSwipeClose();
-
-    // Botão voltar ao topo
-    setupScrollToTop();
-});
-
-// ========== SWIPE PARA BAIXO FECHA MODAL ==========
-function setupModalSwipeClose() {
-    const modal = document.getElementById('imovel-modal');
-    if (!modal) return;
-    let startY = 0;
-    modal.addEventListener('touchstart', e => {
-        startY = e.touches[0].clientY;
-    }, { passive: true });
-    modal.addEventListener('touchmove', e => {
-        const dy = e.touches[0].clientY - startY;
-        const c = modal.querySelector('.modal-container');
-        if (c && dy > 0) c.style.transform = `translateY(${Math.min(dy, 200)}px) scale(${1 - dy * 0.0002})`;
-    }, { passive: true });
-    modal.addEventListener('touchend', e => {
-        const dy = e.changedTouches[0].clientY - startY;
-        const c = modal.querySelector('.modal-container');
-        if (c) { c.style.transition = ''; c.style.transform = ''; }
-        if (dy > 100) closeModal();
-        setTimeout(() => { if (c) c.style.transition = ''; }, 300);
-    }, { passive: true });
-}
-
-// ========== BOTÃO SCROLL TO TOP ==========
+// ══════════════════════════════════════════════════════════
+//  SCROLL TO TOP
+// ══════════════════════════════════════════════════════════
 function setupScrollToTop() {
-    let scrollBtn = document.getElementById('scroll-top-btn');
-    if (!scrollBtn) {
-        scrollBtn = document.createElement('button');
-        scrollBtn.id = 'scroll-top-btn';
-        scrollBtn.innerHTML = '<i class="fas fa-chevron-up"></i>';
-        scrollBtn.setAttribute('aria-label', 'Voltar ao topo');
-        scrollBtn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-        document.body.appendChild(scrollBtn);
-    }
-    window.addEventListener('scroll', () => {
-        scrollBtn.classList.toggle('visible', window.scrollY > 400);
-    }, { passive: true });
+    const btn = safeEl('scroll-top-btn');
+    if (!btn) return;
+    window.addEventListener('scroll', () => btn.classList.toggle('visible', window.scrollY > 400), { passive:true });
 }
 
-// ========== SCHEMA.ORG JSON-LD ==========
+// ══════════════════════════════════════════════════════════
+//  SCHEMA ORG
+// ══════════════════════════════════════════════════════════
 function injectSchemaOrg(imo) {
-    const existing = document.getElementById('schema-imovel');
-    if (existing) existing.remove();
+    const ex = safeEl('schema-imovel'); if (ex) ex.remove();
     const s = document.createElement('script');
-    s.type = 'application/ld+json';
-    s.id = 'schema-imovel';
+    s.type = 'application/ld+json'; s.id = 'schema-imovel';
     s.textContent = JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'RealEstateListing',
-        name: imo.titulo,
-        description: imo.descricao,
-        image: imo.imagem,
-        offers: {
-            '@type': 'Offer',
-            price: imo.preco,
-            priceCurrency: 'BRL',
-            availability: imo.status === 'vendido' || imo.status === 'alugado'
-                ? 'https://schema.org/SoldOut'
-                : 'https://schema.org/InStock'
-        },
-        address: {
-            '@type': 'PostalAddress',
-            addressLocality: imo.bairro,
-            addressRegion: 'RJ',
-            addressCountry: 'BR'
-        },
-        numberOfRooms: imo.quartos,
-        floorSize: { '@type': 'QuantitativeValue', value: imo.area, unitCode: 'MTK' }
+        '@context':'https://schema.org','@type':'RealEstateListing',
+        name:imo.titulo, description:imo.descricao, image:imo.imagem,
+        offers:{'@type':'Offer',price:imo.preco,priceCurrency:'BRL',
+            availability: (imo.status==='vendido'||imo.status==='alugado')
+                ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock'},
+        address:{'@type':'PostalAddress',addressLocality:imo.bairro,addressRegion:'RJ',addressCountry:'BR'},
+        numberOfRooms:imo.quartos,
+        floorSize:{'@type':'QuantitativeValue',value:imo.area,unitCode:'MTK'}
     });
     document.head.appendChild(s);
 }
 
-// ========== EXPOR FUNÇÕES GLOBAIS ==========
-window.toggleFavorito = toggleFavorito;
-window.limparFavoritos = limparTodosFavoritos;
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.prevPhoto = prevPhoto;
-window.nextPhoto = nextPhoto;
-window.aplicarFiltros = aplicarFiltros;
-window.limparFiltros = limparFiltros;
-window.showToast = showToast;
-window.getFavoritos = getFavoritos;
-window.isFavorito = isFavorito;
-window.openLightbox = openLightbox;
-window.closeLightbox = closeLightbox;
-window.lbPrev = lbPrev;
-window.lbNext = lbNext;
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+    loadSiteConfig();
+    if (document.querySelector('.testimonials-carousel')) window._carousel = new TestimonialsCarousel();
+    setupMobileMenu();
+    setupParallax();
+    setupCounters();
+    setupScrollToTop();
 
+    // Fade-ins
+    document.querySelectorAll('.fade-in').forEach((el,i) => {
+        setTimeout(() => el.style.animationPlayState='running', i*150);
+    });
 
-// ============================================================
-// MELHORIAS SSS — LEANDRO IMÓVEIS
-// Skeleton control, modal-aware WhatsApp, page-hidden,
-// gallery show/hide, decoding async
-// ============================================================
+    // Página de imóveis
+    if (safeEl('gallery')) {
+        carregarImoveis();
 
-// ── Skeleton: mostrar quando carregando, ocultar quando pronto ──
-function hideSkeleton() {
-    const skel = document.getElementById('gallery-skeleton');
-    const gal  = document.getElementById('gallery');
-    if (skel) { skel.style.display = 'none'; }
-    if (gal)  { gal.style.display = ''; }
-}
+        // Eventos nos filtros extras
+        ['quartos','preco','tipo','ordenar'].forEach(id => safeEl(id)?.addEventListener('change', aplicarFiltros));
+        safeEl('mostrar-vendidos')?.addEventListener('change', () => { atualizarContadoresRegiao(); popularChipsBairros(); aplicarFiltros(); });
 
-// Patch renderGallery para esconder skeleton ao renderizar
-const _origRenderGallery = window.renderGallery || renderGallery;
-function renderGalleryWithSkeleton(list, containerId) {
-    hideSkeleton();
-    _origRenderGallery(list, containerId);
-}
-// Override global se na página de imóveis
-if (document.getElementById('gallery-skeleton')) {
-    window.renderGallery = renderGalleryWithSkeleton;
-}
+        // Busca com debounce
+        let _bT;
+        safeEl('busca-texto-top')?.addEventListener('input', () => { clearTimeout(_bT); _bT = setTimeout(aplicarFiltros, 250); });
 
-// ── Modal: adiciona/remove body.modal-open para ocultar WhatsApp ──
-(function patchModalOpenClose() {
-    const _open  = window.openModal;
-    const _close = window.closeModal;
-    if (_open) window.openModal = function(id) {
-        document.body.classList.add('modal-open');
-        _open(id);
-    };
-    if (_close) window.closeModal = function() {
-        document.body.classList.remove('modal-open');
-        _close();
-    };
-})();
+        // URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('bairro')) { filtroState.bairro = params.get('bairro'); for(const[r,l] of Object.entries(REGIOES)){if(l.includes(filtroState.bairro))filtroState.region=r;} syncRegionUI(); }
+        if (params.get('region')) { filtroState.region = params.get('region'); syncRegionUI(); }
+        ['quartos','preco','tipo'].forEach(k => { const v=params.get(k); if(v){ const el=safeEl(k); if(el) el.value=v; } });
 
-// ── Pause animations when tab is hidden ──
-document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-        document.body.classList.add('page-hidden');
-    } else {
-        document.body.classList.remove('page-hidden');
-    }
-});
-
-// ── Keyboard nav: fechar modal com ESC ──
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        const modal = document.getElementById('imovel-modal');
-        if (modal && modal.classList.contains('active')) {
-            if (window.closeModal) window.closeModal();
-        }
-        // fechar lightbox
-        const lb = document.getElementById('lightbox-overlay');
-        if (lb && lb.classList.contains('active')) {
-            if (window.closeLightbox) window.closeLightbox();
+        // Abre modal da URL
+        const imovelId = params.get('imovel');
+        if (imovelId) {
+            const waitAndOpen = () => {
+                if (imoveisCarregados) { setTimeout(() => openModal(imovelId), 300); }
+                else setTimeout(waitAndOpen, 200);
+            };
+            waitAndOpen();
         }
     }
-});
 
-// ── Menu mobile: fechar ao clicar em link ──
-document.querySelectorAll('nav ul li a').forEach(function(link) {
-    link.addEventListener('click', function() {
-        const nav = document.querySelector('nav ul');
-        const toggle = document.querySelector('.menu-toggle');
-        if (nav) nav.classList.remove('active', 'open');
-        if (toggle) toggle.classList.remove('active', 'open');
-        document.body.classList.remove('no-scroll');
+    // Modal
+    const modal = safeEl('imovel-modal');
+    if (modal) {
+        modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+        // Swipe down fecha modal
+        let _sY = 0;
+        modal.addEventListener('touchstart', e => { _sY = e.touches[0].clientY; }, {passive:true});
+        modal.addEventListener('touchmove', e => {
+            const dy = e.touches[0].clientY - _sY;
+            const c = modal.querySelector('.modal-container');
+            if (c && dy > 0) c.style.transform = `translateY(${Math.min(dy,180)}px)`;
+        }, {passive:true});
+        modal.addEventListener('touchend', e => {
+            const dy = e.changedTouches[0].clientY - _sY;
+            const c = modal.querySelector('.modal-container');
+            if (c) { c.style.transition = 'transform .25s'; c.style.transform = ''; setTimeout(()=>c.style.transition='',250); }
+            if (dy > 100) closeModal();
+        }, {passive:true});
+
+        // Swipe fotos
+        const mwrap = document.querySelector('.modal-main-photo-wrap');
+        if (mwrap) {
+            let _mx = 0, _my = 0;
+            mwrap.addEventListener('touchstart', e => { _mx=e.changedTouches[0].screenX; _my=e.changedTouches[0].screenY; }, {passive:true});
+            mwrap.addEventListener('touchend', e => {
+                const dx = _mx-e.changedTouches[0].screenX;
+                const dy = Math.abs(_my-e.changedTouches[0].screenY);
+                if (Math.abs(dx)>40 && dy<60) dx>0?nextPhoto():prevPhoto();
+            }, {passive:true});
+        }
+    }
+
+    // Teclado
+    document.addEventListener('keydown', e => {
+        const lb = safeEl('lightbox-overlay');
+        if (lb?.classList.contains('active')) {
+            if (e.key==='Escape') closeLightbox();
+            if (e.key==='ArrowLeft') lbPrev();
+            if (e.key==='ArrowRight') lbNext();
+            return;
+        }
+        const m = safeEl('imovel-modal');
+        if (!m?.classList.contains('active')) return;
+        if (e.key==='Escape') closeModal();
+        if (e.key==='ArrowLeft') prevPhoto();
+        if (e.key==='ArrowRight') nextPhoto();
+    });
+
+    // Pausar animações em background
+    document.addEventListener('visibilitychange', () => {
+        document.body.classList.toggle('page-hidden', document.hidden);
     });
 });
 
-// ── Menu toggle: suporte a teclado (Enter/Space) ──
-(function() {
-    const toggle = document.querySelector('.menu-toggle');
-    if (toggle) {
-        toggle.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggle.click();
-            }
-        });
-    }
-})();
+// ══════════════════════════════════════════════════════════
+//  EXPOR FUNÇÕES GLOBAIS
+// ══════════════════════════════════════════════════════════
+window.openModal       = openModal;
+window.closeModal      = closeModal;
+window.prevPhoto       = prevPhoto;
+window.nextPhoto       = nextPhoto;
+window.toggleFavorito  = toggleFavorito;
+window.openLightbox    = openLightbox;
+window.closeLightbox   = closeLightbox;
+window.lbPrev          = lbPrev;
+window.lbNext          = lbNext;
+window.aplicarFiltros  = aplicarFiltros;
+window.limparFiltros   = limparFiltros;
+window.toggleRegion    = toggleRegion;
+window.selectBairroChip= selectBairroChip;
+window.selectBairro    = selectBairro;
+window.showToast       = showToast;
+window.showNotification= showNotification;
+window.getFavoritos    = getFavoritos;
+window.isFavorito      = isFavorito;
