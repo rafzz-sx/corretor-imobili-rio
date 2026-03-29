@@ -1731,62 +1731,77 @@ function stopRealtimeListeners() {
     if (_linksListener)    { _linksListener();     _linksListener    = null; }
 }
 
-// Toast de notificação em tempo real
-let _notifQueue = [];
-let _notifTimer = null;
+// ══════════════════════════════════════════════════════════
+//  SISTEMA DE NOTIFICAÇÕES — FILA ROBUSTA (SEM BUG)
+//  Notificações em fila nunca ficam presas na tela
+// ══════════════════════════════════════════════════════════
+const _notifQueue = [];
+let _notifActive = false;
 
-function showNotification(title, body, color) {
+function showNotification(title, body, color = 'blue') {
     _notifQueue.push({ title, body, color });
-    // Se não há notificação ativa, mostra imediatamente
-    if (!_notifTimer) _processNextNotif();
+    if (!_notifActive) _processNextNotif();
 }
 
 function _processNextNotif() {
-    if (!_notifQueue.length) return;
+    if (!_notifQueue.length) { _notifActive = false; return; }
+    _notifActive = true;
     const { title, body, color } = _notifQueue.shift();
-    const colors = { blue:'var(--accent)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)' };
+    const colors = { blue:'var(--accent)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)', purple:'var(--purple)' };
     const c = colors[color] || colors.blue;
 
-    // Garante que o elemento existe e está completamente fora da tela antes de animar
     let el = document.getElementById('_realtime-notif');
     if (!el) {
         el = document.createElement('div');
         el.id = '_realtime-notif';
-        el.style.cssText = `position:fixed;bottom:5.5rem;right:1.5rem;z-index:9999;
+        el.style.cssText = `
+            position:fixed;bottom:5.5rem;right:1.5rem;z-index:9999;
             min-width:260px;max-width:320px;
             background:var(--bg-elevated);border-radius:var(--radius);padding:.9rem 1.1rem;
             box-shadow:var(--shadow-lg);display:flex;gap:.75rem;align-items:flex-start;
-            border-left:3px solid ${c};
-            transform:translateX(calc(100% + 2rem));
-            transition:transform .35s cubic-bezier(.22,1,.36,1);`;
+            will-change:transform;`;
         document.body.appendChild(el);
     }
 
-    // Reseta para fora da tela sem transição, depois anima entrada
+    // Reseta posição instantaneamente, depois anima
     el.style.transition = 'none';
-    el.style.transform = 'translateX(calc(100% + 2rem))';
-    el.style.borderLeftColor = c;
+    el.style.transform = 'translateX(calc(100% + 2.5rem))';
+    el.style.borderLeft = `3px solid ${c}`;
     el.innerHTML = `
-        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.3rem;
+        <div style="width:8px;height:8px;border-radius:50%;background:${c};margin-top:.35rem;
             flex-shrink:0;box-shadow:0 0 8px ${c};animation:pulse 1.2s infinite;"></div>
-        <div>
-            <div style="font-weight:600;font-size:.82rem;color:var(--text-primary);">${title}</div>
-            <div style="font-size:.75rem;color:var(--text-secondary);margin-top:.15rem;">${body}</div>
-        </div>`;
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:.82rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${title}</div>
+            <div style="font-size:.74rem;color:var(--text-secondary);margin-top:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${body}</div>
+        </div>
+        <button onclick="_dismissNotif()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:0;font-size:.75rem;flex-shrink:0;align-self:center;opacity:.6;" title="Fechar">✕</button>`;
 
-    // Força reflow para garantir que o navegador processa o estado inicial antes de animar
+    // Force reflow → anima entrada
     void el.offsetWidth;
     el.style.transition = 'transform .35s cubic-bezier(.22,1,.36,1)';
     el.style.transform = 'translateX(0)';
 
-    // Agenda saída após 4s + próxima notificação após animação de saída (350ms)
-    _notifTimer = setTimeout(() => {
-        el.style.transform = 'translateX(calc(100% + 2rem))';
-        _notifTimer = setTimeout(() => {
-            _notifTimer = null;
-            _processNextNotif();
-        }, 370);
-    }, 4000);
+    // Auto-saída após 4.2s
+    el._hideTimer = setTimeout(() => _hideNotif(el), 4200);
+
+    // Clique no card fecha
+    el.onclick = (e) => { if (!e.target.closest('button')) _dismissNotif(); };
+}
+
+function _hideNotif(el) {
+    if (!el) return;
+    clearTimeout(el._hideTimer);
+    el.style.transition = 'transform .35s cubic-bezier(.22,1,.36,1)';
+    el.style.transform = 'translateX(calc(100% + 2.5rem))';
+    setTimeout(() => {
+        _notifActive = false;
+        _processNextNotif();
+    }, 380);
+}
+
+function _dismissNotif() {
+    const el = document.getElementById('_realtime-notif');
+    if (el) _hideNotif(el);
 }
 
 // ========== LINKS COPIADOS — RELATÓRIO ==========
@@ -1820,6 +1835,8 @@ async function loadPerfilVisitante() {
         if (loading) loading.style.display = 'none';
         if (content) content.style.display = 'block';
         renderPerfilVisitante(visitas, imoveisViews, imoveis, linksCopiados);
+        // Carrega gráfico de performance logo após renderizar
+        setTimeout(loadPerformanceImovel, 200);
     } catch(e) {
         console.error(e);
         showToast('Erro ao carregar perfil','error');
@@ -2147,3 +2164,257 @@ function exportarRelatorioPDF() {
 window.exportarBackupJSON = exportarBackupJSON;
 window.exportarCSVVisitas = exportarCSVVisitas;
 window.exportarRelatorioPDF = exportarRelatorioPDF;
+window._dismissNotif = _dismissNotif;
+
+// ══════════════════════════════════════════════════════════
+//  AUTO-REFRESH VISITANTES (sem reload)
+//  Listeners em tempo real para seções de visitas e perfil
+// ══════════════════════════════════════════════════════════
+
+let _visitasRTListener   = null;
+let _linksRTListener     = null;
+let _imoveisRTListener   = null;
+let _visitasRTData       = [];
+let _linksRTData         = [];
+let _imoveisViewsRTData  = [];
+
+function startVisitasRT() {
+    if (_visitasRTListener) return;
+    // Listener de visitas em tempo real
+    _visitasRTListener = db.collection('visitas').orderBy('timestamp','desc').onSnapshot(snap => {
+        _visitasRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+        const activeSection = document.querySelector('.admin-section.active')?.id;
+        if (activeSection === 'section-visitas') {
+            renderVisitasReport(_visitasRTData);
+        }
+        // Atualiza dashboard se ativo
+        if (activeSection === 'section-dashboard') {
+            const el = document.getElementById('dash-visitas-total');
+            if (el) el.textContent = _visitasRTData.length;
+            const uniq = new Set(_visitasRTData.map(v => v.deviceId)).size;
+            const el2 = document.getElementById('dash-visitas-unique');
+            if (el2) el2.textContent = uniq;
+        }
+    }, err => console.warn('visitasRT:', err));
+
+    // Listener de links copiados em tempo real
+    _linksRTListener = db.collection('links_copiados').orderBy('timestamp','desc').onSnapshot(snap => {
+        const prev = _linksRTData.length;
+        _linksRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+        // Notifica novos links (só após primeira carga)
+        if (prev > 0 && _linksRTData.length > prev) {
+            const novo = _linksRTData[0];
+            showNotification(
+                '🔗 Link copiado!',
+                `"${novo.titulo||'Imóvel'}" · ${novo.deviceId?.slice(0,12)||''}…`,
+                'purple'
+            );
+        }
+        // Atualiza dash
+        const hoje = new Date().toISOString().slice(0,10);
+        const hojeCount = _linksRTData.filter(v => v.date === hoje).length;
+        const elC = document.getElementById('dash-links-copiados');
+        if (elC) elC.textContent = hojeCount;
+        // Perfil
+        const activeSection = document.querySelector('.admin-section.active')?.id;
+        if (activeSection === 'section-perfil') loadPerfilVisitante();
+    }, err => console.warn('linksRT:', err));
+
+    // Views de imóveis em tempo real
+    _imoveisRTListener = db.collection('visitas_imoveis').orderBy('timestamp','desc').onSnapshot(snap => {
+        _imoveisViewsRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+        // Imóvel mais visto hoje
+        const hoje = new Date().toISOString().slice(0,10);
+        const counts = {};
+        _imoveisViewsRTData.forEach(v => {
+            if (v.date === hoje) {
+                if (!counts[v.imovelId]) counts[v.imovelId] = {titulo:v.titulo,bairro:v.bairro,count:0};
+                counts[v.imovelId].count++;
+            }
+        });
+        const top = Object.values(counts).sort((a,b)=>b.count-a.count)[0];
+        const elTop = document.getElementById('dash-imovel-top');
+        if (elTop) {
+            elTop.innerHTML = top
+                ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count>1?'s':''} hoje</span>`
+                : `<strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>`;
+        }
+    }, err => console.warn('imoveisViewsRT:', err));
+}
+
+function stopVisitasRT() {
+    if (_visitasRTListener)  { _visitasRTListener();  _visitasRTListener  = null; }
+    if (_linksRTListener)    { _linksRTListener();    _linksRTListener    = null; }
+    if (_imoveisRTListener)  { _imoveisRTListener();  _imoveisRTListener  = null; }
+}
+
+// Inicia listeners RT após login
+const _origSetupAuthListener = setupAuthListener;
+
+// ══════════════════════════════════════════════════════════
+//  SISTEMA DE LEADS / CONTATOS
+//  Registra quando alguém abre WhatsApp ou envia contato
+// ══════════════════════════════════════════════════════════
+
+let _leadsListener = null;
+
+function startLeadsListener() {
+    if (_leadsListener) return;
+    let _leadsInit = false;
+    _leadsListener = db.collection('leads').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+        if (!_leadsInit) { _leadsInit = true; return; }
+        snap.docChanges().forEach(change => {
+            if (change.type === 'added') {
+                const v = change.doc.data();
+                showNotification(
+                    '🔥 Novo lead!',
+                    `${v.tipo||'Contato'} — ${v.titulo||'Imóvel'} · ${v.deviceId?.slice(0,10)||''}`,
+                    'green'
+                );
+                // Badge no dashboard
+                updateLastRefreshIndicator();
+                // Se perfil aberto, atualiza
+                const active = document.querySelector('.admin-section.active')?.id;
+                if (active === 'section-perfil') loadPerfilVisitante();
+            }
+        });
+    }, err => console.warn('leadsRT:', err));
+}
+
+// Seção de leads no admin
+async function loadLeads() {
+    if (!db) return;
+    try {
+        const snap = await db.collection('leads').orderBy('timestamp','desc').limit(100).get();
+        return snap.docs.map(d => ({id:d.id,...d.data()}));
+    } catch { return []; }
+}
+
+// Patch do startRealtimeListeners para incluir os novos listeners
+const _origStartRealtimeListeners = startRealtimeListeners;
+function startRealtimeListeners() {
+    _origStartRealtimeListeners();
+    startVisitasRT();
+    startLeadsListener();
+}
+const _origStopRealtimeListeners = stopRealtimeListeners;
+function stopRealtimeListeners() {
+    _origStopRealtimeListeners();
+    stopVisitasRT();
+    if (_leadsListener) { _leadsListener(); _leadsListener = null; }
+}
+
+// ══════════════════════════════════════════════════════════
+//  NOTIFICAÇÕES PUSH (Push API + Service Worker)
+//  Solicita permissão e mostra push quando link é copiado
+// ══════════════════════════════════════════════════════════
+
+async function requestPushPermission() {
+    if (!('Notification' in window)) {
+        showToast('Seu navegador não suporta notificações push', 'warning');
+        return;
+    }
+    if (Notification.permission === 'granted') {
+        showToast('Notificações push já estão ativas! ✅', 'success');
+        return;
+    }
+    if (Notification.permission === 'denied') {
+        showToast('Notificações bloqueadas no navegador. Habilite nas configurações.', 'warning');
+        return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+        showToast('✅ Notificações push ativadas!');
+        new Notification('LB Imóveis — Admin', {
+            body: 'Você receberá alertas quando links forem copiados.',
+            icon: '/favicon.ico',
+        });
+    } else {
+        showToast('Permissão negada para notificações', 'warning');
+    }
+}
+
+function sendPushNotification(title, body) {
+    if (Notification.permission !== 'granted') return;
+    new Notification(title, { body, icon: '/favicon.ico', badge: '/favicon.ico', tag: 'lb-admin-notif', renotify: true });
+}
+
+// Expor
+window.requestPushPermission = requestPushPermission;
+window.startVisitasRT        = startVisitasRT;
+window.stopVisitasRT         = stopVisitasRT;
+
+// ══════════════════════════════════════════════════════════
+//  GRÁFICOS DE PERFORMANCE POR IMÓVEL
+// ══════════════════════════════════════════════════════════
+
+async function loadPerformanceImovel() {
+    if (!db) return;
+    const content = document.getElementById('perfil-content');
+    if (!content) return;
+
+    try {
+        const [viewsSnap, linksSnap, imoveisSnap] = await Promise.all([
+            db.collection('visitas_imoveis').get(),
+            db.collection('links_copiados').get(),
+            db.collection('imoveis').get(),
+        ]);
+
+        const imoveisCatalog = {};
+        imoveisSnap.docs.forEach(d => { imoveisCatalog[d.id] = d.data(); });
+
+        // Contagem por imóvel
+        const perf = {};
+        viewsSnap.docs.forEach(d => {
+            const v = d.data();
+            const k = v.imovelId||v.titulo;
+            if (!perf[k]) perf[k] = { titulo:v.titulo||k, bairro:v.bairro||'', views:0, links:0 };
+            perf[k].views++;
+        });
+        linksSnap.docs.forEach(d => {
+            const v = d.data();
+            const k = v.imovelId||v.titulo;
+            if (!perf[k]) perf[k] = { titulo:v.titulo||k, bairro:v.bairro||'', views:0, links:0 };
+            perf[k].links++;
+        });
+
+        const sorted = Object.values(perf).sort((a,b) => b.views-a.views).slice(0,10);
+        if (!sorted.length) return;
+
+        // Injeta mini-gráfico de barras horizontais no topo do perfil
+        const barHtml = sorted.map(im => {
+            const maxV = sorted[0].views||1;
+            const pct = Math.round((im.views/maxV)*100);
+            const convRate = im.views ? Math.round((im.links/im.views)*100) : 0;
+            return `
+            <div style="margin-bottom:.6rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;gap:.5rem;">
+                    <span style="font-size:.78rem;color:var(--text-primary);font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${im.titulo}</span>
+                    <div style="display:flex;gap:.5rem;flex-shrink:0;">
+                        <span style="font-size:.72rem;background:var(--amber-soft);color:var(--amber);padding:.12rem .45rem;border-radius:99px;font-weight:700;">${im.views} views</span>
+                        <span style="font-size:.72rem;background:var(--purple-soft);color:var(--purple);padding:.12rem .45rem;border-radius:99px;font-weight:700;">${im.links} links</span>
+                        <span style="font-size:.72rem;background:var(--green-soft);color:var(--green);padding:.12rem .45rem;border-radius:99px;font-weight:700;">${convRate}% conv.</span>
+                    </div>
+                </div>
+                <div style="height:5px;background:var(--bg-elevated);border-radius:99px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#6366f1);border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)"></div>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Prepend ao content
+        const perfCard = document.createElement('div');
+        perfCard.className = 'dashboard-card';
+        perfCard.style.marginBottom = '1.2rem';
+        perfCard.innerHTML = `
+            <h3 style="margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;">
+                <i class="fas fa-chart-bar" style="color:var(--amber)"></i>
+                Performance por Imóvel <span style="font-size:.7rem;color:var(--text-muted);font-weight:400;margin-left:.3rem;">— views × links copiados × conversão</span>
+            </h3>
+            ${barHtml}`;
+        content.prepend(perfCard);
+    } catch(e) { console.error('loadPerformanceImovel:', e); }
+}
+
+// Expor
+window.loadPerformanceImovel = loadPerformanceImovel;
