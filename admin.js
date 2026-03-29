@@ -37,6 +37,14 @@ function setupAuthListener() {
             startSessionTimer();
             showAdminPanel();
             loadDashboard();
+            // Solicita push silenciosamente se já não solicitou
+            setTimeout(() => {
+                if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                    Notification.requestPermission().then(p => {
+                        if (p === 'granted') showToast('🔔 Notificações push ativadas!', 'success');
+                    }).catch(()=>{});
+                }
+            }, 3000);
 
             // Registra login no histórico apenas em novas sessões
             if (isNewSession) {
@@ -361,7 +369,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', perfil:'Perfil de Visitante' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
@@ -372,6 +380,7 @@ function showSection(name) {
     else if (name === 'site') loadSiteConfig();
     else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
+    else if (name === 'chat-logs') { loadChatLogs(); return; }
     else if (name === 'seguranca') { loadSeguranca().then(() => carregarIPSessaoAtual()); return; }
     else stopSessaoCountdown();
 }
@@ -583,7 +592,6 @@ async function moveToLixeira(id) {
 async function loadLixeira() {
     if (!db) return;
     try {
-        if (_realtimeActive && lixeiraData.length >= 0) { renderLixeiraTable(lixeiraData); return; }
         const snap = await db.collection('lixeira').get();
         lixeiraData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderLixeiraTable(lixeiraData);
@@ -596,7 +604,7 @@ function renderLixeiraTable(list) {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-trash-alt"></i><h3>Lixeira vazia</h3><p>Os imóveis excluídos aparecem aqui.</p></div>';
         return;
     }
-    container.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Foto</th><th>Título</th><th>Bairro</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${list.map(i => `<tr><td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td><td style="color:var(--text-primary);font-weight:500;">${i.titulo}</td><td>${i.bairro}</td><td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td><td><div class="table-actions"><button onclick="restaurarImovel('${i.id}')" class="btn-restore"><i class="fas fa-undo"></i> Restaurar</button><button onclick="deletePerma('${i.id}')" class="btn-delete" title="Excluir permanente"><i class="fas fa-times"></i></button></div></td></tr>`).join('')}</tbody></table></div><div style="margin-top:1rem;display:flex;justify-content:flex-end;"><button onclick="esvaziarLixeira()" class="btn-danger"><i class="fas fa-fire"></i> Esvaziar lixeira</button></div>`;
+    container.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Foto</th><th>Título</th><th>Bairro</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${list.map(i => `<tr><td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td><td style="color:var(--text-primary);font-weight:500;">${i.titulo}</td><td>${i.bairro}</td><td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td><td><div class="table-actions"><button onclick="restaurarImovel('${i.id}')" class="btn-edit" title="Restaurar" style="color:var(--green);background:var(--green-soft);gap:.3rem;width:auto;padding:0 .7rem;font-size:.75rem;"><i class="fas fa-undo"></i> Restaurar</button><button onclick="deletePerma('${i.id}')" class="btn-delete" title="Excluir permanente"><i class="fas fa-times"></i></button></div></td></tr>`).join('')}</tbody></table></div><div style="margin-top:1rem;display:flex;justify-content:flex-end;"><button onclick="esvaziarLixeira()" class="btn-danger"><i class="fas fa-fire"></i> Esvaziar lixeira</button></div>`;
 }
 
 async function restaurarImovel(id) {
@@ -698,7 +706,7 @@ function parseUA(ua) {
     return { browser, os, device };
 }
 
-function deviceIcon(device) {
+function deviceIconHTML(device) {
     if (device==='mobile') return '<i class="fas fa-mobile-alt" style="color:var(--accent)"></i>';
     if (device==='tablet') return '<i class="fas fa-tablet-alt" style="color:var(--purple)"></i>';
     return '<i class="fas fa-desktop" style="color:var(--green)"></i>';
@@ -748,11 +756,20 @@ function renderVisitasReport(data) {
     const maxDia = Math.max(...Object.values(porDia), 1);
     const diasAtivos = Object.values(porDia).filter(v=>v>0).length;
     const browsers={}, oss={}, devices={mobile:0,tablet:0,desktop:0};
+    // Conta navegadores e dispositivos por deviceId único (não por visita)
+    const seenDevices = new Set();
+    const browsersUniq={};
     filtered.forEach(v => {
         const p=parseUA(v.userAgent);
-        browsers[p.browser]=(browsers[p.browser]||0)+1;
-        oss[p.os]=(oss[p.os]||0)+1;
+        // devices contam por registro (visita por página)
         devices[p.device]++;
+        oss[p.os]=(oss[p.os]||0)+1;
+        // browsers contam por dispositivo único
+        if (!seenDevices.has(v.deviceId)) {
+            seenDevices.add(v.deviceId);
+            browsersUniq[p.browser]=(browsersUniq[p.browser]||0)+1;
+        }
+        browsers[p.browser]=(browsers[p.browser]||0)+1;
     });
     const allPages=[...new Set(data.map(v=>v.page))];
 
@@ -813,18 +830,18 @@ function renderVisitasReport(data) {
             <div style="margin-top:.8rem;">
                 ${[['desktop','Desktop','var(--green)'],['mobile','Mobile','var(--accent)'],['tablet','Tablet','var(--purple)']].map(([k,label,color])=>`
                 <div style="margin-bottom:.9rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIcon(k)} ${label}</span><span style="font-weight:600;">${devices[k]}</span></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:${color};font-size:.83rem;">${deviceIconHTML(k)} ${label}</span><span style="font-weight:600;">${devices[k]}</span></div>
                     <div class="chart-track"><div class="chart-fill" style="width:${totalVisitas?((devices[k]/totalVisitas)*100):0}%;background:${color};opacity:.8;"></div></div>
                 </div>`).join('')}
             </div>
         </div>
         <div class="dashboard-card">
-            <h3><i class="fas fa-globe"></i> Navegadores</h3>
+            <h3><i class="fas fa-globe"></i> Navegadores <span style="font-size:.65rem;color:var(--text-muted);font-weight:400;">(dispositivos únicos)</span></h3>
             <div style="margin-top:.8rem;">
-            ${Object.entries(browsers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n])=>`
+            ${Object.entries(browsersUniq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([br,n])=>`
                 <div style="margin-bottom:.9rem;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;"><span style="color:var(--text-secondary);font-size:.83rem;">${br}</span><span style="font-weight:600;">${n}</span></div>
-                    <div class="chart-track"><div class="chart-fill" style="width:${(n/totalVisitas)*100}%;opacity:.8;"></div></div>
+                    <div class="chart-track"><div class="chart-fill" style="width:${seenDevices.size?((n/seenDevices.size)*100):0}%;opacity:.8;"></div></div>
                 </div>`).join('')}
             </div>
         </div>
@@ -853,7 +870,7 @@ function renderVisitasReport(data) {
                         <td style="padding:.6rem .8rem;color:var(--text-muted);">${i+1}</td>
                         <td style="padding:.6rem .8rem;color:var(--text-secondary);white-space:nowrap;">${formatTimestamp(v.timestamp)}</td>
                         <td style="padding:.6rem .8rem;">${pageBadge(v.page||'—')}</td>
-                        <td style="padding:.6rem .8rem;">${deviceIcon(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
+                        <td style="padding:.6rem .8rem;">${deviceIconHTML(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
                         <td style="padding:.6rem .8rem;color:var(--text-secondary);">${p.browser} · ${p.os}</td>
                         <td style="padding:.6rem .8rem;font-family:monospace;font-size:.75rem;color:var(--text-muted);" title="${v.deviceId||''}">${(v.deviceId||'—').slice(0,22)}…</td>
                     </tr>`;
@@ -1675,16 +1692,15 @@ function startRealtimeListeners() {
     // ---- LIXEIRA ----
     if (!_lixeiraListener) {
         _lixeiraListener = db.collection('lixeira').onSnapshot(snap => {
-            const wasInit = _lixeiraInitialized;
-            _lixeiraInitialized = true;
             lixeiraData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             const lCount = lixeiraData.length;
             const badgeEl = document.getElementById('badge-lixeira');
             if (badgeEl) { badgeEl.textContent = lCount > 0 ? lCount : ''; badgeEl.style.display = lCount > 0 ? '' : 'none'; }
             syncMobileBadges();
 
+            // Atualiza lixeira se seção ativa
             const activeSection = document.querySelector('.admin-section.active')?.id;
-            if (wasInit && activeSection === 'section-lixeira') renderLixeiraTable(lixeiraData);
+            if (activeSection === 'section-lixeira') renderLixeiraTable(lixeiraData);
         }, err => console.warn('Listener lixeira:', err));
     }
 
@@ -1716,12 +1732,19 @@ function startRealtimeListeners() {
                 if (change.type === 'added') {
                     const v = change.doc.data();
                     showNotification('🔗 Link copiado!', `"${v.titulo||'Imóvel'}" — ${v.deviceId?v.deviceId.slice(0,14)+'…':''}`, 'green');
+                    // Push notification do OS
+                    sendPushNotification('🔗 Link Copiado — LB Imóveis', `"${v.titulo||'Imóvel'}" foi compartilhado!`);
                     const activeSection = document.querySelector('.admin-section.active')?.id;
                     if (activeSection === 'section-dashboard') loadDashboardVisitas();
                 }
             });
         }, err => console.warn('Listener links:', err));
     }
+
+    // ---- VISITANTES RT + LEADS + CHAT LOGS ----
+    startVisitasRT();
+    startLeadsListener();
+    startChatLogsListener();
 }
 
 function stopRealtimeListeners() {
@@ -1729,6 +1752,8 @@ function stopRealtimeListeners() {
     if (_lixeiraListener)  { _lixeiraListener();  _lixeiraListener  = null; _lixeiraInitialized = false; }
     if (_visitasListener)  { _visitasListener();  _visitasListener  = null; }
     if (_linksListener)    { _linksListener();     _linksListener    = null; }
+    stopVisitasRT();
+    if (_leadsListener) { _leadsListener(); _leadsListener = null; }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2271,9 +2296,7 @@ function startLeadsListener() {
                     `${v.tipo||'Contato'} — ${v.titulo||'Imóvel'} · ${v.deviceId?.slice(0,10)||''}`,
                     'green'
                 );
-                // Badge no dashboard
                 updateLastRefreshIndicator();
-                // Se perfil aberto, atualiza
                 const active = document.querySelector('.admin-section.active')?.id;
                 if (active === 'section-perfil') loadPerfilVisitante();
             }
@@ -2281,27 +2304,12 @@ function startLeadsListener() {
     }, err => console.warn('leadsRT:', err));
 }
 
-// Seção de leads no admin
 async function loadLeads() {
     if (!db) return;
     try {
         const snap = await db.collection('leads').orderBy('timestamp','desc').limit(100).get();
         return snap.docs.map(d => ({id:d.id,...d.data()}));
     } catch { return []; }
-}
-
-// Patch do startRealtimeListeners para incluir os novos listeners
-const _origStartRealtimeListeners = startRealtimeListeners;
-function startRealtimeListeners() {
-    _origStartRealtimeListeners();
-    startVisitasRT();
-    startLeadsListener();
-}
-const _origStopRealtimeListeners = stopRealtimeListeners;
-function stopRealtimeListeners() {
-    _origStopRealtimeListeners();
-    stopVisitasRT();
-    if (_leadsListener) { _leadsListener(); _leadsListener = null; }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2418,3 +2426,136 @@ async function loadPerformanceImovel() {
 
 // Expor
 window.loadPerformanceImovel = loadPerformanceImovel;
+
+// ══════════════════════════════════════════════════════════
+//  LOGS DO ASSISTENTE VIRTUAL
+// ══════════════════════════════════════════════════════════
+
+let _chatLogsListener = null;
+
+async function loadChatLogs() {
+    if (!db) return;
+    const loading = document.getElementById('chat-logs-loading');
+    const content = document.getElementById('chat-logs-content');
+    if (loading) loading.style.display = 'flex';
+    if (content) content.style.display = 'none';
+
+    try {
+        const snap = await db.collection('chat_logs')
+            .orderBy('timestamp', 'desc')
+            .limit(200)
+            .get();
+        const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        if (loading) loading.style.display = 'none';
+        if (content) { content.style.display = 'block'; renderChatLogs(logs); }
+
+        // Badge
+        const badge = document.getElementById('badge-chat-logs');
+        const today = new Date().toISOString().slice(0,10);
+        const hojeAbertos = logs.filter(l => l.event === 'chat_aberto' && l.date === today).length;
+        if (badge) { badge.textContent = hojeAbertos > 0 ? hojeAbertos : ''; badge.style.display = hojeAbertos > 0 ? '' : 'none'; }
+    } catch(e) {
+        if (loading) loading.style.display = 'none';
+        if (content) { content.style.display = 'block'; content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Sem dados</h3><p>Nenhuma conversa registrada ainda.</p></div>'; }
+    }
+}
+
+function renderChatLogs(logs) {
+    const content = document.getElementById('chat-logs-content');
+    if (!content) return;
+
+    if (!logs.length) {
+        content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ainda</h3><p>Quando visitantes usarem o chat, os logs aparecerão aqui.</p></div>';
+        return;
+    }
+
+    const today = new Date().toISOString().slice(0,10);
+
+    // Agrupa por sessão
+    const sessions = {};
+    logs.forEach(l => {
+        if (!sessions[l.sessionId]) sessions[l.sessionId] = { sessionId:l.sessionId, deviceId:l.deviceId, date:l.date, events:[], hasWA:false, path:'' };
+        sessions[l.sessionId].events.push(l);
+        if (l.event === 'chat_whatsapp') sessions[l.sessionId].hasWA = true;
+        if (l.path) sessions[l.sessionId].path = l.path;
+    });
+
+    const sessionList = Object.values(sessions).sort((a,b) => {
+        const aT = a.events[0]?.timestamp?.seconds || 0;
+        const bT = b.events[0]?.timestamp?.seconds || 0;
+        return bT - aT;
+    });
+
+    // KPIs
+    const totalSessions = sessionList.length;
+    const waSessions = sessionList.filter(s => s.hasWA).length;
+    const hojeS = sessionList.filter(s => s.date === today).length;
+    const convRate = totalSessions > 0 ? Math.round((waSessions/totalSessions)*100) : 0;
+
+    content.innerHTML = `
+    <div class="stats-grid" style="margin-bottom:1.5rem;">
+        <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-comments"></i></div><div class="stat-info"><span class="stat-value">${totalSessions}</span><span class="stat-label">Conversas Totais</span></div></div>
+        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${hojeS}</span><span class="stat-label">Hoje</span></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><i class="fab fa-whatsapp"></i></div><div class="stat-info"><span class="stat-value">${waSessions}</span><span class="stat-label">Foram ao WhatsApp</span></div></div>
+        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${convRate}%</span><span class="stat-label">Taxa de Conversão</span></div></div>
+    </div>
+
+    <div class="dashboard-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+            <h3><i class="fas fa-list-ul"></i> Histórico de Conversas</h3>
+            <span style="font-size:.78rem;color:var(--text-muted);">${sessionList.length} sessões</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.7rem;">
+        ${sessionList.slice(0,50).map(s => {
+            const clicks = s.events.filter(e => e.event === 'chat_click');
+            const firstEvent = s.events.find(e => e.timestamp);
+            const ts = firstEvent?.timestamp?.toDate?.() || null;
+            const tsStr = ts ? ts.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : s.date || '—';
+            return `
+            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem;background:var(--bg-elevated);
+                border-left:3px solid ${s.hasWA ? 'var(--green)' : 'var(--border)'};">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;">
+                    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                        <span style="font-size:.72rem;font-family:monospace;color:var(--text-muted);">${(s.deviceId||'').slice(0,22)}…</span>
+                        ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.68rem;padding:.15rem .55rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
+                    </div>
+                    <span style="font-size:.73rem;color:var(--text-muted);">${tsStr}</span>
+                </div>
+                <div style="font-size:.76rem;color:var(--text-secondary);line-height:1.5;">
+                    ${clicks.length ? `<span style="color:var(--text-muted);">Caminho:</span> ${clicks.map(c=>`<span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.1rem .4rem;border-radius:4px;font-size:.7rem;">${c.label}</span>`).join(' → ')}` : '<span style="color:var(--text-muted);">Abriu mas não interagiu</span>'}
+                </div>
+                ${s.path ? `<div style="margin-top:.3rem;font-size:.7rem;color:var(--text-muted);">Fluxo: ${s.path}</div>` : ''}
+            </div>`;
+        }).join('')}
+        ${sessionList.length > 50 ? `<div style="text-align:center;padding:.7rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
+        </div>
+    </div>`;
+}
+
+// ── Real-time badge para novos chats ──
+function startChatLogsListener() {
+    if (!db) return;
+    let _chatInit = false;
+    db.collection('chat_logs')
+        .where('event','==','chat_aberto')
+        .orderBy('timestamp','desc')
+        .limit(1)
+        .onSnapshot(snap => {
+            if (!_chatInit) { _chatInit = true; return; }
+            snap.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    showNotification('💬 Chat aberto!', 'Um visitante iniciou uma conversa', 'purple');
+                    const today = new Date().toISOString().slice(0,10);
+                    const badge = document.getElementById('badge-chat-logs');
+                    if (badge) {
+                        const cur = parseInt(badge.textContent || '0') + 1;
+                        badge.textContent = cur;
+                        badge.style.display = '';
+                    }
+                }
+            });
+        }, err => console.warn('chatLogsRT:', err));
+}
+
+window.loadChatLogs = loadChatLogs;
