@@ -14,8 +14,6 @@
     <meta property="og:url" content="https://leandrobomfim.com.br/imoveis.html">
     <meta property="og:locale" content="pt_BR">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Imóveis | Leandro Bomfim">
-    <meta name="twitter:image" content="https://files.catbox.moe/nqdyup.png">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <link rel="manifest" href="manifest.json">
@@ -28,31 +26,236 @@
     <meta name="apple-mobile-web-app-title" content="LB Imóveis">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    <!-- Schema.org RealEstateListing -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      "name": "Imóveis à Venda — Leandro Bomfim",
-      "description": "Imóveis de alto padrão à venda no Rio de Janeiro: Ipanema, Leblon, Barra da Tijuca, Recreio.",
-      "url": "https://leandrobomfim.com.br/imoveis.html",
-      "author": {
-        "@type": "RealEstateAgent",
-        "name": "Leandro Bomfim",
-        "telephone": "+55-21-98142-4469"
-      }
-    }
-    </script>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="tracker.js"></script>
+    <style>
+    /* ══ HERO ══ */
+    .imoveis-hero {
+        text-align: center;
+        padding: 2.5rem 0 1.8rem;
+    }
+    .imoveis-hero h1 {
+        font-family: var(--font-title);
+        font-size: clamp(1.8rem,5vw,3rem);
+        font-weight: 700;
+        background: linear-gradient(135deg,#fff 30%,var(--primary));
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        margin-bottom:.5rem;
+    }
+    .imoveis-hero p { color:var(--text-muted);font-size:.95rem;max-width:460px;margin:0 auto .1rem; }
+
+    /* ══ BUSCA TOP ══ */
+    .imoveis-search-wrap {
+        position:relative;max-width:520px;margin:1.2rem auto 0;
+    }
+    .imoveis-search-wrap i {
+        position:absolute;left:1.1rem;top:50%;transform:translateY(-50%);
+        color:var(--text-muted);font-size:.9rem;pointer-events:none;
+    }
+    #busca-texto-top {
+        width:100%;padding:.85rem 1.1rem .85rem 2.8rem;
+        background:rgba(255,255,255,.06);border:1px solid var(--border-medium);
+        border-radius:var(--radius-full);color:#fff;font-size:.92rem;font-family:var(--font-body);
+        transition:border-color .2s,box-shadow .2s;
+    }
+    #busca-texto-top:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(52,152,219,.15);}
+    #busca-texto-top::placeholder{color:var(--text-muted);}
+
+    /* ══ FILTROS SECTION ══ */
+    .filtros-section { margin: 1.8rem 0 1rem; }
+
+    .filtros-label {
+        display:flex;align-items:center;gap:.6rem;margin-bottom:.9rem;
+        font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+        color:rgba(255,255,255,.3);
+    }
+    .filtros-label::before,.filtros-label::after {
+        content:'';flex:1;height:1px;background:rgba(255,255,255,.06);
+    }
+
+    /* ══ REGION CARDS ══ */
+    .region-cards {
+        display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin-bottom:1.1rem;
+    }
+    .region-card {
+        position:relative;
+        background:rgba(15,18,26,.95);
+        border:1.5px solid rgba(255,255,255,.07);
+        border-radius:16px;padding:1.1rem 1.2rem;
+        cursor:pointer;overflow:hidden;min-height:108px;
+        display:flex;flex-direction:column;gap:.45rem;
+        transition:border-color .25s,box-shadow .25s,transform .2s;
+        user-select:none;
+    }
+    .region-card::after {
+        content:'';position:absolute;inset:0;border-radius:14px;opacity:0;
+        transition:opacity .3s;pointer-events:none;
+    }
+    .region-card.zona-sul::after { background:linear-gradient(135deg,rgba(52,152,219,.1) 0%,transparent 65%); }
+    .region-card.barra-recreio::after { background:linear-gradient(135deg,rgba(155,89,182,.1) 0%,transparent 65%); }
+    .region-card:hover { transform:translateY(-2px); }
+    .region-card:hover::after,.region-card.active::after { opacity:1; }
+    .region-card.zona-sul:hover,.region-card.zona-sul.active {
+        border-color:rgba(52,152,219,.5);
+        box-shadow:0 0 0 1px rgba(52,152,219,.15),0 10px 30px rgba(0,0,0,.5);
+    }
+    .region-card.barra-recreio:hover,.region-card.barra-recreio.active {
+        border-color:rgba(155,89,182,.5);
+        box-shadow:0 0 0 1px rgba(155,89,182,.15),0 10px 30px rgba(0,0,0,.5);
+    }
+    /* Imagem de fundo decorativa */
+    .rc-bg {
+        position:absolute;right:-8px;bottom:-8px;
+        width:88px;height:78px;object-fit:cover;
+        border-radius:10px;opacity:.1;filter:blur(1.5px);
+        pointer-events:none;transition:opacity .3s;
+    }
+    .region-card:hover .rc-bg,.region-card.active .rc-bg { opacity:.22; }
+
+    .rc-header {
+        display:flex;align-items:flex-start;justify-content:space-between;
+        gap:.5rem;position:relative;z-index:1;
+    }
+    .rc-icon {
+        width:34px;height:34px;border-radius:10px;
+        display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;
+    }
+    .zona-sul .rc-icon { background:rgba(52,152,219,.15);color:var(--primary); }
+    .barra-recreio .rc-icon { background:rgba(155,89,182,.15);color:#a855f7; }
+
+    .rc-count {
+        display:flex;flex-direction:column;align-items:flex-end;gap:.02rem;
+        font-size:.68rem;color:rgba(255,255,255,.4);font-weight:600;
+    }
+    .rc-count-num {
+        font-size:1.4rem;font-weight:800;line-height:1;color:#fff;
+        font-family:var(--font-title);transition:color .2s;
+    }
+    .zona-sul.active .rc-count-num,.zona-sul:hover .rc-count-num { color:var(--primary); }
+    .barra-recreio.active .rc-count-num,.barra-recreio:hover .rc-count-num { color:#a855f7; }
+
+    .rc-title {
+        font-size:.92rem;font-weight:700;color:#fff;
+        position:relative;z-index:1;
+    }
+    .rc-bairros {
+        display:flex;flex-wrap:wrap;gap:.3rem;position:relative;z-index:1;
+    }
+    .rc-chip {
+        font-size:.66rem;color:rgba(255,255,255,.45);
+        padding:.15rem .5rem;border-radius:99px;
+        border:1px solid rgba(255,255,255,.07);
+        background:rgba(255,255,255,.025);font-weight:500;
+        transition:all .2s;white-space:nowrap;cursor:pointer;
+    }
+    .rc-chip:hover { border-color:rgba(255,255,255,.18);color:rgba(255,255,255,.75); }
+    .rc-chip.ativo {
+        font-weight:700;
+    }
+    .zona-sul .rc-chip.ativo {
+        background:rgba(52,152,219,.18);border-color:rgba(52,152,219,.4);color:#60b3f0;
+    }
+    .barra-recreio .rc-chip.ativo {
+        background:rgba(168,85,247,.18);border-color:rgba(168,85,247,.4);color:#c084f5;
+    }
+
+    /* ══ BAIRROS DIRETO ══ */
+    .bairros-direct-label {
+        display:flex;align-items:center;gap:.5rem;margin:.75rem 0 .55rem;
+        font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+        color:rgba(255,255,255,.22);
+    }
+    .bairros-direct-label::before,.bairros-direct-label::after {
+        content:'';flex:1;height:1px;background:rgba(255,255,255,.05);
+    }
+    .bairros-chips-row {
+        display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.1rem;
+    }
+    .bchip {
+        font-size:.76rem;color:rgba(255,255,255,.5);
+        padding:.3rem .8rem;border-radius:99px;
+        border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.03);
+        font-weight:500;transition:all .2s;cursor:pointer;
+        display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap;
+    }
+    .bchip:hover { border-color:rgba(52,152,219,.3);color:var(--primary);background:rgba(52,152,219,.06); }
+    .bchip.ativo { background:rgba(52,152,219,.15);border-color:rgba(52,152,219,.45);color:#60b3f0;font-weight:700; }
+    .bchip-count { font-size:.62rem;opacity:.55;font-weight:600; }
+
+    /* ══ FILTROS EXTRAS ══ */
+    .filtros-extras {
+        display:flex;gap:.65rem;flex-wrap:wrap;align-items:center;
+        padding:.8rem 1.1rem;background:rgba(255,255,255,.025);
+        border:1px solid rgba(255,255,255,.06);border-radius:12px;margin-bottom:1.1rem;
+    }
+    .fx-group { display:flex;flex-direction:column;gap:.18rem;min-width:120px;flex:1; }
+    .fx-group label {
+        font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+        color:rgba(255,255,255,.28);
+    }
+    .fx-group select {
+        padding:.45rem .7rem;background:rgba(255,255,255,.04);
+        border:1px solid rgba(255,255,255,.08);border-radius:8px;
+        color:rgba(255,255,255,.7);font-size:.8rem;font-family:var(--font-body);
+        cursor:pointer;transition:border-color .2s;min-height:0;
+    }
+    .fx-group select:focus { outline:none;border-color:var(--primary); }
+    .fx-group select option { background:#1a1a2e; }
+    .fx-divider { width:1px;align-self:stretch;background:rgba(255,255,255,.05);margin:0 .1rem; }
+    .fx-toggle {
+        display:flex;align-items:center;gap:.45rem;cursor:pointer;
+        color:rgba(255,255,255,.4);font-size:.78rem;user-select:none;white-space:nowrap;
+    }
+    .fx-toggle input { accent-color:var(--primary); }
+    .fx-toggle:hover { color:rgba(255,255,255,.65); }
+    #btn-clear-all {
+        display:none;align-items:center;gap:.3rem;margin-left:auto;
+        padding:.35rem .85rem;border-radius:99px;
+        border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.07);
+        color:#ef4444;font-size:.73rem;font-weight:600;cursor:pointer;
+        font-family:var(--font-body);transition:all .2s;white-space:nowrap;
+    }
+    #btn-clear-all:hover { background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4); }
+    #btn-clear-all.vis { display:inline-flex; }
+
+    /* ══ RESULTS BAR ══ */
+    .results-bar-new {
+        display:none;align-items:center;justify-content:space-between;
+        flex-wrap:wrap;gap:.5rem;
+        margin-bottom:1.1rem;padding:.55rem .95rem;
+        border-radius:10px;background:rgba(52,152,219,.05);
+        border:1px solid rgba(52,152,219,.1);
+    }
+    .results-bar-new.vis { display:flex; }
+    .results-bar-new span { font-size:.8rem;color:rgba(255,255,255,.45); }
+    .results-bar-new strong { color:var(--primary);font-weight:700; }
+
+    /* ══ ANIMAÇÃO CARDS ══ */
+    @keyframes cardIn {
+        from { opacity:0;transform:translateY(18px) scale(.98); }
+        to   { opacity:1;transform:translateY(0) scale(1); }
+    }
+    #gallery .imovel { animation:cardIn .35s ease both; }
+    #gallery .imovel:nth-child(1){animation-delay:0ms}
+    #gallery .imovel:nth-child(2){animation-delay:55ms}
+    #gallery .imovel:nth-child(3){animation-delay:110ms}
+    #gallery .imovel:nth-child(4){animation-delay:165ms}
+    #gallery .imovel:nth-child(5){animation-delay:220ms}
+    #gallery .imovel:nth-child(6){animation-delay:275ms}
+
+    @media(max-width:600px){
+        .region-cards{grid-template-columns:1fr;}
+        .filtros-extras{flex-direction:column;align-items:stretch;}
+        .fx-divider{display:none;}
+        #btn-clear-all{margin-left:0;width:100%;justify-content:center;}
+    }
+    </style>
 </head>
 <body class="imoveis-page">
     <header>
@@ -67,49 +270,100 @@
                 <li><a href="contato.html">Contato</a></li>
             </ul>
             <div class="menu-toggle" aria-label="Menu" role="button" tabindex="0">
-                <span></span>
-                <span></span>
-                <span></span>
+                <span></span><span></span><span></span>
             </div>
         </nav>
     </header>
 
     <main>
-        <section class="filters fade-in">
-            <h2>Filtrar Imóveis</h2>
-            <div class="search-text-wrap">
-                <i class="fas fa-search search-icon" aria-hidden="true"></i>
-                <input type="text" id="busca-texto" placeholder="Buscar por título, bairro, tipo..." autocomplete="off" aria-label="Buscar imóveis">
+        <!-- HERO -->
+        <div class="imoveis-hero fade-in">
+            <h1>Encontre seu Imóvel</h1>
+            <p>Imóveis de alto padrão na Zona Sul e Barra — do studio à cobertura de luxo.</p>
+            <div class="imoveis-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="busca-texto-top" placeholder="Buscar por título, bairro, tipo..." autocomplete="off" aria-label="Buscar imóveis">
             </div>
-            <div class="filter-container">
-                <div class="filter-group fade-in delay-1">
-                    <label for="bairro">Bairro:</label>
-                    <select id="bairro" aria-label="Filtrar por bairro">
+        </div>
+
+        <!-- FILTROS -->
+        <div class="filtros-section fade-in delay-1">
+
+            <div class="filtros-label"><i class="fas fa-filter" style="font-size:.6rem"></i> Filtrar por Região</div>
+
+            <!-- Region Cards -->
+            <div class="region-cards">
+                <!-- Zona Sul -->
+                <div class="region-card zona-sul" id="card-zona-sul" onclick="toggleRegion('zona-sul')">
+                    <img class="rc-bg" src="https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg" alt="" loading="lazy">
+                    <div class="rc-header">
+                        <div class="rc-icon"><i class="fas fa-umbrella-beach"></i></div>
+                        <div class="rc-count">
+                            <span class="rc-count-num" id="count-zona-sul">—</span>
+                            <span>imóveis</span>
+                        </div>
+                    </div>
+                    <div class="rc-title">Zona Sul</div>
+                    <div class="rc-bairros" id="chips-zona-sul">
+                        <span class="rc-chip" data-bairro="Ipanema" onclick="selectBairroChip(event,'Ipanema')">Ipanema</span>
+                        <span class="rc-chip" data-bairro="Leblon" onclick="selectBairroChip(event,'Leblon')">Leblon</span>
+                        <span class="rc-chip" data-bairro="Copacabana" onclick="selectBairroChip(event,'Copacabana')">Copacabana</span>
+                        <span class="rc-chip" data-bairro="Botafogo" onclick="selectBairroChip(event,'Botafogo')">Botafogo</span>
+                        <span class="rc-chip" data-bairro="Flamengo" onclick="selectBairroChip(event,'Flamengo')">Flamengo</span>
+                    </div>
+                </div>
+
+                <!-- Barra & Recreio -->
+                <div class="region-card barra-recreio" id="card-barra-recreio" onclick="toggleRegion('barra-recreio')">
+                    <img class="rc-bg" src="https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg" alt="" loading="lazy">
+                    <div class="rc-header">
+                        <div class="rc-icon"><i class="fas fa-city"></i></div>
+                        <div class="rc-count">
+                            <span class="rc-count-num" id="count-barra-recreio">—</span>
+                            <span>imóveis</span>
+                        </div>
+                    </div>
+                    <div class="rc-title">Barra &amp; Recreio</div>
+                    <div class="rc-bairros" id="chips-barra-recreio">
+                        <span class="rc-chip" data-bairro="Barra da Tijuca" onclick="selectBairroChip(event,'Barra da Tijuca')">Barra da Tijuca</span>
+                        <span class="rc-chip" data-bairro="Barra Olímpica" onclick="selectBairroChip(event,'Barra Olímpica')">Barra Olímpica</span>
+                        <span class="rc-chip" data-bairro="Recreio dos Bandeirantes" onclick="selectBairroChip(event,'Recreio dos Bandeirantes')">Recreio</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bairros direto -->
+            <div class="bairros-direct-label">Ou escolha o bairro</div>
+            <div class="bairros-chips-row" id="bairros-chips-row">
+                <!-- Populado pelo JS após carregar imóveis -->
+            </div>
+
+            <!-- Filtros extras -->
+            <div class="filtros-extras">
+                <div class="fx-group">
+                    <label>Quartos</label>
+                    <select id="quartos">
                         <option value="">Todos</option>
+                        <option value="1">1 quarto</option>
+                        <option value="2">2 quartos</option>
+                        <option value="3">3 quartos</option>
+                        <option value="4">4+ quartos</option>
                     </select>
                 </div>
-                <div class="filter-group fade-in delay-2">
-                    <label for="quartos">Quartos:</label>
-                    <select id="quartos" aria-label="Filtrar por quartos">
-                        <option value="">Todos</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4+</option>
+                <div class="fx-divider"></div>
+                <div class="fx-group">
+                    <label>Preço</label>
+                    <select id="preco">
+                        <option value="">Qualquer</option>
+                        <option value="0-600000">Até R$ 600k</option>
+                        <option value="600001-1000000">R$ 600k – 1M</option>
+                        <option value="1000001+">Acima R$ 1M</option>
                     </select>
                 </div>
-                <div class="filter-group fade-in delay-3">
-                    <label for="preco">Faixa de Preço (R$):</label>
-                    <select id="preco" aria-label="Filtrar por preço">
-                        <option value="">Todos</option>
-                        <option value="0-600000">Até R$ 600.000</option>
-                        <option value="600001-1000000">R$ 600k – R$ 1M</option>
-                        <option value="1000001+">Acima de R$ 1M</option>
-                    </select>
-                </div>
-                <div class="filter-group fade-in delay-4">
-                    <label for="tipo">Tipo:</label>
-                    <select id="tipo" aria-label="Filtrar por tipo">
+                <div class="fx-divider"></div>
+                <div class="fx-group">
+                    <label>Tipo</label>
+                    <select id="tipo">
                         <option value="">Todos</option>
                         <option value="Apartamento">Apartamento</option>
                         <option value="Casa">Casa</option>
@@ -117,142 +371,71 @@
                         <option value="Comercial">Comercial</option>
                     </select>
                 </div>
-                <div class="filter-group fade-in delay-4">
-                    <label for="ordenar">Ordenar por:</label>
-                    <select id="ordenar" aria-label="Ordenar resultados">
-                        <option value="destaque">Destaques primeiro</option>
+                <div class="fx-divider"></div>
+                <div class="fx-group">
+                    <label>Ordenar</label>
+                    <select id="ordenar">
+                        <option value="destaque">Destaques</option>
                         <option value="recentes">Mais recentes</option>
                         <option value="menor-preco">Menor preço</option>
                         <option value="maior-preco">Maior preço</option>
                         <option value="maior-area">Maior área</option>
                     </select>
                 </div>
-            </div>
-            <div class="filter-extra-row">
-                <label class="checkbox-label">
+                <div class="fx-divider"></div>
+                <label class="fx-toggle">
                     <input type="checkbox" id="mostrar-vendidos">
-                    <span>Mostrar vendidos / alugados</span>
+                    Mostrar vendidos
                 </label>
+                <button id="btn-clear-all" onclick="limparFiltros()">
+                    <i class="fas fa-times"></i> Limpar
+                </button>
             </div>
-        </section>
 
-        <!-- Barra de resultados -->
-        <div id="results-bar" class="results-bar" style="display:none;" role="status" aria-live="polite">
-            <span id="results-count"></span>
-            <button id="btn-limpar-filtros" onclick="limparFiltros()" style="display:none;" aria-label="Limpar filtros">
-                <i class="fas fa-times-circle" aria-hidden="true"></i> Limpar filtros
-            </button>
+            <!-- Results bar -->
+            <div class="results-bar-new" id="results-bar-new">
+                <span id="results-text-new">Carregando...</span>
+            </div>
         </div>
 
-        <!-- Skeleton loaders — visíveis enquanto carrega -->
+        <!-- Skeleton -->
         <section class="gallery skeleton-gallery" id="gallery-skeleton" aria-hidden="true">
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
-            <div class="imovel-skeleton">
-                <div class="skel-img"></div>
-                <div class="skel-body">
-                    <div class="skel-line skel-title"></div>
-                    <div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div><div class="skel-tag"></div></div>
-                    <div class="skel-line skel-price"></div>
-                    <div class="skel-line skel-desc"></div>
-                    <div class="skel-line skel-desc short"></div>
-                </div>
-            </div>
+            <div class="imovel-skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line skel-title"></div><div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div></div><div class="skel-line skel-price"></div><div class="skel-line skel-desc"></div><div class="skel-line skel-desc short"></div></div></div>
+            <div class="imovel-skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line skel-title"></div><div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div></div><div class="skel-line skel-price"></div><div class="skel-line skel-desc"></div><div class="skel-line skel-desc short"></div></div></div>
+            <div class="imovel-skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line skel-title"></div><div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div></div><div class="skel-line skel-price"></div><div class="skel-line skel-desc"></div><div class="skel-line skel-desc short"></div></div></div>
+            <div class="imovel-skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line skel-title"></div><div class="skel-tags"><div class="skel-tag"></div><div class="skel-tag"></div></div><div class="skel-line skel-price"></div><div class="skel-line skel-desc"></div><div class="skel-line skel-desc short"></div></div></div>
         </section>
 
-        <section class="gallery" id="gallery" style="display:none;">
-            <!-- Galeria populada pelo JS -->
-        </section>
+        <section class="gallery" id="gallery" style="display:none;"></section>
     </main>
 
-    <!-- MODAL SAIBA MAIS -->
+    <!-- MODAL -->
     <div class="modal-overlay" id="imovel-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-container">
-            <button class="modal-close" onclick="closeModal()" aria-label="Fechar modal">
-                <i class="fas fa-times" aria-hidden="true"></i>
-            </button>
+            <button class="modal-close" onclick="closeModal()" aria-label="Fechar modal"><i class="fas fa-times"></i></button>
             <div class="modal-gallery">
                 <div class="modal-main-photo-wrap">
-                    <img id="modal-main-photo" src="" alt="Foto principal do imóvel" loading="lazy" decoding="async">
-                    <button class="modal-nav modal-prev" onclick="prevPhoto()" aria-label="Foto anterior">
-                        <i class="fas fa-chevron-left" aria-hidden="true"></i>
-                    </button>
-                    <button class="modal-nav modal-next" onclick="nextPhoto()" aria-label="Próxima foto">
-                        <i class="fas fa-chevron-right" aria-hidden="true"></i>
-                    </button>
-                    <div class="modal-photo-counter" id="modal-photo-counter" aria-live="polite">1 / 1</div>
+                    <img id="modal-main-photo" src="" alt="Foto principal" loading="lazy" decoding="async">
+                    <button class="modal-nav modal-prev" onclick="prevPhoto()"><i class="fas fa-chevron-left"></i></button>
+                    <button class="modal-nav modal-next" onclick="nextPhoto()"><i class="fas fa-chevron-right"></i></button>
+                    <div class="modal-photo-counter" id="modal-photo-counter">1 / 1</div>
                 </div>
                 <div class="modal-thumbs" id="modal-thumbs"></div>
             </div>
             <div class="modal-info">
                 <h2 id="modal-title"></h2>
-                <div class="modal-tags" id="modal-tags">
-                    <span class="modal-tag"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> <span id="modal-bairro"></span></span>
-                    <span class="modal-tag"><i class="fas fa-bed" aria-hidden="true"></i> <span id="modal-quartos"></span> quartos</span>
-                    <span class="modal-tag"><i class="fas fa-ruler-combined" aria-hidden="true"></i> <span id="modal-area"></span></span>
-                </div>
+                <div class="modal-tags" id="modal-tags"></div>
                 <p class="modal-preco" id="modal-preco"></p>
                 <p class="modal-descricao" id="modal-descricao"></p>
                 <div class="modal-cta-group">
-                    <a href="https://wa.me/5521981424469" id="modal-whatsapp" class="modal-cta" target="_blank" rel="noopener noreferrer">
-                        <i class="fab fa-whatsapp" aria-hidden="true"></i>
-                        <span>Tenho Interesse</span>
+                    <a href="https://wa.me/5521981424469" id="modal-whatsapp" class="modal-cta" target="_blank" rel="noopener">
+                        <i class="fab fa-whatsapp"></i><span>Tenho Interesse</span>
                     </a>
                     <a href="contato.html" class="modal-cta modal-cta-contato">
-                        <i class="fas fa-address-card" aria-hidden="true"></i>
-                        <span>Ver Contatos</span>
+                        <i class="fas fa-address-card"></i><span>Ver Contatos</span>
                     </a>
-                    <button id="modal-share-btn" class="modal-cta modal-cta-share" aria-label="Compartilhar imóvel">
-                        <i class="fas fa-share-alt" aria-hidden="true"></i>
-                        <span>Compartilhar</span>
+                    <button id="modal-share-btn" class="modal-cta modal-cta-share">
+                        <i class="fas fa-share-alt"></i><span>Compartilhar</span>
                     </button>
                 </div>
             </div>
@@ -260,78 +443,36 @@
     </div>
 
     <!-- Lightbox -->
-    <div id="lightbox-overlay" role="dialog" aria-modal="true" aria-label="Visualizador de fotos">
-        <img id="lb-img" src="" alt="Foto em tela cheia">
-        <button class="lb-close" onclick="closeLightbox()" aria-label="Fechar">
-            <i class="fas fa-times" aria-hidden="true"></i>
-        </button>
-        <button class="lb-prev" onclick="lbPrev()" aria-label="Anterior">
-            <i class="fas fa-chevron-left" aria-hidden="true"></i>
-        </button>
-        <button class="lb-next" onclick="lbNext()" aria-label="Próximo">
-            <i class="fas fa-chevron-right" aria-hidden="true"></i>
-        </button>
-        <div class="lb-counter" id="lb-counter" aria-live="polite">1 / 1</div>
+    <div id="lightbox-overlay" role="dialog" aria-modal="true">
+        <img id="lb-img" src="" alt="Foto ampliada">
+        <button class="lb-close" onclick="closeLightbox()"><i class="fas fa-times"></i></button>
+        <button class="lb-prev" onclick="lbPrev()"><i class="fas fa-chevron-left"></i></button>
+        <button class="lb-next" onclick="lbNext()"><i class="fas fa-chevron-right"></i></button>
+        <div class="lb-counter" id="lb-counter">1 / 1</div>
     </div>
 
-    <!-- Scroll to top -->
     <button id="scroll-top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Voltar ao topo">
-        <i class="fas fa-arrow-up" aria-hidden="true"></i>
+        <i class="fas fa-arrow-up"></i>
     </button>
 
-    <!-- Footer Rico -->
     <footer class="footer-rich">
         <div class="footer-grid">
             <div class="footer-brand">
-                <div class="footer-logo">
-                    <span class="logo-text">LB</span>
-                    <span class="footer-logo-name">Leandro Bomfim</span>
-                </div>
+                <div class="footer-logo"><span class="logo-text">LB</span><span class="footer-logo-name">Leandro Bomfim</span></div>
                 <p class="footer-tagline">Corretor especialista em imóveis de alto padrão no Rio de Janeiro. CRECI-RJ 123456-F.</p>
                 <div class="footer-socials">
-                    <a href="https://wa.me/5521981424469" target="_blank" rel="noopener" aria-label="WhatsApp" class="footer-social-link">
-                        <i class="fab fa-whatsapp"></i>
-                    </a>
-                    <a href="https://instagram.com/leopbomfim" target="_blank" rel="noopener" aria-label="Instagram" class="footer-social-link">
-                        <i class="fab fa-instagram"></i>
-                    </a>
-                    <a href="mailto:leandromorenno007@gmail.com" aria-label="E-mail" class="footer-social-link">
-                        <i class="fas fa-envelope"></i>
-                    </a>
+                    <a href="https://wa.me/5521981424469" target="_blank" rel="noopener" class="footer-social-link"><i class="fab fa-whatsapp"></i></a>
+                    <a href="https://instagram.com/leopbomfim" target="_blank" rel="noopener" class="footer-social-link"><i class="fab fa-instagram"></i></a>
+                    <a href="mailto:leandromorenno007@gmail.com" class="footer-social-link"><i class="fas fa-envelope"></i></a>
                 </div>
             </div>
-            <div class="footer-links">
-                <h4>Navegação</h4>
-                <ul>
-                    <li><a href="index.html">Início</a></li>
-                    <li><a href="imoveis.html">Imóveis</a></li>
-                    <li><a href="contato.html">Contato</a></li>
-                </ul>
-            </div>
-            <div class="footer-links">
-                <h4>Regiões</h4>
-                <ul>
-                    <li><span>Ipanema</span></li>
-                    <li><span>Leblon</span></li>
-                    <li><span>Barra da Tijuca</span></li>
-                    <li><span>Recreio dos Bandeirantes</span></li>
-                    <li><span>Copacabana</span></li>
-                </ul>
-            </div>
+            <div class="footer-links"><h4>Navegação</h4><ul><li><a href="index.html">Início</a></li><li><a href="imoveis.html">Imóveis</a></li><li><a href="contato.html">Contato</a></li></ul></div>
+            <div class="footer-links"><h4>Regiões</h4><ul><li><span>Ipanema</span></li><li><span>Leblon</span></li><li><span>Barra da Tijuca</span></li><li><span>Recreio dos Bandeirantes</span></li><li><span>Copacabana</span></li></ul></div>
             <div class="footer-contact">
                 <h4>Contato</h4>
-                <a href="https://wa.me/5521981424469" class="footer-contact-item" target="_blank" rel="noopener">
-                    <i class="fab fa-whatsapp"></i>
-                    <span>(21) 98142-4469</span>
-                </a>
-                <a href="mailto:leandromorenno007@gmail.com" class="footer-contact-item">
-                    <i class="fas fa-envelope"></i>
-                    <span>leandromorenno007@gmail.com</span>
-                </a>
-                <a href="https://instagram.com/leopbomfim" class="footer-contact-item" target="_blank" rel="noopener">
-                    <i class="fab fa-instagram"></i>
-                    <span>@leopbomfim</span>
-                </a>
+                <a href="https://wa.me/5521981424469" class="footer-contact-item" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i><span>(21) 98142-4469</span></a>
+                <a href="mailto:leandromorenno007@gmail.com" class="footer-contact-item"><i class="fas fa-envelope"></i><span>leandromorenno007@gmail.com</span></a>
+                <a href="https://instagram.com/leopbomfim" class="footer-contact-item" target="_blank" rel="noopener"><i class="fab fa-instagram"></i><span>@leopbomfim</span></a>
             </div>
         </div>
         <div class="footer-bottom">
@@ -340,16 +481,13 @@
         </div>
     </footer>
 
-    <!-- Botão Flutuante WhatsApp -->
     <a href="https://wa.me/5521981424469?text=Olá%20Leandro!%20Tenho%20interesse%20em%20imóveis.%20Pode%20me%20ajudar%3F"
-       class="whatsapp-float" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp">
-        <div class="whatsapp-float-inner">
-            <i class="fab fa-whatsapp" aria-hidden="true"></i>
-            <span class="whatsapp-float-label">Falar com Leandro</span>
-        </div>
+       class="whatsapp-float" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
+        <div class="whatsapp-float-inner"><i class="fab fa-whatsapp"></i><span class="whatsapp-float-label">Falar com Leandro</span></div>
         <span class="whatsapp-float-pulse"></span>
     </a>
 
     <script src="script.js"></script>
+    <script src="chat-widget.js"></script>
 </body>
 </html>
