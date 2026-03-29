@@ -83,6 +83,10 @@
                 <a href="#" class="nav-item" data-section="perfil">
                     <i class="fas fa-users"></i><span>Perfil de Visitante</span>
                 </a>
+                <a href="#" class="nav-item" data-section="chat-logs">
+                    <i class="fas fa-comments"></i><span>Logs do Chat</span>
+                    <span class="nav-badge" id="badge-chat-logs" style="display:none;background:var(--purple)">0</span>
+                </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
                 <a href="#" class="nav-item" data-section="seguranca">
                     <i class="fas fa-shield-alt"></i><span>Segurança</span>
@@ -399,6 +403,14 @@
                 <div id="perfil-content"></div>
             </section>
 
+            <!-- LOGS DO CHAT -->
+            <section id="section-chat-logs" class="admin-section">
+                <div id="chat-logs-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--purple);"></span> Carregando logs...
+                </div>
+                <div id="chat-logs-content"></div>
+            </section>
+
             <!-- CONFIG. DO SITE -->
             <section id="section-site" class="admin-section">
                 <div id="site-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
@@ -493,6 +505,10 @@
                 <button class="mobile-more-item" onclick="mobileNavMore('perfil')">
                     <span class="mobile-more-icon purple"><i class="fas fa-users"></i></span>
                     <span>Visitantes</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('chat-logs')">
+                    <span class="mobile-more-icon" style="background:rgba(168,85,247,.15);color:var(--purple);"><i class="fas fa-comments"></i></span>
+                    <span>Chat Logs</span>
                 </button>
                 <button class="mobile-more-item" onclick="mobileNavMore('seguranca')">
                     <span class="mobile-more-icon" style="background:rgba(239,68,68,.15);color:var(--red);"><i class="fas fa-shield-alt"></i></span>
