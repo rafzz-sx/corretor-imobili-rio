@@ -26,7 +26,11 @@ const filtroState = {
 // Mapa de bairros por região
 const REGIOES = {
     'zona-sul': ['Ipanema','Leblon','Copacabana','Botafogo','Flamengo'],
-    'barra-recreio': ['Barra da Tijuca','Barra Olímpica','Recreio dos Bandeirantes'],
+    'barra-recreio': [
+        'Barra da Tijuca','Barra Olímpica','Recreio dos Bandeirantes',
+        'Jacarepaguá','Vargem Grande','Vargem Pequena',
+        'Pedra de Guaratiba','Grumari','Camorim','Taquara','Curicica',
+    ],
 };
 
 // ══════════════════════════════════════════════════════════
@@ -459,7 +463,11 @@ function renderGallery(lista, containerId = 'gallery') {
     }
 
     gallery.innerHTML = lista.map(imo => {
-        const preco = parseFloat(imo.preco).toLocaleString('pt-BR');
+        const isTerreno = imo.tipo === 'Terreno';
+        const precoNum = parseFloat(imo.preco).toLocaleString('pt-BR');
+        const precoLabel = (isTerreno && imo.precoTipo === 'por_m2')
+            ? `R$ ${precoNum}/m²`
+            : `R$ ${precoNum}`;
         const isFav = isFavorito(imo.id);
 
         let statusBadge = '';
@@ -467,11 +475,24 @@ function renderGallery(lista, containerId = 'gallery') {
         else if (imo.status === 'alugado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--primary);color:var(--primary);"><i class="fas fa-key"></i> Alugado</div>';
         else if (imo.status === 'reservado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--warning);color:var(--warning);"><i class="fas fa-clock"></i> Reservado</div>';
 
+        // Tags adaptadas por tipo
+        let detailTags = `<span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
+        if (isTerreno) {
+            if (imo.frente) detailTags += `<span class="detail-tag"><i class="fas fa-arrows-alt-h"></i> ${imo.frente}m frente</span>`;
+            if (imo.zoneamento) detailTags += `<span class="detail-tag"><i class="fas fa-layer-group"></i> ${imo.zoneamento}</span>`;
+            if (imo.topografia) detailTags += `<span class="detail-tag"><i class="fas fa-mountain"></i> ${imo.topografia}</span>`;
+            if (imo.localidade) detailTags += `<span class="detail-tag"><i class="fas fa-map-pin"></i> ${imo.localidade}</span>`;
+        } else {
+            if (imo.quartos) detailTags += `<span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} qto${imo.quartos > 1 ? 's' : ''}</span>`;
+            if (imo.vagas) detailTags += `<span class="detail-tag"><i class="fas fa-car"></i> ${imo.vagas}</span>`;
+        }
+        if (imo.tipo) detailTags += `<span class="detail-tag">${imo.tipo}</span>`;
+
         return `
             <div class="imovel" onclick="openModal('${imo.id}')">
                 <div class="imovel-img-wrap">
                     <img src="${imo.imagem}" alt="${imo.titulo}" loading="lazy"
-                         onerror="this.src='https://via.placeholder.com/400x300/1a1a2e/fff?text=Imóvel'">
+                         onerror="this.src='https://via.placeholder.com/400x300/1a1a2e/fff?text=${isTerreno?'Terreno':'Imóvel'}'">
                     <button class="favorito-btn ${isFav?'favorito-ativo':''}"
                             data-id="${imo.id}"
                             onclick="toggleFavorito('${imo.id}', event)">
@@ -486,14 +507,10 @@ function renderGallery(lista, containerId = 'gallery') {
                 </div>
                 <div class="imovel-content">
                     <h3>${imo.titulo}</h3>
-                    <div class="imovel-details-row">
-                        <span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>
-                        <span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} qto${imo.quartos > 1 ? 's' : ''}</span>
-                        ${imo.vagas ? `<span class="detail-tag"><i class="fas fa-car"></i> ${imo.vagas}</span>` : ''}
-                        ${imo.tipo ? `<span class="detail-tag">${imo.tipo}</span>` : ''}
-                    </div>
-                    <p class="imovel-preco">R$ ${preco}</p>
-                    ${imo.condominio ? `<p class="imovel-condominio"><small>Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}/mês</small></p>` : ''}
+                    <div class="imovel-details-row">${detailTags}</div>
+                    <p class="imovel-preco">${precoLabel}</p>
+                    ${(!isTerreno && imo.condominio) ? `<p class="imovel-condominio"><small>Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}/mês</small></p>` : ''}
+                    ${(isTerreno && imo.iptu) ? `<p class="imovel-condominio"><small>IPTU R$ ${imo.iptu.toLocaleString('pt-BR')}/ano</small></p>` : ''}
                     <p class="imovel-desc">${imo.descricao}</p>
                     <button class="btn-saiba-mais" onclick="openModal('${imo.id}');event.stopPropagation()">
                         <span>Saiba Mais</span><i class="fas fa-arrow-right"></i>
@@ -533,18 +550,29 @@ function openModal(imovelId) {
     currentPhotoIndex = 0;
 
     safeText('modal-title', imo.titulo);
-    safeText('modal-preco', 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR'));
     safeText('modal-descricao', imo.descricao);
 
     // Tags
     const tags = safeEl('modal-tags');
+    const isTerreno = imo.tipo === 'Terreno';
+    const precoLabel = (isTerreno && imo.precoTipo === 'por_m2')
+        ? 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR') + '/m²'
+        : 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR');
+    safeText('modal-preco', precoLabel);
     if (tags) {
-        let html = `
-            <span class="modal-tag"><i class="fas fa-map-marker-alt"></i> ${imo.bairro}</span>
-            <span class="modal-tag"><i class="fas fa-bed"></i> ${imo.quartos} quartos</span>
-            <span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
-        if (imo.vagas) html += `<span class="modal-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas>1?'s':''}</span>`;
-        if (imo.condominio) html += `<span class="modal-tag"><i class="fas fa-home"></i> Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}</span>`;
+        let html = `<span class="modal-tag"><i class="fas fa-map-marker-alt"></i> ${imo.bairro}</span>`;
+        html += `<span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
+        if (isTerreno) {
+            if (imo.frente)      html += `<span class="modal-tag"><i class="fas fa-arrows-alt-h"></i> ${imo.frente}m frente</span>`;
+            if (imo.zoneamento)  html += `<span class="modal-tag"><i class="fas fa-layer-group"></i> ${imo.zoneamento}</span>`;
+            if (imo.topografia)  html += `<span class="modal-tag"><i class="fas fa-mountain"></i> ${imo.topografia}</span>`;
+            if (imo.localidade)  html += `<span class="modal-tag"><i class="fas fa-map-pin"></i> ${imo.localidade}</span>`;
+            if (imo.iptu)        html += `<span class="modal-tag"><i class="fas fa-file-invoice-dollar"></i> IPTU R$ ${Number(imo.iptu).toLocaleString('pt-BR')}/ano</span>`;
+        } else {
+            if (imo.quartos) html += `<span class="modal-tag"><i class="fas fa-bed"></i> ${imo.quartos} quartos</span>`;
+            if (imo.vagas)   html += `<span class="modal-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas>1?'s':''}</span>`;
+            if (imo.condominio) html += `<span class="modal-tag"><i class="fas fa-home"></i> Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}</span>`;
+        }
         tags.innerHTML = html;
     }
 
