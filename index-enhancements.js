@@ -319,24 +319,56 @@
 
         if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
             try {
+                // Busca imóveis marcados como anúncio ativo
                 firebase.firestore().collection('imoveis')
                     .where('status', '==', 'disponivel')
-                    .orderBy('createdAt', 'desc').limit(6).get()
+                    .where('anuncioAtivo', '==', true)
+                    .orderBy('createdAt', 'desc').limit(8).get()
                     .then(snap => {
-                        if (snap.size > 0) {
-                            _adsData = snap.docs.map(d => {
+                        const agora = new Date().toISOString();
+                        const ativos = snap.docs.filter(d => {
+                            const exp = d.data().anuncioExpiraEm;
+                            return !exp || exp > agora; // sem prazo ou ainda válido
+                        });
+
+                        if (ativos.length > 0) {
+                            _adsData = ativos.map(d => {
                                 const data = d.data();
                                 return {
                                     id: d.id,
                                     titulo: data.titulo || 'Imóvel Disponível',
                                     bairro: data.bairro || 'Rio de Janeiro',
                                     preco: 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
-                                    quartos: data.quartos || 1,
+                                    quartos: data.quartos || 0,
                                     area: data.area || 0,
-                                    destaque: data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível'),
+                                    destaque: data.tipo === 'Terreno' ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
                                     img: data.imagem || '',
                                 };
                             });
+                        } else {
+                            // Fallback: sem anúncios configurados — usa os mais recentes disponíveis
+                            firebase.firestore().collection('imoveis')
+                                .where('status', '==', 'disponivel')
+                                .orderBy('createdAt', 'desc').limit(6).get()
+                                .then(snap2 => {
+                                    if (snap2.size > 0) {
+                                        _adsData = snap2.docs.map(d => {
+                                            const data = d.data();
+                                            return {
+                                                id: d.id,
+                                                titulo: data.titulo || 'Imóvel Disponível',
+                                                bairro: data.bairro || 'Rio de Janeiro',
+                                                preco: 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
+                                                quartos: data.quartos || 0,
+                                                area: data.area || 0,
+                                                destaque: data.tipo === 'Terreno' ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
+                                                img: data.imagem || '',
+                                            };
+                                        });
+                                    }
+                                    setTimeout(() => showAd(0), 5000);
+                                }).catch(() => setTimeout(() => showAd(0), 5000));
+                            return;
                         }
                         setTimeout(() => showAd(0), 5000);
                     })
