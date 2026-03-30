@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Administrativo - Leandro Imóveis</title>
+    <title>Painel Admin — LB Imóveis</title>
     <!-- Segurança -->
     <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="robots" content="noindex, nofollow">
+    <!-- Favicon igual ao site público -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text y='.9em' font-size='55' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text y='.9em' font-size='55' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <meta name="theme-color" content="#3b82f6">
@@ -86,10 +87,6 @@
                 <a href="#" class="nav-item" data-section="perfil">
                     <i class="fas fa-users"></i><span>Perfil de Visitante</span>
                 </a>
-                <a href="#" class="nav-item" data-section="chat-logs">
-                    <i class="fas fa-comments"></i><span>Logs do Chat</span>
-                    <span class="nav-badge" id="badge-chat-logs" style="display:none;background:var(--purple)">0</span>
-                </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
                 <a href="#" class="nav-item" data-section="seguranca">
                     <i class="fas fa-shield-alt"></i><span>Segurança</span>
@@ -165,9 +162,19 @@
                         <div class="dash-visitas-icon" style="background:var(--green-soft);color:var(--green)"><i class="fas fa-users"></i></div>
                         <div class="dash-visitas-info">
                             <span class="dash-visitas-value" id="dash-visitas-unique">—</span>
-                            <span class="dash-visitas-label">Visitantes únicos</span>
+                            <span class="dash-visitas-label">Visitantes únicos hoje</span>
                         </div>
                         <a href="#" onclick="showSection('visitas');return false;" class="dash-visitas-link">Ver relatório <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <div class="dash-visitas-card">
+                        <div class="dash-visitas-icon" style="background:rgba(34,197,94,.2);color:var(--green)">
+                            <i class="fas fa-circle" style="font-size:.65rem;animation:pulse 1.2s ease-in-out infinite;"></i>
+                        </div>
+                        <div class="dash-visitas-info">
+                            <span class="dash-visitas-value" id="dash-online-agora" style="color:var(--green);">—</span>
+                            <span class="dash-visitas-label">Online agora</span>
+                        </div>
+                        <span style="font-size:.67rem;color:var(--text-muted);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:6px;white-space:nowrap;">últimos 5 min</span>
                     </div>
                     <div class="dash-visitas-card">
                         <div class="dash-visitas-icon" style="background:var(--amber-soft);color:var(--amber)"><i class="fas fa-fire"></i></div>
@@ -239,14 +246,26 @@
                                 <label for="imovel-bairro">Bairro *</label>
                                 <select id="imovel-bairro" required>
                                     <option value="">Selecione...</option>
-                                    <option value="Ipanema">Ipanema</option>
-                                    <option value="Leblon">Leblon</option>
-                                    <option value="Barra da Tijuca">Barra da Tijuca</option>
-                                    <option value="Barra Olímpica">Barra Olímpica</option>
-                                    <option value="Recreio dos Bandeirantes">Recreio dos Bandeirantes</option>
-                                    <option value="Copacabana">Copacabana</option>
-                                    <option value="Botafogo">Botafogo</option>
-                                    <option value="Flamengo">Flamengo</option>
+                                    <optgroup label="Zona Sul">
+                                        <option value="Ipanema">Ipanema</option>
+                                        <option value="Leblon">Leblon</option>
+                                        <option value="Copacabana">Copacabana</option>
+                                        <option value="Botafogo">Botafogo</option>
+                                        <option value="Flamengo">Flamengo</option>
+                                    </optgroup>
+                                    <optgroup label="Barra &amp; Região Oeste">
+                                        <option value="Barra da Tijuca">Barra da Tijuca</option>
+                                        <option value="Barra Olímpica">Barra Olímpica</option>
+                                        <option value="Recreio dos Bandeirantes">Recreio dos Bandeirantes</option>
+                                        <option value="Jacarepaguá">Jacarepaguá</option>
+                                        <option value="Vargem Grande">Vargem Grande</option>
+                                        <option value="Vargem Pequena">Vargem Pequena</option>
+                                        <option value="Pedra de Guaratiba">Pedra de Guaratiba</option>
+                                        <option value="Grumari">Grumari</option>
+                                        <option value="Camorim">Camorim</option>
+                                        <option value="Taquara">Taquara</option>
+                                        <option value="Curicica">Curicica</option>
+                                    </optgroup>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -262,6 +281,7 @@
                                     <option value="Casa">Casa</option>
                                     <option value="Cobertura">Cobertura</option>
                                     <option value="Comercial">Comercial</option>
+                                    <option value="Terreno">🏗️ Terreno</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -284,7 +304,7 @@
                                 <input type="text" id="imovel-preco" placeholder="850.000" required>
                             </div>
                         </div>
-                        <div class="form-row three-columns">
+                        <div class="form-row">
                             <div class="form-group">
                                 <label for="imovel-vagas">Vagas</label>
                                 <input type="number" id="imovel-vagas" min="0" max="10" placeholder="0" value="0">
@@ -296,6 +316,85 @@
                             <div class="form-group">
                                 <label for="imovel-iptu">IPTU (R$/mês)</label>
                                 <input type="number" id="imovel-iptu" min="0" placeholder="0" value="0">
+                            </div>
+                        </div>
+
+                        <!-- CAMPOS ESPECÍFICOS DE TERRENO (ocultos por padrão) -->
+                        <div id="terreno-fields" style="display:none;">
+                            <div style="padding:.6rem .9rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-sm);margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--amber);">
+                                <i class="fas fa-drafting-compass"></i> Campos específicos para Terreno
+                            </div>
+                            <div class="form-row three-columns">
+                                <div class="form-group">
+                                    <label for="imovel-frente">Frente / Testada (m)</label>
+                                    <input type="number" id="imovel-frente" min="0" step="0.1" placeholder="Ex: 15">
+                                </div>
+                                <div class="form-group">
+                                    <label for="imovel-zoneamento">Zoneamento</label>
+                                    <select id="imovel-zoneamento">
+                                        <option value="">Não especificado</option>
+                                        <option value="Residencial">Residencial</option>
+                                        <option value="Comercial">Comercial</option>
+                                        <option value="Misto">Misto</option>
+                                        <option value="Rural">Rural</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="imovel-topografia">Topografia</label>
+                                    <select id="imovel-topografia">
+                                        <option value="">Não especificado</option>
+                                        <option value="Plano">Plano</option>
+                                        <option value="Aclive">Aclive</option>
+                                        <option value="Declive">Declive</option>
+                                        <option value="Irregular">Irregular</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row two-columns">
+                                <div class="form-group">
+                                    <label for="imovel-localidade">Localidade / Referência</label>
+                                    <input type="text" id="imovel-localidade" placeholder="Ex: Próximo à praia, Condomínio X...">
+                                    <small>Ponto de referência ou localização dentro do bairro</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="imovel-preco-tipo">Tipo de preço</label>
+                                    <select id="imovel-preco-tipo">
+                                        <option value="total">Preço total</option>
+                                        <option value="por_m2">Preço por m²</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="imovel-iptu-terreno">IPTU anual (R$)</label>
+                                    <input type="number" id="imovel-iptu-terreno" min="0" placeholder="0" value="0">
+                                    <small>IPTU anual do terreno (exibido ao visitante)</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ANÚNCIO FLUTUANTE -->
+                        <div style="padding:.6rem .9rem;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:var(--radius-sm);margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--accent);">
+                            <i class="fas fa-bullhorn"></i> Configuração de Anúncio Flutuante (página inicial)
+                        </div>
+                        <div class="form-row two-columns">
+                            <div class="form-group">
+                                <label for="imovel-anuncio-ativo">Exibir como anúncio flutuante?</label>
+                                <select id="imovel-anuncio-ativo">
+                                    <option value="false">Não exibir</option>
+                                    <option value="true">✅ Sim — exibir no carrossel</option>
+                                </select>
+                                <small>Aparece no card flutuante da página inicial</small>
+                            </div>
+                            <div class="form-group" id="anuncio-duracao-wrap" style="display:none;">
+                                <label for="imovel-anuncio-duracao">Duração do anúncio</label>
+                                <select id="imovel-anuncio-duracao">
+                                    <option value="7">7 dias</option>
+                                    <option value="14">14 dias</option>
+                                    <option value="30">30 dias</option>
+                                    <option value="60">60 dias</option>
+                                    <option value="0">Sem prazo (permanente)</option>
+                                </select>
                             </div>
                         </div>
                         <div class="form-row">
@@ -406,14 +505,6 @@
                 <div id="perfil-content"></div>
             </section>
 
-            <!-- LOGS DO CHAT -->
-            <section id="section-chat-logs" class="admin-section">
-                <div id="chat-logs-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
-                    <span class="loading" style="border-top-color:var(--purple);"></span> Carregando logs...
-                </div>
-                <div id="chat-logs-content"></div>
-            </section>
-
             <!-- CONFIG. DO SITE -->
             <section id="section-site" class="admin-section">
                 <div id="site-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
@@ -508,10 +599,6 @@
                 <button class="mobile-more-item" onclick="mobileNavMore('perfil')">
                     <span class="mobile-more-icon purple"><i class="fas fa-users"></i></span>
                     <span>Visitantes</span>
-                </button>
-                <button class="mobile-more-item" onclick="mobileNavMore('chat-logs')">
-                    <span class="mobile-more-icon" style="background:rgba(168,85,247,.15);color:var(--purple);"><i class="fas fa-comments"></i></span>
-                    <span>Chat Logs</span>
                 </button>
                 <button class="mobile-more-item" onclick="mobileNavMore('seguranca')">
                     <span class="mobile-more-icon" style="background:rgba(239,68,68,.15);color:var(--red);"><i class="fas fa-shield-alt"></i></span>
