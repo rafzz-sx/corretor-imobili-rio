@@ -21,6 +21,7 @@ const FAVORITOS_KEY = '_lb_favoritos';
 const filtroState = {
     region: null,      // 'zona-sul' | 'barra-recreio' | null
     bairro: null,      // nome exato do bairro ou null
+    tipo: null,        // 'Terreno' | null (para filtro rápido por tipo)
 };
 
 // Mapa de bairros por região
@@ -240,7 +241,28 @@ function atualizarContadoresRegiao() {
     safeText('count-zona-sul', cZS);
     safeText('count-barra-recreio', cBR);
 
-    // Atualiza chips dentro dos cards com contagem individual
+    // Conta terrenos
+    const terrenos = lista.filter(i => i.tipo === 'Terreno');
+    safeText('count-terrenos', terrenos.length);
+
+    // Popula chips dos bairros dos terrenos dinamicamente
+    const chipsTerrenos = safeEl('chips-terrenos');
+    if (chipsTerrenos) {
+        const bairrosTerrenos = [...new Set(terrenos.map(i => i.bairro))].filter(Boolean);
+        chipsTerrenos.innerHTML = bairrosTerrenos.map(b =>
+            `<span class="rc-chip" data-bairro="${b}" onclick="selectBairroChip(event,'${b.replace(/'/g,"\\'")}')">
+                ${b}
+            </span>`
+        ).join('');
+    }
+
+    // Mostra/oculta card de terrenos
+    const cardTerrenos = safeEl('card-terrenos');
+    if (cardTerrenos) {
+        cardTerrenos.style.display = terrenos.length > 0 ? '' : 'none';
+    }
+
+    // Atualiza chips dentro dos cards de região
     ['zona-sul','barra-recreio'].forEach(reg => {
         const container = safeEl('chips-' + reg);
         if (!container) return;
@@ -248,7 +270,6 @@ function atualizarContadoresRegiao() {
             const bairroNome = chip.dataset.bairro;
             if (!bairroNome) return;
             const n = lista.filter(i => i.bairro === bairroNome).length;
-            // Mostra contagem discreta no chip
             chip.title = `${n} imóve${n!==1?'is':'l'}`;
         });
     });
@@ -323,12 +344,40 @@ function selectBairro(bairro) {
     aplicarFiltros();
 }
 
+// ── Filtro rápido por tipo (ex: Terreno) ──
+function toggleTipo(tipo) {
+    const sel = safeEl('tipo');
+    if (!sel) return;
+    if (filtroState.tipo === tipo) {
+        // Desativa
+        filtroState.tipo = null;
+        sel.value = '';
+        const card = safeEl('card-terrenos');
+        if (card) card.classList.remove('active');
+    } else {
+        // Ativa
+        filtroState.tipo = tipo;
+        sel.value = tipo;
+        // Limpa filtros de região ao selecionar terrenos
+        filtroState.region = null;
+        filtroState.bairro = null;
+        syncRegionUI();
+        const card = safeEl('card-terrenos');
+        if (card) card.classList.add('active');
+    }
+    aplicarFiltros();
+}
+
 function syncRegionUI() {
     // Cards de região
     ['zona-sul','barra-recreio'].forEach(reg => {
         const card = safeEl('card-' + reg);
         if (card) card.classList.toggle('active', filtroState.region === reg);
     });
+
+    // Card terrenos: ativo quando filtroState.tipo === 'Terreno'
+    const cardTerrenos = safeEl('card-terrenos');
+    if (cardTerrenos) cardTerrenos.classList.toggle('active', filtroState.tipo === 'Terreno');
 
     // Chips dentro dos cards de região
     document.querySelectorAll('.rc-chip').forEach(chip => {
@@ -359,7 +408,9 @@ function ordenarImoveis(lista, criterio) {
 function aplicarFiltros() {
     const quartos = safeEl('quartos')?.value || '';
     const preco   = safeEl('preco')?.value || '';
-    const tipo    = safeEl('tipo')?.value || '';
+    // tipo: usa o select OU o filtroState.tipo (card terrenos) — select tem precedência se preenchido
+    const tipoSelect = safeEl('tipo')?.value || '';
+    const tipoFiltro = tipoSelect || filtroState.tipo || '';
     const ordem   = safeEl('ordenar')?.value || 'destaque';
     const vendidos= safeEl('mostrar-vendidos')?.checked;
     const busca   = (safeEl('busca-texto-top')?.value || '').toLowerCase().trim();
@@ -367,7 +418,7 @@ function aplicarFiltros() {
     let filtrados = imoveis.filter(imo => {
         if (!vendidos && (imo.status === 'vendido' || imo.status === 'alugado')) return false;
 
-        // Filtro de região/bairro
+        // Filtro de região/bairro (ignorado quando filtrando por tipo terreno sem bairro específico)
         if (filtroState.bairro) {
             if (imo.bairro !== filtroState.bairro) return false;
         } else if (filtroState.region) {
@@ -375,7 +426,7 @@ function aplicarFiltros() {
         }
 
         const matchQ = !quartos || (quartos === '4' ? parseInt(imo.quartos) >= 4 : String(imo.quartos) === quartos);
-        const matchT = !tipo || imo.tipo === tipo;
+        const matchT = !tipoFiltro || imo.tipo === tipoFiltro;
         const matchB = !busca || [imo.titulo,imo.bairro,imo.descricao,imo.tipo].some(v=>(v||'').toLowerCase().includes(busca));
 
         let matchP = true;
@@ -394,7 +445,7 @@ function aplicarFiltros() {
     // Atualiza barra de resultados
     const bar = safeEl('results-bar-new');
     const txt = safeEl('results-text-new');
-    const temFiltro = !!(filtroState.region || filtroState.bairro || quartos || preco || tipo || busca || vendidos);
+    const temFiltro = !!(filtroState.region || filtroState.bairro || filtroState.tipo || quartos || preco || tipoSelect || busca || vendidos);
 
     if (bar) bar.classList.toggle('vis', true);
     if (txt) {
@@ -402,6 +453,7 @@ function aplicarFiltros() {
         let msg = total === 0 ? 'Nenhum imóvel encontrado' : `<strong>${total}</strong> imóve${total !== 1 ? 'is encontrados' : 'l encontrado'}`;
         if (filtroState.bairro) msg += ` em <strong>${filtroState.bairro}</strong>`;
         else if (filtroState.region) msg += ` na <strong>${filtroState.region === 'zona-sul' ? 'Zona Sul' : 'Barra & Recreio'}</strong>`;
+        else if (filtroState.tipo === 'Terreno') msg += ` do tipo <strong>Terreno</strong>`;
         txt.innerHTML = msg;
     }
 
@@ -425,7 +477,6 @@ function aplicarFiltros() {
     } catch {}
 
     renderGallery(filtrados);
-    // Re-popula chips com contagem atualizada
     popularChipsBairros();
     atualizarContadoresRegiao();
 }
@@ -433,9 +484,13 @@ function aplicarFiltros() {
 function limparFiltros() {
     filtroState.region = null;
     filtroState.bairro = null;
+    filtroState.tipo = null;
     ['quartos','preco','tipo'].forEach(id => { const el = safeEl(id); if (el) el.value = ''; });
     const mv = safeEl('mostrar-vendidos'); if (mv) mv.checked = false;
     const busca = safeEl('busca-texto-top'); if (busca) busca.value = '';
+    // Remove active do card terrenos
+    const cardTerrenos = safeEl('card-terrenos');
+    if (cardTerrenos) cardTerrenos.classList.remove('active');
     syncRegionUI();
     aplicarFiltros();
 }
@@ -1066,6 +1121,7 @@ window.lbNext          = lbNext;
 window.aplicarFiltros  = aplicarFiltros;
 window.limparFiltros   = limparFiltros;
 window.toggleRegion    = toggleRegion;
+window.toggleTipo      = toggleTipo;
 window.selectBairroChip= selectBairroChip;
 window.selectBairro    = selectBairro;
 window.showToast       = showToast;
