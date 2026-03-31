@@ -555,10 +555,13 @@ function renderGallery(lista, containerId = 'gallery') {
 
     gallery.innerHTML = lista.map(imo => {
         const isTerreno = imo.tipo === 'Terreno';
+        const isLancamento = imo.precoModo === 'lancamento';
         const precoNum = parseFloat(imo.preco).toLocaleString('pt-BR');
-        const precoLabel = (isTerreno && imo.precoTipo === 'por_m2')
-            ? `R$ ${precoNum}/m²`
-            : `R$ ${precoNum}`;
+        const precoLabel = isLancamento
+            ? `<span class="lb-launch-pill">Lançamento</span>`
+            : ((isTerreno && imo.precoTipo === 'por_m2')
+                ? `R$ ${precoNum}/m²`
+                : `R$ ${precoNum}`);
         const isFav = isFavorito(imo.id);
 
         let statusBadge = '';
@@ -646,13 +649,25 @@ function openModal(imovelId) {
     // Tags
     const tags = safeEl('modal-tags');
     const isTerreno = imo.tipo === 'Terreno';
-    const precoLabel = (isTerreno && imo.precoTipo === 'por_m2')
-        ? 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR') + '/m²'
-        : 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR');
+    const isLancamento = imo.precoModo === 'lancamento';
+    const precoLabel = isLancamento
+        ? 'Lançamento'
+        : ((isTerreno && imo.precoTipo === 'por_m2')
+            ? 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR') + '/m²'
+            : 'R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR'));
     safeText('modal-preco', precoLabel);
     if (tags) {
         let html = `<span class="modal-tag"><i class="fas fa-map-marker-alt"></i> ${imo.bairro}</span>`;
         html += `<span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
+        if (isLancamento) {
+            const ap = imo?.lancamento?.aPartirDe ? `R$ ${Number(imo.lancamento.aPartirDe).toLocaleString('pt-BR')}` : null;
+            const en = imo?.lancamento?.entrada   ? `R$ ${Number(imo.lancamento.entrada).toLocaleString('pt-BR')}`   : null;
+            const pa = imo?.lancamento?.parcelas  ? String(imo.lancamento.parcelas) : null;
+            html += `<span class="modal-tag" style="border-color:rgba(168,85,247,.35);color:#c084f5;">Lançamento</span>`;
+            if (ap) html += `<span class="modal-tag"><i class="fas fa-tag"></i> A partir de ${ap}</span>`;
+            if (en) html += `<span class="modal-tag"><i class="fas fa-coins"></i> Entrada ${en}</span>`;
+            if (pa) html += `<span class="modal-tag"><i class="fas fa-list-ol"></i> ${pa}</span>`;
+        }
         if (isTerreno) {
             if (imo.frente)      html += `<span class="modal-tag"><i class="fas fa-arrows-alt-h"></i> ${imo.frente}m frente</span>`;
             if (imo.zoneamento)  html += `<span class="modal-tag"><i class="fas fa-layer-group"></i> ${imo.zoneamento}</span>`;
@@ -668,7 +683,10 @@ function openModal(imovelId) {
     }
 
     // WhatsApp
-    const waMsg = encodeURIComponent(`Olá Leandro! Tenho interesse no imóvel: *${imo.titulo}* — ${imo.bairro}, R$ ${parseFloat(imo.preco).toLocaleString('pt-BR')}. Pode me dar mais informações?`);
+    const waPrecoTxt = isLancamento
+        ? 'Lançamento'
+        : ('R$ ' + parseFloat(imo.preco).toLocaleString('pt-BR'));
+    const waMsg = encodeURIComponent(`Olá Leandro! Tenho interesse no imóvel: *${imo.titulo}* — ${imo.bairro}, ${waPrecoTxt}. Pode me dar mais informações?`);
     const waLink = safeEl('modal-whatsapp');
     if (waLink) waLink.href = `https://wa.me/5521981424469?text=${waMsg}`;
 
