@@ -469,18 +469,19 @@ async function loadDashboard() {
 
 async function loadDashboardVisitas() {
     try {
-        const [visitasSnap, imoveisViewsSnap] = await Promise.all([
-            db.collection('visitas').get(),
-            db.collection('visitas_imoveis').get()
-        ]);
-        const uniqueDevices = new Set(visitasSnap.docs.map(d => d.data().deviceId));
-
-        // Visitas do dia
         const hoje = new Date().toISOString().slice(0,10);
+        const [visitasSnap, imoveisViewsSnap, copiadosSnap] = await Promise.all([
+            db.collection('visitas').get(),
+            db.collection('visitas_imoveis').get(),
+            db.collection('links_copiados').where('date','==',hoje).get(),
+        ]);
+
+        // Total de registros de visita (todas as páginas, todos os dias)
+        setEl('dash-visitas-total', visitasSnap.size);
+
+        // Visitantes únicos HOJE (não total histórico)
         const visitasHoje = visitasSnap.docs.filter(d => d.data().date === hoje);
         const uniqueHoje = new Set(visitasHoje.map(d => d.data().deviceId)).size;
-
-        setEl('dash-visitas-total', visitasSnap.size);
         setEl('dash-visitas-unique', uniqueHoje);
 
         // Imóvel mais visto do dia
@@ -493,36 +494,34 @@ async function loadDashboardVisitas() {
             }
         });
         const top = Object.values(counts).sort((a,b) => b.count - a.count)[0];
-        const el = document.getElementById('dash-imovel-top');
-        if (el) el.innerHTML = top
+        const elTop = document.getElementById('dash-imovel-top');
+        if (elTop) elTop.innerHTML = top
             ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count>1?'s':''} hoje</span>`
             : `<strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>`;
 
         // Links copiados hoje
-        const copiadosSnap = await db.collection('links_copiados').where('date','==',hoje).get();
         const elC = document.getElementById('dash-links-copiados');
         if (elC) elC.textContent = copiadosSnap.size;
 
-        // ── Online agora — lê coleção presença com lastSeen >= agora-5min ──
-        startPresencaListener();
+        // Inicia listener de presença (online agora) — apenas uma vez
+        _startPresencaListener();
     } catch (e) { console.error('loadDashboardVisitas', e); }
 }
 
-// Listener em tempo real para presença (online agora)
+// ── Online agora — listener em tempo real da coleção presenca ──
 let _presencaListener = null;
-function startPresencaListener() {
-    if (_presencaListener) return; // já está ativo
+function _startPresencaListener() {
+    if (_presencaListener) return; // já ativo
     _presencaListener = db.collection('presenca').onSnapshot(snap => {
         const cincoMinAtras = Date.now() - 5 * 60 * 1000;
         let online = 0;
         snap.docs.forEach(d => {
-            const data = d.data();
-            // lastSeen pode ser Timestamp do Firestore ou null
-            const lastSeen = data.lastSeen?.toMillis?.() || 0;
-            if (lastSeen >= cincoMinAtras) online++;
+            const ts = d.data().lastSeen;
+            const ms = ts?.toMillis?.() || 0;
+            if (ms >= cincoMinAtras) online++;
         });
         const el = document.getElementById('dash-online-agora');
-        if (el) el.textContent = online > 0 ? online : '0';
+        if (el) el.textContent = online;
     }, err => console.warn('presencaListener:', err));
 }
 
@@ -1432,87 +1431,130 @@ function exportarDados() {
 }
 
 // ========== CRUD ==========
+// ── Helper: mostra/oculta campos de terreno e atualiza opacidade ──
+function _syncTipoUI(tipo) {
+    const isTerreno = tipo === 'Terreno';
+    const terrenoFields = document.getElementById('terreno-fields');
+    const quartosGroup  = document.getElementById('imovel-quartos')?.closest('.form-group');
+    const vagasGroup    = document.getElementById('imovel-vagas')?.closest('.form-group');
+    const condGroup     = document.getElementById('imovel-condominio')?.closest('.form-group');
+    const iptuGroup     = document.getElementById('imovel-iptu')?.closest('.form-group');
+    if (terrenoFields) terrenoFields.style.display = isTerreno ? '' : 'none';
+    [quartosGroup, vagasGroup, condGroup, iptuGroup].forEach(g => {
+        if (g) {
+            g.style.opacity = isTerreno ? '.35' : '1';
+            g.style.pointerEvents = isTerreno ? 'none' : '';
+        }
+    });
+}
+
+// ── Helper: atualiza preview da data de expiração do anúncio ──
+function _updateAnuncioPreview() {
+    const dias = parseInt(document.getElementById('imovel-anuncio-duracao')?.value || 0);
+    const preview = document.getElementById('anuncio-expiracao-preview');
+    if (!preview) return;
+    if (dias === 0) {
+        preview.textContent = 'Sem prazo definido — permanente';
+    } else {
+        const expira = new Date(Date.now() + dias * 86400000);
+        preview.textContent = `Expira em: ${expira.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'})}`;
+    }
+}
+
 function setupFormListeners() {
     document.getElementById('search-imoveis')?.addEventListener('input', e => {
         const t = e.target.value.toLowerCase();
-        renderImoveisTable(imoveisData.filter(i=>(i.titulo||'').toLowerCase().includes(t)||(i.bairro||'').toLowerCase().includes(t)||(i.descricao||'').toLowerCase().includes(t)));
+        renderImoveisTable(imoveisData.filter(i =>
+            (i.titulo||'').toLowerCase().includes(t) ||
+            (i.bairro||'').toLowerCase().includes(t) ||
+            (i.descricao||'').toLowerCase().includes(t)
+        ));
     });
     document.getElementById('filter-bairro')?.addEventListener('change', e => {
-        const b = e.target.value; renderImoveisTable(b?imoveisData.filter(i=>i.bairro===b):imoveisData);
+        const b = e.target.value;
+        renderImoveisTable(b ? imoveisData.filter(i => i.bairro === b) : imoveisData);
     });
     document.getElementById('imovel-preco')?.addEventListener('input', e => {
-        let v = e.target.value.replace(/[^0-9]/g,''); if(v) e.target.value=parseInt(v).toLocaleString('pt-BR');
+        let v = e.target.value.replace(/[^0-9]/g,'');
+        if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
     });
 
-    // ── Mostra/oculta campos de terreno ao mudar tipo ──
+    // ── Tipo → mostra/oculta campos de terreno ──
     document.getElementById('imovel-tipo')?.addEventListener('change', e => {
-        const isTerreno = e.target.value === 'Terreno';
-        const terrenoFields = document.getElementById('terreno-fields');
-        const quartosRow = document.getElementById('imovel-quartos')?.closest('.form-group');
-        const vagasRow = document.getElementById('imovel-vagas')?.closest('.form-group');
-        const condominioRow = document.getElementById('imovel-condominio')?.closest('.form-group');
-        if (terrenoFields) terrenoFields.style.display = isTerreno ? '' : 'none';
-        if (quartosRow) quartosRow.style.opacity = isTerreno ? '.4' : '';
-        if (vagasRow) vagasRow.style.opacity = isTerreno ? '.4' : '';
-        if (condominioRow) condominioRow.style.opacity = isTerreno ? '.4' : '';
+        _syncTipoUI(e.target.value);
     });
 
-    // ── Mostra duração do anúncio quando ativado ──
+    // ── Anúncio ativo → mostra duração + preview ──
     document.getElementById('imovel-anuncio-ativo')?.addEventListener('change', e => {
         const wrap = document.getElementById('anuncio-duracao-wrap');
         if (wrap) wrap.style.display = e.target.value === 'true' ? '' : 'none';
+        if (e.target.value === 'true') _updateAnuncioPreview();
     });
+
+    // ── Duração → atualiza preview ──
+    document.getElementById('imovel-anuncio-duracao')?.addEventListener('change', _updateAnuncioPreview);
 
     document.getElementById('imovel-form')?.addEventListener('submit', async e => {
         e.preventDefault();
-        const id = document.getElementById('imovel-id').value;
-        const fotos = Array.from(document.querySelectorAll('.foto-input')).map(i=>i.value.trim()).filter(Boolean);
-        const videos = Array.from(document.querySelectorAll('.video-input')).map(i=>i.value.trim()).filter(Boolean);
-        const getVal = id => (document.getElementById(id)?.value || '').trim();
-        const getNum = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
-        const tipo = getVal('imovel-tipo') || 'Apartamento';
+        const id      = document.getElementById('imovel-id').value;
+        const fotos   = Array.from(document.querySelectorAll('.foto-input')).map(i => i.value.trim()).filter(Boolean);
+        const videos  = Array.from(document.querySelectorAll('.video-input')).map(i => i.value.trim()).filter(Boolean);
+        const getVal  = id => (document.getElementById(id)?.value || '').trim();
+        const getNum  = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+        const tipo    = getVal('imovel-tipo') || 'Apartamento';
         const isTerreno = tipo === 'Terreno';
-        const anuncioAtivo = getVal('imovel-anuncio-ativo') === 'true';
+        const anuncioAtivo   = getVal('imovel-anuncio-ativo') === 'true';
         const anuncioDuracao = parseInt(getVal('imovel-anuncio-duracao')) || 0;
 
         const data = {
-            titulo: getVal('imovel-titulo'),
-            bairro: getVal('imovel-bairro'),
-            area: parseInt(getVal('imovel-area')) || 0,
-            preco: parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0,
+            titulo:    getVal('imovel-titulo'),
+            bairro:    getVal('imovel-bairro'),
+            area:      parseInt(getVal('imovel-area')) || 0,
+            preco:     parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0,
             descricao: getVal('imovel-descricao'),
-            imagem: getVal('imovel-imagem'),
-            fotos: fotos.length ? fotos : [getVal('imovel-imagem')],
-            videos: videos,
-            video: videos[0] || null,
+            imagem:    getVal('imovel-imagem'),
+            fotos:     fotos.length ? fotos : [getVal('imovel-imagem')],
+            videos,
+            video:     videos[0] || null,
             tipo,
-            status: getVal('imovel-status') || 'disponivel',
+            status:    getVal('imovel-status') || 'disponivel',
             // Campos de imóvel normal (0 para terreno)
-            quartos: isTerreno ? 0 : (parseInt(getVal('imovel-quartos')) || 1),
-            vagas: isTerreno ? 0 : getNum('imovel-vagas'),
+            quartos:    isTerreno ? 0 : (parseInt(getVal('imovel-quartos')) || 0),
+            vagas:      isTerreno ? 0 : getNum('imovel-vagas'),
             condominio: isTerreno ? 0 : getNum('imovel-condominio'),
-            iptu: isTerreno ? getNum('imovel-iptu-terreno') : getNum('imovel-iptu'),
-            // Campos exclusivos de terreno
-            frente: isTerreno ? (parseFloat(getVal('imovel-frente')) || 0) : null,
-            zoneamento: isTerreno ? getVal('imovel-zoneamento') : null,
-            topografia: isTerreno ? getVal('imovel-topografia') : null,
-            localidade: isTerreno ? getVal('imovel-localidade') : null,
-            precoTipo: isTerreno ? (getVal('imovel-preco-tipo') || 'total') : 'total',
+            iptu:       isTerreno ? getNum('imovel-iptu-terreno') : getNum('imovel-iptu'),
+            // Campos exclusivos de terreno (null para imóveis normais)
+            frente:      isTerreno ? (parseFloat(getVal('imovel-frente')) || null) : null,
+            zoneamento:  isTerreno ? (getVal('imovel-zoneamento') || null) : null,
+            topografia:  isTerreno ? (getVal('imovel-topografia') || null) : null,
+            localidade:  isTerreno ? (getVal('imovel-localidade') || null) : null,
+            precoTipo:   isTerreno ? (getVal('imovel-preco-tipo') || 'total') : 'total',
             // Anúncio flutuante
             anuncioAtivo,
             anuncioDuracao,
             anuncioExpiraEm: (anuncioAtivo && anuncioDuracao > 0)
                 ? new Date(Date.now() + anuncioDuracao * 86400000).toISOString()
-                : null,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                : (anuncioAtivo ? null : null), // null = sem prazo quando permanente
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         };
-        const btn = document.querySelector('#imovel-form .btn-primary'); btn.innerHTML='<span class="loading"></span>'; btn.disabled=true;
+
+        const btn = document.querySelector('#imovel-form .btn-primary');
+        btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true;
         try {
-            if(id){await db.collection('imoveis').doc(id).update(data);showToast('Imóvel atualizado!');}
-            else{data.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection('imoveis').add(data);showToast('Imóvel adicionado!');}
+            if (id) {
+                await db.collection('imoveis').doc(id).update(data);
+                showToast('✅ Imóvel atualizado!');
+            } else {
+                data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await db.collection('imoveis').add(data);
+                showToast('✅ Imóvel adicionado!');
+            }
             resetForm(); showSection('imoveis');
-        } catch(err){showToast('Erro ao salvar','error');}
-        finally{btn.innerHTML='<i class="fas fa-save"></i><span id="btn-submit-text">Salvar Imóvel</span>';btn.disabled=false;}
+        } catch(err) { showToast('Erro ao salvar — ' + err.message, 'error'); }
+        finally {
+            btn.innerHTML = '<i class="fas fa-save"></i><span id="btn-submit-text">Salvar Imóvel</span>';
+            btn.disabled = false;
+        }
     });
 }
 
@@ -1527,8 +1569,18 @@ function resetForm() {
     }
     const btnRemove = document.getElementById('btn-remove-foto');
     if (btnRemove) btnRemove.style.display = 'none';
-    // Reseta vídeos ilimitados
+    // Reseta vídeos
     clearVideos();
+    // Reseta campos de terreno
+    const terrenoFields = document.getElementById('terreno-fields');
+    if (terrenoFields) terrenoFields.style.display = 'none';
+    _syncTipoUI('Apartamento');
+    // Reseta anúncio
+    const anuncioDuracaoWrap = document.getElementById('anuncio-duracao-wrap');
+    if (anuncioDuracaoWrap) anuncioDuracaoWrap.style.display = 'none';
+    const anuncioPreview = document.getElementById('anuncio-expiracao-preview');
+    if (anuncioPreview) anuncioPreview.textContent = '';
+    // Reseta label do botão
     const t = document.getElementById('btn-submit-text');
     if (t) t.textContent = 'Salvar Imóvel';
 }
@@ -1591,9 +1643,11 @@ function removeVideoInput() {
 
 async function editImovel(id) {
     try {
-        const doc = await db.collection('imoveis').doc(id).get(); if(!doc.exists){showToast('Não encontrado','error');return;}
-        const d=doc.data();
-        const setF = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+        const doc = await db.collection('imoveis').doc(id).get();
+        if (!doc.exists) { showToast('Não encontrado', 'error'); return; }
+        const d = doc.data();
+        const setF = (fieldId, val) => { const el = document.getElementById(fieldId); if (el) el.value = val ?? ''; };
+
         setF('imovel-id', id);
         setF('imovel-titulo', d.titulo);
         setF('imovel-bairro', d.bairro);
@@ -1610,49 +1664,61 @@ async function editImovel(id) {
 
         // ── Campos de Terreno ──
         const isTerreno = d.tipo === 'Terreno';
-        const terrenoFields = document.getElementById('terreno-fields');
-        if (terrenoFields) terrenoFields.style.display = isTerreno ? '' : 'none';
+        _syncTipoUI(d.tipo || 'Apartamento');
         if (isTerreno) {
-            setF('imovel-frente', d.frente || '');
-            setF('imovel-zoneamento', d.zoneamento || '');
-            setF('imovel-topografia', d.topografia || '');
-            setF('imovel-localidade', d.localidade || '');
-            setF('imovel-preco-tipo', d.precoTipo || 'total');
+            setF('imovel-frente', d.frente ?? '');
+            setF('imovel-zoneamento', d.zoneamento ?? '');
+            setF('imovel-topografia', d.topografia ?? '');
+            setF('imovel-localidade', d.localidade ?? '');
+            setF('imovel-preco-tipo', d.precoTipo ?? 'total');
             setF('imovel-iptu-terreno', d.iptu || 0);
         }
-        // Opacidade campos irrelevantes para terreno
-        const quartosRow = document.getElementById('imovel-quartos')?.closest('.form-group');
-        const vagasRow = document.getElementById('imovel-vagas')?.closest('.form-group');
-        const condominioRow = document.getElementById('imovel-condominio')?.closest('.form-group');
-        if (quartosRow) quartosRow.style.opacity = isTerreno ? '.4' : '';
-        if (vagasRow) vagasRow.style.opacity = isTerreno ? '.4' : '';
-        if (condominioRow) condominioRow.style.opacity = isTerreno ? '.4' : '';
 
         // ── Anúncio flutuante ──
         setF('imovel-anuncio-ativo', d.anuncioAtivo ? 'true' : 'false');
-        setF('imovel-anuncio-duracao', d.anuncioDuracao || 14);
-        const anuncioDuracaoWrap = document.getElementById('anuncio-duracao-wrap');
-        if (anuncioDuracaoWrap) anuncioDuracaoWrap.style.display = d.anuncioAtivo ? '' : 'none';
+        setF('imovel-anuncio-duracao', d.anuncioDuracao ?? 14);
+        const duracaoWrap = document.getElementById('anuncio-duracao-wrap');
+        if (duracaoWrap) duracaoWrap.style.display = d.anuncioAtivo ? '' : 'none';
+        // Preview da data de expiração atual
+        const preview = document.getElementById('anuncio-expiracao-preview');
+        if (preview) {
+            if (d.anuncioExpiraEm) {
+                const expDate = new Date(d.anuncioExpiraEm);
+                const hoje = new Date();
+                if (expDate < hoje) {
+                    preview.textContent = '⚠️ Anúncio expirado em ' + expDate.toLocaleDateString('pt-BR');
+                    preview.style.color = 'var(--red)';
+                } else {
+                    preview.textContent = 'Expira em: ' + expDate.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'});
+                    preview.style.color = 'var(--amber)';
+                }
+            } else if (d.anuncioAtivo) {
+                preview.textContent = 'Sem prazo definido — permanente';
+                preview.style.color = 'var(--green)';
+            } else {
+                preview.textContent = '';
+            }
+        }
 
-        // Fotos dinâmicas — carrega todas
+        // ── Fotos dinâmicas ──
         const container = document.getElementById('fotos-inputs-container');
         if (container) {
             const fList = (d.fotos && d.fotos.length > 1) ? d.fotos : [(d.fotos?.[0] || ''), ''];
             container.innerHTML = fList.map((f, i) =>
-                `<input type="url" class="foto-input" placeholder="Foto ${i+1} — URL" value="${f||''}">`
+                `<input type="url" class="foto-input" placeholder="Foto ${i+1} — URL" value="${f || ''}">`
             ).join('');
             const btnRemove = document.getElementById('btn-remove-foto');
             if (btnRemove) btnRemove.style.display = fList.length > 2 ? '' : 'none';
         }
 
-        // Vídeos (suporte a array ou string legada)
+        // ── Vídeos ──
         clearVideos();
         const videoList = Array.isArray(d.videos) && d.videos.length ? d.videos : (d.video ? [d.video] : []);
         if (videoList.length) {
             const vContainer = document.getElementById('videos-inputs-container');
             if (vContainer) {
                 vContainer.innerHTML = videoList.map((v, i) =>
-                    '<input type="url" class="video-input" placeholder="Vídeo ' + (i+1) + ' — URL do YouTube" value="' + (v||'') + '">'
+                    `<input type="url" class="video-input" placeholder="Vídeo ${i+1} — URL do YouTube" value="${v || ''}">`
                 ).join('');
                 const btnRemoveV = document.getElementById('btn-remove-video');
                 if (btnRemoveV) btnRemoveV.style.display = videoList.length > 1 ? '' : 'none';
@@ -1662,7 +1728,7 @@ async function editImovel(id) {
         const submitTxt = document.getElementById('btn-submit-text');
         if (submitTxt) submitTxt.textContent = 'Atualizar Imóvel';
         showSection('adicionar');
-    } catch(e){showToast('Erro ao carregar','error');}
+    } catch(e) { showToast('Erro ao carregar', 'error'); console.error(e); }
 }
 
 // ========== MOBILE NAVIGATION ==========
