@@ -943,6 +943,8 @@ footer::before {
     text-transform: uppercase;
     letter-spacing: 2px;
     color: var(--text-dark);
+    white-space: nowrap;
+    user-select: none;
 }
 
 .scroll-line {
@@ -950,11 +952,12 @@ footer::before {
     height: 50px;
     background: linear-gradient(180deg, var(--primary), transparent);
     animation: scrollPulse 2s ease-in-out infinite;
+    transform-origin: top;
 }
 
 @keyframes scrollPulse {
-    0%, 100% { opacity: 0.3; height: 50px; }
-    50% { opacity: 1; height: 70px; }
+    0%, 100% { opacity: 0.35; transform: scaleY(1); }
+    50% { opacity: 1; transform: scaleY(1.35); }
 }
 
 /* ========== FEATURED LOGOS ========== */
@@ -997,6 +1000,10 @@ footer::before {
     gap: 3rem;
     animation: scroll 35s linear infinite;
     white-space: nowrap;
+    width: max-content;
+    will-change: transform;
+    transform: translate3d(0,0,0);
+    backface-visibility: hidden;
 }
 
 .logo-track span {
@@ -1006,6 +1013,7 @@ footer::before {
     letter-spacing: 3px;
     text-transform: uppercase;
     transition: color 0.3s ease;
+    display: inline-block;
 }
 
 .logo-track span:hover {
@@ -1018,9 +1026,35 @@ footer::before {
 }
 
 @keyframes scroll {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    from { transform: translate3d(0,0,0); }
+    to { transform: translate3d(-50%,0,0); }
 }
+
+/* Mobile: evita "pulo" visual e excesso de máscara */
+@media (max-width: 600px) {
+    .featured-logos::before,
+    .featured-logos::after { width: 56px; }
+    .logo-track { gap: 2rem; animation-duration: 28s; }
+    .logo-track span { letter-spacing: 2px; }
+}
+
+/* Selo de Lançamento no lugar do preço */
+.lb-launch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .38rem .8rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(168,85,247,.22), rgba(52,152,219,.14));
+    border: 1px solid rgba(168,85,247,.38);
+    color: #e9d5ff;
+    font-weight: 800;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    font-size: .82rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+.lb-launch-pill { line-height: 1; }
 
 /* ========== PÁGINA DE IMÓVEIS ========== */
 .filters {
@@ -2363,12 +2397,29 @@ footer::before {
         bottom: auto;
         left: auto;
         transform: none;
-        margin: 0.5rem auto 0;
-        display: flex;
+        margin: 0.35rem auto 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.95rem;
+        border-radius: 999px;
+        background: rgba(15, 25, 35, 0.55);
+        border: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 14px 30px rgba(0,0,0,0.35);
+    }
+
+    .scroll-text {
+        color: rgba(255,255,255,0.65);
+        font-size: 0.62rem;
+        letter-spacing: 2.2px;
     }
     
     .scroll-line {
-        height: 35px;
+        height: 22px;
+        margin-left: 0.65rem;
+        border-radius: 99px;
     }
     
     /* Featured Logos */
