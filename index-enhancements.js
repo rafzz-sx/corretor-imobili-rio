@@ -188,12 +188,16 @@
             titulo: data.titulo || 'Imóvel Disponível',
             bairro: data.bairro || 'Rio de Janeiro',
             tipo: data.tipo || 'Apartamento',
-            preco: isTerreno && data.precoTipo === 'por_m2'
-                ? 'R$ ' + Number(data.preco).toLocaleString('pt-BR') + '/m²'
-                : 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
+            preco: data.precoModo === 'lancamento'
+                ? '🚀 Lançamento'
+                : (isTerreno && data.precoTipo === 'por_m2'
+                    ? 'R$ ' + Number(data.preco).toLocaleString('pt-BR') + '/m²'
+                    : 'R$ ' + Number(data.preco).toLocaleString('pt-BR')),
             quartos: data.quartos || 0,
             area: data.area || 0,
-            destaque: isTerreno ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
+            destaque: data.precoModo === 'lancamento'
+                ? '🚀 Lançamento'
+                : (isTerreno ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível'))),
             img: data.imagem || '',
         };
     }
@@ -205,27 +209,32 @@
         if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return;
         try {
             const agora = new Date().toISOString();
+            // Evita depender de índices compostos (where + orderBy). Ordena no cliente.
             firebase.firestore().collection('imoveis')
-                .where('status', '==', 'disponivel')
                 .where('anuncioAtivo', '==', true)
-                .orderBy('createdAt', 'desc').limit(8).get()
+                .limit(20).get()
                 .then(snap => {
-                    const validos = snap.docs.filter(d => { const exp = d.data().anuncioExpiraEm; return !exp || exp > agora; });
-                    if (validos.length > 0) { _adsData = validos.map(_mapAdData); setTimeout(() => showAd(0), 5000); }
+                    const validos = snap.docs
+                        .filter(d => {
+                            const data = d.data();
+                            if (data.status === 'vendido' || data.status === 'alugado') return false;
+                            const exp = data.anuncioExpiraEm;
+                            if (exp && exp <= agora) return false;
+                            return true;
+                        })
+                        .sort((a, b) => {
+                            const as = a.data()?.createdAt?.seconds || 0;
+                            const bs = b.data()?.createdAt?.seconds || 0;
+                            return bs - as;
+                        })
+                        .slice(0, 8);
+
+                    if (validos.length > 0) {
+                        _adsData = validos.map(_mapAdData);
+                        setTimeout(() => showAd(0), 5000);
+                    }
                 })
-                .catch(() => {
-                    firebase.firestore().collection('imoveis')
-                        .where('anuncioAtivo', '==', true)
-                        .orderBy('createdAt', 'desc').limit(8).get()
-                        .then(snap2 => {
-                            const agora2 = new Date().toISOString();
-                            const validos2 = snap2.docs.filter(d => {
-                                const data = d.data();
-                                return data.status !== 'vendido' && (!data.anuncioExpiraEm || data.anuncioExpiraEm > agora2);
-                            });
-                            if (validos2.length > 0) { _adsData = validos2.map(_mapAdData); setTimeout(() => showAd(0), 5000); }
-                        }).catch(() => {});
-                });
+                .catch(() => {});
         } catch(e) {}
     }
 
@@ -323,7 +332,8 @@
         injectAdStyles();
         initUrgencyBar();
         startAds();
-        initLiveCounter();
+        // Contador "visitando" não deve aparecer no site público.
+        // (Mantemos a função no arquivo, mas não inicializamos aqui.)
         initScrollReveal();
         initCursorSpotlight();
         initNumberGlow();
