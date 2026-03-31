@@ -431,13 +431,19 @@ async function loadDashboard() {
     try {
         const snap = await db.collection('imoveis').get();
         imoveisData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Se não há imóveis no Firestore, importa os estáticos automaticamente
-        if (imoveisData.length === 0 && !localStorage.getItem('_lb_seeded')) {
-            localStorage.setItem('_lb_seeded', '1');
-            await seedStaticImoveis();
-            const snap2 = await db.collection('imoveis').get();
-            imoveisData = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
+        // Se não há imóveis, NÃO faz seed automático sem permissão do painel.
+        // (O seed existe, mas só roda quando permitido em config/site ou manualmente.)
+        try {
+            const siteDoc = await db.collection('config').doc('site').get();
+            const siteCfg = siteDoc.exists ? (siteDoc.data() || {}) : {};
+            const autoSeed = !!siteCfg?.conteudoPublico?.autoSeedExemplos;
+            if (autoSeed && imoveisData.length === 0 && !localStorage.getItem('_lb_seeded')) {
+                localStorage.setItem('_lb_seeded', '1');
+                await seedStaticImoveis();
+                const snap2 = await db.collection('imoveis').get();
+                imoveisData = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+        } catch(e) {}
         const total = imoveisData.length;
         const bairros = [...new Set(imoveisData.map(i => i.bairro))];
         const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s,i) => s+(parseInt(i.quartos)||0),0)/total) : 0;
@@ -2189,6 +2195,61 @@ async function loadSiteConfig() {
     content.innerHTML = `
     <div style="max-width:820px;">
         <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-toggle-on"></i> Controle do Conteúdo Público</h3>
+            <div style="display:flex;flex-direction:column;gap:.8rem;">
+                <label class="fx-toggle" style="justify-content:space-between;gap:1rem;">
+                    <span style="color:var(--text-secondary);font-size:.85rem;">
+                        <strong style="color:var(--text-primary);">Permitir dados de exemplo no site público</strong><br>
+                        <span style="color:var(--text-muted);font-size:.75rem;">Se o Firebase falhar, o site pode (opcionalmente) mostrar imóveis de exemplo. Desligado por padrão.</span>
+                    </span>
+                    <input type="checkbox" id="cfg-public-fallback" ${cfg?.conteudoPublico?.fallbackExemplos ? 'checked' : ''}>
+                </label>
+
+                <label class="fx-toggle" style="justify-content:space-between;gap:1rem;">
+                    <span style="color:var(--text-secondary);font-size:.85rem;">
+                        <strong style="color:var(--text-primary);">Importar imóveis de exemplo automaticamente no painel</strong><br>
+                        <span style="color:var(--text-muted);font-size:.75rem;">Só use para testes. Se ligado e seu banco estiver vazio, o painel pode importar exemplos.</span>
+                    </span>
+                    <input type="checkbox" id="cfg-auto-seed" ${cfg?.conteudoPublico?.autoSeedExemplos ? 'checked' : ''}>
+                </label>
+
+                <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+                    <button onclick="seedStaticImoveis();showToast('Importando exemplos...','info')" class="btn-secondary" style="justify-content:flex-start;gap:.7rem;">
+                        <i class="fas fa-database" style="color:var(--amber)"></i> Importar exemplos (manual)
+                    </button>
+                    <span style="color:var(--text-muted);font-size:.74rem;align-self:center;">Não afeta anúncios. Anúncios só aparecem quando <code style="background:var(--bg-elevated);padding:.08rem .35rem;border-radius:6px;border:1px solid var(--border);">anuncioAtivo=true</code> no imóvel.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
+            <h3 style="margin-bottom:1rem;"><i class="fas fa-bullhorn"></i> Barra de Urgência (Topo do Site)</h3>
+            <div style="display:flex;flex-direction:column;gap:.9rem;">
+                <label class="fx-toggle" style="justify-content:space-between;gap:1rem;">
+                    <span style="color:var(--text-secondary);font-size:.85rem;">
+                        <strong style="color:var(--text-primary);">Ativar barra de urgência</strong><br>
+                        <span style="color:var(--text-muted);font-size:.75rem;">Aparece no site público apenas quando estiver ativada aqui.</span>
+                    </span>
+                    <input type="checkbox" id="cfg-urg-ativo" ${(cfg.urgencyBar && cfg.urgencyBar.ativo) ? 'checked' : ''}>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label class="form-label">Texto</label>
+                        <input type="text" id="cfg-urg-texto" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.texto) ? String(cfg.urgencyBar.texto).replace(/"/g,'&quot;') : ''}" placeholder="Ex: Novos imóveis disponíveis hoje!">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bairro (opcional)</label>
+                        <input type="text" id="cfg-urg-bairro" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.bairro) ? String(cfg.urgencyBar.bairro).replace(/"/g,'&quot;') : ''}" placeholder="Ex: Ipanema">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Link (opcional)</label>
+                        <input type="text" id="cfg-urg-link" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.link) ? String(cfg.urgencyBar.link).replace(/"/g,'&quot;') : ''}" placeholder="Ex: imoveis.html">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card" style="margin-bottom:1.2rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-user"></i> Informações Pessoais</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
                 <div class="form-group"><label class="form-label">Nome do Corretor</label><input type="text" id="cfg-nome" class="form-control" value="${cfg.nome||'Leandro Bomfim'}"></div>
@@ -2268,6 +2329,16 @@ async function saveSiteConfig() {
         velocidade:document.getElementById('cfg-velocidade')?.value||'',
         bairros:document.getElementById('cfg-bairros')?.value||'',
         depoimentos,
+        conteudoPublico: {
+            fallbackExemplos: !!document.getElementById('cfg-public-fallback')?.checked,
+            autoSeedExemplos: !!document.getElementById('cfg-auto-seed')?.checked,
+        },
+        urgencyBar: {
+            ativo: !!document.getElementById('cfg-urg-ativo')?.checked,
+            texto: (document.getElementById('cfg-urg-texto')?.value || '').trim(),
+            bairro: (document.getElementById('cfg-urg-bairro')?.value || '').trim(),
+            link: (document.getElementById('cfg-urg-link')?.value || '').trim(),
+        },
         updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     };
     try { await db.collection('config').doc('site').set(cfg); showToast('✅ Configurações salvas!'); }
