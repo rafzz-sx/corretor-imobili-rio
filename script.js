@@ -17,6 +17,25 @@ let imoveis = [];
 let imoveisCarregados = false;
 const FAVORITOS_KEY = '_lb_favoritos';
 
+// ── Config do site (cache) ─────────────────────────────────
+let _siteCfg = null;
+async function loadSiteCfgCached() {
+    if (_siteCfg) return _siteCfg;
+    try {
+        const cached = sessionStorage.getItem('_lb_site_cfg');
+        if (cached) _siteCfg = JSON.parse(cached);
+    } catch {}
+    if (_siteCfg) return _siteCfg;
+    try {
+        const doc = await db.collection('config').doc('site').get();
+        _siteCfg = doc.exists ? (doc.data() || {}) : {};
+        try { sessionStorage.setItem('_lb_site_cfg', JSON.stringify(_siteCfg)); } catch {}
+    } catch {
+        _siteCfg = _siteCfg || {};
+    }
+    return _siteCfg;
+}
+
 // Estado dos filtros de região/bairro
 const filtroState = {
     region: null,      // 'zona-sul' | 'barra-recreio' | null
@@ -198,7 +217,7 @@ function startImoveisListener() {
         hideSkeleton();
     }, err => {
         console.error('imoveis listener:', err);
-        carregarImoveisEstaticos();
+        handleImoveisLoadFail();
     });
 }
 
@@ -206,6 +225,23 @@ async function carregarImoveis() {
     const gallery = safeEl('gallery');
     if (!gallery) return;
     startImoveisListener();
+}
+
+async function handleImoveisLoadFail() {
+    const cfg = await loadSiteCfgCached();
+    const allowFallback = !!cfg?.conteudoPublico?.fallbackExemplos;
+    if (allowFallback) {
+        carregarImoveisEstaticos();
+        return;
+    }
+    // Sem fallback: evita “imóveis falsos” — lista fica vazia
+    imoveis = [];
+    imoveisCarregados = true;
+    atualizarContadoresRegiao();
+    popularChipsBairros();
+    aplicarFiltros();
+    hideSkeleton();
+    showToast('Sem conexão com o banco — aguardando imóveis do painel', 'warning', 4200);
 }
 
 // Dados estáticos fallback
@@ -220,7 +256,7 @@ function carregarImoveisEstaticos() {
     popularChipsBairros();
     aplicarFiltros();
     hideSkeleton();
-    showToast('Usando dados de exemplo', 'info');
+    showToast('Usando dados de exemplo (permitido no painel)', 'info');
 }
 
 // ══════════════════════════════════════════════════════════
