@@ -369,7 +369,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', saude:'Saúde do Sistema', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
@@ -378,6 +378,7 @@ function showSection(name) {
     else if (name === 'analytics') loadAnalytics();
     else if (name === 'visitas') loadVisitas();
     else if (name === 'site') loadSiteConfig();
+    else if (name === 'saude') loadSaudeSistema();
     else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
     else if (name === 'chat-logs') { loadChatLogs(); return; }
@@ -511,24 +512,181 @@ async function loadDashboardVisitas() {
 
         // Inicia listener de presença (online agora) — apenas uma vez
         _startPresencaListener();
+        updateFirestoreStatusCard();
     } catch (e) { console.error('loadDashboardVisitas', e); }
 }
 
 // ── Online agora — listener em tempo real da coleção presenca ──
 let _presencaListener = null;
+let _presencaCacheDocs = [];
+let _presencaTick = null;
 function _startPresencaListener() {
     if (_presencaListener) return; // já ativo
-    _presencaListener = db.collection('presenca').onSnapshot(snap => {
+
+    function computeOnline() {
         const cincoMinAtras = Date.now() - 5 * 60 * 1000;
         let online = 0;
-        snap.docs.forEach(d => {
-            const ts = d.data().lastSeen;
+        _presencaCacheDocs.forEach(doc => {
+            const ts = doc?.lastSeen;
             const ms = ts?.toMillis?.() || 0;
             if (ms >= cincoMinAtras) online++;
         });
         const el = document.getElementById('dash-online-agora');
-        if (el) el.textContent = online;
-    }, err => console.warn('presencaListener:', err));
+        if (el) el.textContent = String(online);
+    }
+
+    _presencaListener = db.collection('presenca').onSnapshot(snap => {
+        _presencaCacheDocs = snap.docs.map(d => d.data());
+        computeOnline();
+        if (_presencaTick) clearInterval(_presencaTick);
+        _presencaTick = setInterval(computeOnline, 15000);
+    }, err => {
+        console.warn('presencaListener:', err);
+        const el = document.getElementById('dash-online-agora');
+        if (el) el.textContent = '—';
+    });
+}
+
+// ========== SAÚDE DO SISTEMA ==========
+const EXPECTED_RULES_TAG = 'rules_2026-03-31';
+
+function _setHealthLine(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+}
+
+async function runFirestoreHealthCheck() {
+    if (!db) return { ok: false, msg: 'Firestore não inicializado' };
+    const started = Date.now();
+    const today = new Date().toISOString().slice(0, 10);
+    const uid = currentUser?.uid ? String(currentUser.uid).slice(0, 48) : 'anon';
+    const deviceId = 'admin_' + uid;
+
+    try {
+        // 1) Leitura de config/site (deve funcionar sempre)
+        await db.collection('config').doc('site').get();
+
+        // 2) Presença: simula escrita no formato do tracker (create/update permitido)
+        await db.collection('presenca').doc(deviceId).set({
+            deviceId,
+            page: 'Admin',
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+            date: today,
+        }, { merge: true });
+
+        // 3) Leitura mínima de presenca (auth read)
+        await db.collection('presenca').limit(1).get();
+
+        const ms = Date.now() - started;
+        return { ok: true, msg: `OK • ${ms}ms`, rulesTag: EXPECTED_RULES_TAG, presencaOk: true };
+    } catch (e) {
+        return { ok: false, msg: (e && e.message) ? e.message : 'Erro', rulesTag: EXPECTED_RULES_TAG, presencaOk: false };
+    }
+}
+
+async function updateFirestoreStatusCard() {
+    const v = document.getElementById('dash-firestore-ok');
+    const meta = document.getElementById('dash-firestore-meta');
+    if (!v || !meta) return;
+    v.textContent = '...';
+    meta.textContent = 'Status Firestore';
+    const r = await runFirestoreHealthCheck();
+    if (r.ok) {
+        v.textContent = 'OK';
+        v.style.color = 'var(--green)';
+        meta.textContent = `rules: ${r.rulesTag} • presença: ok`;
+    } else {
+        v.textContent = 'Erro';
+        v.style.color = 'var(--red)';
+        meta.textContent = `rules: ${r.rulesTag} • presença: falhou`;
+    }
+}
+
+function _fmtTs(ts) {
+    try {
+        const ms = ts?.toMillis?.();
+        if (!ms) return '—';
+        return new Date(ms).toLocaleString('pt-BR');
+    } catch { return '—'; }
+}
+
+async function loadSaudeSistema() {
+    const c1 = document.getElementById('saude-firestore-content');
+    const c2 = document.getElementById('saude-erros-content');
+    if (c1) c1.innerHTML = '<span class="loading"></span> Verificando...';
+    if (c2) c2.innerHTML = '<span class="loading"></span> Carregando logs...';
+
+    // Firestore status
+    const r = await runFirestoreHealthCheck();
+    if (c1) {
+        c1.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
+                    <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Conexão</div>
+                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.ok?'var(--green)':'var(--red)'};">${r.ok?'OK':'ERRO'}</div>
+                    <div style="margin-top:.25rem;color:var(--text-secondary);font-size:.82rem;">${r.msg}</div>
+                </div>
+                <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
+                    <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Rules tag</div>
+                    <div style="margin-top:.35rem;font-family:monospace;font-weight:700;color:var(--text-primary);">${r.rulesTag || EXPECTED_RULES_TAG}</div>
+                    <div style="margin-top:.25rem;color:var(--text-muted);font-size:.78rem;">Se a tag não bater com o deploy, pode haver bloqueios.</div>
+                </div>
+                <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
+                    <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Presença</div>
+                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.presencaOk?'var(--green)':'var(--red)'};">${r.presencaOk?'OK':'FALHOU'}</div>
+                    <div style="margin-top:.25rem;color:var(--text-secondary);font-size:.82rem;">Online agora depende de /presenca</div>
+                </div>
+            </div>
+            <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
+                <button class="btn-secondary" onclick="loadSaudeSistema()"><i class="fas fa-sync"></i> Rechecar</button>
+            </div>
+        `;
+    }
+
+    // Logs: últimos erros do público
+    try {
+        const snap = await db.collection('eventos')
+            .where('eventName', '==', 'client_error')
+            .orderBy('timestamp', 'desc')
+            .limit(40)
+            .get();
+        const rows = snap.docs.map(d => d.data());
+        if (!c2) return;
+        if (!rows.length) {
+            c2.innerHTML = `<div class="empty-message">Nenhum erro capturado ainda.</div>`;
+            return;
+        }
+        c2.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:.7rem;">
+                ${rows.map(e => {
+                    const ed = e.eventData || {};
+                    const msg = (ed.message || '').toString();
+                    const kind = (ed.kind || 'error').toString();
+                    const src = (ed.source || '').toString();
+                    const path = (ed.path || '').toString();
+                    const when = _fmtTs(e.timestamp);
+                    return `
+                        <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);padding:.9rem 1rem;">
+                            <div style="display:flex;gap:.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+                                <div style="display:flex;gap:.5rem;align-items:center;min-width:0;">
+                                    <span style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:.15rem .55rem;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.02);color:var(--text-secondary);">${kind}</span>
+                                    <span style="color:var(--text-primary);font-weight:700;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">${msg || 'Erro'}</span>
+                                </div>
+                                <span style="color:var(--text-muted);font-size:.75rem;">${when}</span>
+                            </div>
+                            <div style="margin-top:.35rem;color:var(--text-muted);font-size:.78rem;display:flex;gap:.6rem;flex-wrap:wrap;">
+                                ${path ? `<span><i class="fas fa-link" style="opacity:.6;"></i> ${path}</span>` : ''}
+                                ${src ? `<span><i class="fas fa-file-alt" style="opacity:.6;"></i> ${src}</span>` : ''}
+                            </div>
+                            ${ed.stack ? `<details style="margin-top:.55rem;"><summary style="cursor:pointer;color:var(--text-secondary);font-size:.78rem;">Stack</summary><pre style="white-space:pre-wrap;color:var(--text-muted);font-size:.75rem;margin-top:.5rem;">${String(ed.stack).replace(/</g,'&lt;')}</pre></details>` : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        if (c2) c2.innerHTML = `<div class="empty-message">Erro ao carregar logs.</div>`;
+    }
 }
 
 function renderBairrosChart(containerId) {
@@ -1484,6 +1642,26 @@ function setupFormListeners() {
         let v = e.target.value.replace(/[^0-9]/g,'');
         if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
     });
+    document.getElementById('imovel-lanc-apartir')?.addEventListener('input', e => {
+        let v = e.target.value.replace(/[^0-9]/g,'');
+        if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
+    });
+    document.getElementById('imovel-lanc-entrada')?.addEventListener('input', e => {
+        let v = e.target.value.replace(/[^0-9]/g,'');
+        if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
+    });
+
+    // ── Modo de preço (normal x lançamento) ──
+    function _syncPrecoUI(mode) {
+        const lancWrap = document.getElementById('lancamento-fields');
+        const precoNormalWrap = document.getElementById('preco-normal-wrap');
+        const precoInput = document.getElementById('imovel-preco');
+        if (precoNormalWrap) precoNormalWrap.style.display = mode === 'lancamento' ? 'none' : '';
+        if (lancWrap) lancWrap.style.display = mode === 'lancamento' ? '' : 'none';
+        if (precoInput) precoInput.required = mode !== 'lancamento';
+    }
+    document.getElementById('imovel-preco-modo')?.addEventListener('change', e => _syncPrecoUI(e.target.value));
+    _syncPrecoUI(document.getElementById('imovel-preco-modo')?.value || 'normal');
 
     // ── Tipo → mostra/oculta campos de terreno ──
     document.getElementById('imovel-tipo')?.addEventListener('change', e => {
@@ -1511,12 +1689,15 @@ function setupFormListeners() {
         const isTerreno = tipo === 'Terreno';
         const anuncioAtivo   = getVal('imovel-anuncio-ativo') === 'true';
         const anuncioDuracao = parseInt(getVal('imovel-anuncio-duracao')) || 0;
+        const precoModo = getVal('imovel-preco-modo') || 'normal';
 
         const data = {
             titulo:    getVal('imovel-titulo'),
             bairro:    getVal('imovel-bairro'),
             area:      parseInt(getVal('imovel-area')) || 0,
-            preco:     parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0,
+            preco:     precoModo === 'lancamento'
+                ? 0
+                : (parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0),
             descricao: getVal('imovel-descricao'),
             imagem:    getVal('imovel-imagem'),
             fotos:     fotos.length ? fotos : [getVal('imovel-imagem')],
@@ -1524,6 +1705,12 @@ function setupFormListeners() {
             video:     videos[0] || null,
             tipo,
             status:    getVal('imovel-status') || 'disponivel',
+            precoModo,
+            lancamento: precoModo === 'lancamento' ? {
+                aPartirDe: parseFloat(getVal('imovel-lanc-apartir').replace(/[^0-9]/g,'')) || null,
+                entrada:   parseFloat(getVal('imovel-lanc-entrada').replace(/[^0-9]/g,'')) || null,
+                parcelas:  (getVal('imovel-lanc-parcelas') || null),
+            } : null,
             // Campos de imóvel normal (0 para terreno)
             quartos:    isTerreno ? 0 : (parseInt(getVal('imovel-quartos')) || 0),
             vagas:      isTerreno ? 0 : getNum('imovel-vagas'),
@@ -1581,6 +1768,15 @@ function resetForm() {
     const terrenoFields = document.getElementById('terreno-fields');
     if (terrenoFields) terrenoFields.style.display = 'none';
     _syncTipoUI('Apartamento');
+    // Reseta preço
+    const precoModo = document.getElementById('imovel-preco-modo');
+    if (precoModo) precoModo.value = 'normal';
+    const lancWrap = document.getElementById('lancamento-fields');
+    const precoNormalWrap = document.getElementById('preco-normal-wrap');
+    const precoInput = document.getElementById('imovel-preco');
+    if (precoNormalWrap) precoNormalWrap.style.display = '';
+    if (lancWrap) lancWrap.style.display = 'none';
+    if (precoInput) precoInput.required = true;
     // Reseta anúncio
     const anuncioDuracaoWrap = document.getElementById('anuncio-duracao-wrap');
     if (anuncioDuracaoWrap) anuncioDuracaoWrap.style.display = 'none';
@@ -1659,7 +1855,13 @@ async function editImovel(id) {
         setF('imovel-bairro', d.bairro);
         setF('imovel-quartos', d.quartos || 0);
         setF('imovel-area', d.area);
+        setF('imovel-preco-modo', d.precoModo || 'normal');
+        // preço normal
         setF('imovel-preco', d.preco ? Number(d.preco).toLocaleString('pt-BR') : '');
+        // lançamento
+        setF('imovel-lanc-apartir', d?.lancamento?.aPartirDe ? Number(d.lancamento.aPartirDe).toLocaleString('pt-BR') : '');
+        setF('imovel-lanc-entrada', d?.lancamento?.entrada ? Number(d.lancamento.entrada).toLocaleString('pt-BR') : '');
+        setF('imovel-lanc-parcelas', d?.lancamento?.parcelas || '');
         setF('imovel-descricao', d.descricao);
         setF('imovel-imagem', d.imagem);
         setF('imovel-tipo', d.tipo || 'Apartamento');
@@ -1671,6 +1873,16 @@ async function editImovel(id) {
         // ── Campos de Terreno ──
         const isTerreno = d.tipo === 'Terreno';
         _syncTipoUI(d.tipo || 'Apartamento');
+        // Sincroniza UI do preço após preencher
+        try {
+            const mode = (d.precoModo || 'normal');
+            const lancWrap = document.getElementById('lancamento-fields');
+            const precoNormalWrap = document.getElementById('preco-normal-wrap');
+            const precoInput = document.getElementById('imovel-preco');
+            if (precoNormalWrap) precoNormalWrap.style.display = mode === 'lancamento' ? 'none' : '';
+            if (lancWrap) lancWrap.style.display = mode === 'lancamento' ? '' : 'none';
+            if (precoInput) precoInput.required = mode !== 'lancamento';
+        } catch {}
         if (isTerreno) {
             setF('imovel-frente', d.frente ?? '');
             setF('imovel-zoneamento', d.zoneamento ?? '');
@@ -1915,6 +2127,8 @@ function stopRealtimeListeners() {
     if (_visitasListener)  { _visitasListener();  _visitasListener  = null; }
     if (_linksListener)    { _linksListener();     _linksListener    = null; }
     if (_presencaListener) { _presencaListener();  _presencaListener = null; }
+    if (_presencaTick)     { clearInterval(_presencaTick); _presencaTick = null; }
+    _presencaCacheDocs = [];
     stopVisitasRT();
     if (_leadsListener) { _leadsListener(); _leadsListener = null; }
 }
