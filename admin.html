@@ -87,6 +87,10 @@
                 <a href="#" class="nav-item" data-section="perfil">
                     <i class="fas fa-users"></i><span>Perfil de Visitante</span>
                 </a>
+                <a href="#" class="nav-item" data-section="chat-logs">
+                    <i class="fas fa-comments"></i><span>Chat do Assistente</span>
+                    <span class="nav-badge" id="badge-chat-logs" style="display:none;background:var(--purple)">0</span>
+                </a>
                 <div class="sidebar-section-label" style="margin-top:.5rem;">Sistema</div>
                 <a href="#" class="nav-item" data-section="seguranca">
                     <i class="fas fa-shield-alt"></i><span>Segurança</span>
@@ -149,7 +153,7 @@
                 </div>
 
                 <!-- Cards de visitas no dashboard -->
-                <div class="dash-visitas-row" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+                <div class="dash-visitas-row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
                     <div class="dash-visitas-card">
                         <div class="dash-visitas-icon"><i class="fas fa-eye"></i></div>
                         <div class="dash-visitas-info">
@@ -166,15 +170,16 @@
                         </div>
                         <a href="#" onclick="showSection('visitas');return false;" class="dash-visitas-link">Ver relatório <i class="fas fa-arrow-right"></i></a>
                     </div>
+                    <!-- Online agora — atualizado via onSnapshot da coleção presenca -->
                     <div class="dash-visitas-card">
-                        <div class="dash-visitas-icon" style="background:rgba(34,197,94,.2);color:var(--green)">
-                            <i class="fas fa-circle" style="font-size:.65rem;animation:pulse 1.2s ease-in-out infinite;"></i>
+                        <div class="dash-visitas-icon" style="background:rgba(34,197,94,.2);color:var(--green);">
+                            <i class="fas fa-circle" style="font-size:.7rem;animation:pulse 1.2s ease-in-out infinite;"></i>
                         </div>
                         <div class="dash-visitas-info">
-                            <span class="dash-visitas-value" id="dash-online-agora" style="color:var(--green);">—</span>
+                            <span class="dash-visitas-value" id="dash-online-agora" style="color:var(--green);">0</span>
                             <span class="dash-visitas-label">Online agora</span>
                         </div>
-                        <span style="font-size:.67rem;color:var(--text-muted);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:6px;white-space:nowrap;">últimos 5 min</span>
+                        <span style="font-size:.65rem;color:var(--text-muted);padding:.2rem .5rem;background:var(--bg-elevated);border-radius:6px;white-space:nowrap;">últimos 5 min</span>
                     </div>
                     <div class="dash-visitas-card">
                         <div class="dash-visitas-icon" style="background:var(--amber-soft);color:var(--amber)"><i class="fas fa-fire"></i></div>
@@ -269,8 +274,9 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="imovel-quartos">Número de Quartos *</label>
-                                <input type="number" id="imovel-quartos" min="1" max="10" placeholder="2" required>
+                                <label for="imovel-quartos">Número de Quartos</label>
+                                <input type="number" id="imovel-quartos" min="0" max="10" placeholder="2">
+                                <small>Deixe 0 para terrenos</small>
                             </div>
                         </div>
                         <div class="form-row two-columns">
@@ -304,7 +310,7 @@
                                 <input type="text" id="imovel-preco" placeholder="850.000" required>
                             </div>
                         </div>
-                        <div class="form-row">
+                        <div class="form-row three-columns">
                             <div class="form-group">
                                 <label for="imovel-vagas">Vagas</label>
                                 <input type="number" id="imovel-vagas" min="0" max="10" placeholder="0" value="0">
@@ -319,10 +325,10 @@
                             </div>
                         </div>
 
-                        <!-- CAMPOS ESPECÍFICOS DE TERRENO (ocultos por padrão) -->
+                        <!-- CAMPOS EXCLUSIVOS DE TERRENO — ocultos por padrão -->
                         <div id="terreno-fields" style="display:none;">
-                            <div style="padding:.6rem .9rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-sm);margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--amber);">
-                                <i class="fas fa-drafting-compass"></i> Campos específicos para Terreno
+                            <div style="padding:.55rem .9rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-sm);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--amber);">
+                                <i class="fas fa-drafting-compass"></i> Informações específicas do terreno (todos opcionais)
                             </div>
                             <div class="form-row three-columns">
                                 <div class="form-group">
@@ -353,29 +359,29 @@
                             <div class="form-row two-columns">
                                 <div class="form-group">
                                     <label for="imovel-localidade">Localidade / Referência</label>
-                                    <input type="text" id="imovel-localidade" placeholder="Ex: Próximo à praia, Condomínio X...">
-                                    <small>Ponto de referência ou localização dentro do bairro</small>
+                                    <input type="text" id="imovel-localidade" placeholder="Ex: Próximo à praia, dentro de condomínio...">
+                                    <small>Ponto de referência ou sub-localização no bairro</small>
                                 </div>
                                 <div class="form-group">
                                     <label for="imovel-preco-tipo">Tipo de preço</label>
                                     <select id="imovel-preco-tipo">
-                                        <option value="total">Preço total</option>
+                                        <option value="total">Preço total do terreno</option>
                                         <option value="por_m2">Preço por m²</option>
                                     </select>
                                 </div>
                             </div>
-                            <div class="form-row">
+                            <div class="form-row two-columns">
                                 <div class="form-group">
                                     <label for="imovel-iptu-terreno">IPTU anual (R$)</label>
                                     <input type="number" id="imovel-iptu-terreno" min="0" placeholder="0" value="0">
-                                    <small>IPTU anual do terreno (exibido ao visitante)</small>
+                                    <small>IPTU anual total do terreno</small>
                                 </div>
                             </div>
                         </div>
 
                         <!-- ANÚNCIO FLUTUANTE -->
-                        <div style="padding:.6rem .9rem;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:var(--radius-sm);margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--accent);">
-                            <i class="fas fa-bullhorn"></i> Configuração de Anúncio Flutuante (página inicial)
+                        <div style="padding:.55rem .9rem;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.12);border-radius:var(--radius-sm);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--accent);">
+                            <i class="fas fa-bullhorn"></i> Configuração de Anúncio Flutuante — aparece no carrossel da página inicial
                         </div>
                         <div class="form-row two-columns">
                             <div class="form-group">
@@ -384,17 +390,18 @@
                                     <option value="false">Não exibir</option>
                                     <option value="true">✅ Sim — exibir no carrossel</option>
                                 </select>
-                                <small>Aparece no card flutuante da página inicial</small>
+                                <small>Se nenhum imóvel tiver anúncio ativo, o site usará os mais recentes como fallback</small>
                             </div>
                             <div class="form-group" id="anuncio-duracao-wrap" style="display:none;">
                                 <label for="imovel-anuncio-duracao">Duração do anúncio</label>
                                 <select id="imovel-anuncio-duracao">
                                     <option value="7">7 dias</option>
                                     <option value="14">14 dias</option>
-                                    <option value="30">30 dias</option>
+                                    <option value="30">30 dias (recomendado)</option>
                                     <option value="60">60 dias</option>
                                     <option value="0">Sem prazo (permanente)</option>
                                 </select>
+                                <small id="anuncio-expiracao-preview" style="color:var(--amber);"></small>
                             </div>
                         </div>
                         <div class="form-row">
@@ -521,6 +528,14 @@
                 <div id="seguranca-content"></div>
             </section>
 
+            <!-- CHAT LOGS DO ASSISTENTE VIRTUAL -->
+            <section id="section-chat-logs" class="admin-section">
+                <div id="chat-logs-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
+                    <span class="loading" style="border-top-color:var(--accent);"></span> Carregando conversas...
+                </div>
+                <div id="chat-logs-content"></div>
+            </section>
+
             <!-- CONFIGURAÇÕES -->
             <section id="section-configuracoes" class="admin-section">
                 <div class="settings-grid">
@@ -599,6 +614,10 @@
                 <button class="mobile-more-item" onclick="mobileNavMore('perfil')">
                     <span class="mobile-more-icon purple"><i class="fas fa-users"></i></span>
                     <span>Visitantes</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('chat-logs')">
+                    <span class="mobile-more-icon" style="background:rgba(168,85,247,.15);color:#a855f7;"><i class="fas fa-comments"></i></span>
+                    <span>Chat Logs</span>
                 </button>
                 <button class="mobile-more-item" onclick="mobileNavMore('seguranca')">
                     <span class="mobile-more-icon" style="background:rgba(239,68,68,.15);color:var(--red);"><i class="fas fa-shield-alt"></i></span>
