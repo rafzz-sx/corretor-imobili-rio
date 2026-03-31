@@ -249,11 +249,70 @@
     #gallery .imovel:nth-child(5){animation-delay:220ms}
     #gallery .imovel:nth-child(6){animation-delay:275ms}
 
+    /* ══ CARD DE TERRENOS ══ */
+    .terrenos-card {
+        position:relative;
+        background:rgba(15,18,26,.95);
+        border:1.5px solid rgba(255,255,255,.07);
+        border-radius:16px;padding:1.1rem 1.2rem;
+        cursor:pointer;overflow:hidden;min-height:108px;
+        display:flex;flex-direction:column;gap:.45rem;
+        transition:border-color .25s,box-shadow .25s,transform .2s;
+        user-select:none;margin-bottom:1.1rem;
+    }
+    .terrenos-card::after {
+        content:'';position:absolute;inset:0;border-radius:14px;opacity:0;
+        transition:opacity .3s;pointer-events:none;
+        background:linear-gradient(135deg,rgba(245,158,11,.1) 0%,transparent 65%);
+    }
+    .terrenos-card:hover { transform:translateY(-2px); }
+    .terrenos-card:hover::after,.terrenos-card.active::after { opacity:1; }
+    .terrenos-card:hover,.terrenos-card.active {
+        border-color:rgba(245,158,11,.5);
+        box-shadow:0 0 0 1px rgba(245,158,11,.15),0 10px 30px rgba(0,0,0,.5);
+    }
+    .terrenos-card .rc-bg {
+        position:absolute;right:-8px;bottom:-8px;
+        width:88px;height:78px;object-fit:cover;
+        border-radius:10px;opacity:.1;filter:blur(1.5px);
+        pointer-events:none;transition:opacity .3s;
+    }
+    .terrenos-card:hover .rc-bg,.terrenos-card.active .rc-bg { opacity:.22; }
+    .terrenos-card .rc-header {
+        display:flex;align-items:flex-start;justify-content:space-between;
+        gap:.5rem;position:relative;z-index:1;
+    }
+    .terrenos-card .rc-icon {
+        width:34px;height:34px;border-radius:10px;
+        display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;
+        background:rgba(245,158,11,.15);color:#f59e0b;
+    }
+    .terrenos-card .rc-count { display:flex;flex-direction:column;align-items:flex-end;gap:.02rem;font-size:.68rem;color:rgba(255,255,255,.4);font-weight:600; }
+    .terrenos-card .rc-count-num { font-size:1.4rem;font-weight:800;line-height:1;color:#fff;font-family:var(--font-title);transition:color .2s; }
+    .terrenos-card:hover .rc-count-num,.terrenos-card.active .rc-count-num { color:#f59e0b; }
+    .terrenos-card .rc-title { font-size:.92rem;font-weight:700;color:#fff;position:relative;z-index:1; }
+    .terrenos-card .rc-bairros { display:flex;flex-wrap:wrap;gap:.3rem;position:relative;z-index:1; }
+    .terrenos-card .rc-chip {
+        font-size:.66rem;color:rgba(255,255,255,.45);padding:.15rem .5rem;border-radius:99px;
+        border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);font-weight:500;
+        transition:all .2s;white-space:nowrap;cursor:pointer;
+    }
+    .terrenos-card .rc-chip:hover { border-color:rgba(255,255,255,.18);color:rgba(255,255,255,.75); }
+    .terrenos-card .rc-chip.ativo { background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.4);color:#fbbf24;font-weight:700; }
+    /* Badge contagem de terrenos no label de filtros */
+    .terrenos-label-badge {
+        display:inline-flex;align-items:center;gap:.3rem;
+        background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);
+        color:#f59e0b;font-size:.62rem;font-weight:700;
+        padding:.1rem .5rem;border-radius:99px;margin-left:.4rem;
+    }
+
     @media(max-width:600px){
         .region-cards{grid-template-columns:1fr;}
         .filtros-extras{flex-direction:column;align-items:stretch;}
         .fx-divider{display:none;}
         #btn-clear-all{margin-left:0;width:100%;justify-content:center;}
+        .terrenos-card{min-height:auto;}
     }
     </style>
 </head>
@@ -334,6 +393,22 @@
                         <span class="rc-chip" data-bairro="Pedra de Guaratiba" onclick="selectBairroChip(event,'Pedra de Guaratiba')">Pedra de Guaratiba</span>
                         <span class="rc-chip" data-bairro="Grumari" onclick="selectBairroChip(event,'Grumari')">Grumari</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Card de Terrenos -->
+            <div class="terrenos-card" id="card-terrenos" onclick="toggleTipo('Terreno')">
+                <img class="rc-bg" src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=200&q=60" alt="" loading="lazy">
+                <div class="rc-header">
+                    <div class="rc-icon"><i class="fas fa-drafting-compass"></i></div>
+                    <div class="rc-count">
+                        <span class="rc-count-num" id="count-terrenos">—</span>
+                        <span>terrenos</span>
+                    </div>
+                </div>
+                <div class="rc-title">🏗️ Terrenos Disponíveis</div>
+                <div class="rc-bairros" id="chips-terrenos">
+                    <!-- Populado dinamicamente pelo JS com os bairros dos terrenos -->
                 </div>
             </div>
 
