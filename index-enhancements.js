@@ -313,66 +313,69 @@
         sessionStorage.setItem('_lb_ad_dismissed', Date.now().toString());
     }
 
+    function _mapAdData(d) {
+        const data = d.data();
+        const isTerreno = data.tipo === 'Terreno';
+        return {
+            id: d.id,
+            titulo: data.titulo || 'Imóvel Disponível',
+            bairro: data.bairro || 'Rio de Janeiro',
+            preco: isTerreno && data.precoTipo === 'por_m2'
+                ? 'R$ ' + Number(data.preco).toLocaleString('pt-BR') + '/m²'
+                : 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
+            quartos: data.quartos || 0,
+            area: data.area || 0,
+            destaque: isTerreno ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
+            img: data.imagem || '',
+        };
+    }
+
     function startAds() {
         const dismissed = sessionStorage.getItem('_lb_ad_dismissed');
         if (dismissed && (Date.now() - parseInt(dismissed)) < 10 * 60 * 1000) return;
 
         if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
             try {
-                // Busca imóveis marcados como anúncio ativo
+                const agora = new Date().toISOString();
+                // 1ª tentativa: imóveis marcados com anuncioAtivo=true
                 firebase.firestore().collection('imoveis')
                     .where('status', '==', 'disponivel')
                     .where('anuncioAtivo', '==', true)
                     .orderBy('createdAt', 'desc').limit(8).get()
                     .then(snap => {
-                        const agora = new Date().toISOString();
-                        const ativos = snap.docs.filter(d => {
+                        // Filtra também os que não expiraram
+                        const validos = snap.docs.filter(d => {
                             const exp = d.data().anuncioExpiraEm;
-                            return !exp || exp > agora; // sem prazo ou ainda válido
+                            return !exp || exp > agora;
                         });
 
-                        if (ativos.length > 0) {
-                            _adsData = ativos.map(d => {
-                                const data = d.data();
-                                return {
-                                    id: d.id,
-                                    titulo: data.titulo || 'Imóvel Disponível',
-                                    bairro: data.bairro || 'Rio de Janeiro',
-                                    preco: 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
-                                    quartos: data.quartos || 0,
-                                    area: data.area || 0,
-                                    destaque: data.tipo === 'Terreno' ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
-                                    img: data.imagem || '',
-                                };
-                            });
+                        if (validos.length > 0) {
+                            // Há anúncios configurados — usa só eles
+                            _adsData = validos.map(_mapAdData);
+                            setTimeout(() => showAd(0), 5000);
                         } else {
-                            // Fallback: sem anúncios configurados — usa os mais recentes disponíveis
+                            // Nenhum anúncio ativo — fallback: 6 mais recentes disponíveis
                             firebase.firestore().collection('imoveis')
                                 .where('status', '==', 'disponivel')
                                 .orderBy('createdAt', 'desc').limit(6).get()
                                 .then(snap2 => {
-                                    if (snap2.size > 0) {
-                                        _adsData = snap2.docs.map(d => {
-                                            const data = d.data();
-                                            return {
-                                                id: d.id,
-                                                titulo: data.titulo || 'Imóvel Disponível',
-                                                bairro: data.bairro || 'Rio de Janeiro',
-                                                preco: 'R$ ' + Number(data.preco).toLocaleString('pt-BR'),
-                                                quartos: data.quartos || 0,
-                                                area: data.area || 0,
-                                                destaque: data.tipo === 'Terreno' ? '🏗️ Terreno' : (data.destaque ? '⭐ Destaque' : (data.tipo || 'Disponível')),
-                                                img: data.imagem || '',
-                                            };
-                                        });
-                                    }
+                                    if (snap2.size > 0) _adsData = snap2.docs.map(_mapAdData);
                                     setTimeout(() => showAd(0), 5000);
-                                }).catch(() => setTimeout(() => showAd(0), 5000));
-                            return;
+                                })
+                                .catch(() => setTimeout(() => showAd(0), 5000));
                         }
-                        setTimeout(() => showAd(0), 5000);
                     })
-                    .catch(() => setTimeout(() => showAd(0), 5000));
+                    .catch(() => {
+                        // Índice composto não existe ainda — fallback direto
+                        firebase.firestore().collection('imoveis')
+                            .where('status', '==', 'disponivel')
+                            .orderBy('createdAt', 'desc').limit(6).get()
+                            .then(snap2 => {
+                                if (snap2.size > 0) _adsData = snap2.docs.map(_mapAdData);
+                                setTimeout(() => showAd(0), 5000);
+                            })
+                            .catch(() => setTimeout(() => showAd(0), 5000));
+                    });
             } catch(e) { setTimeout(() => showAd(0), 5000); }
         } else {
             setTimeout(() => showAd(0), 5000);
