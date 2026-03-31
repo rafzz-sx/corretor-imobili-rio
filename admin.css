@@ -481,6 +481,109 @@
        display: flex; align-items: center; gap: 0.5rem;
    }
    .dashboard-card h3 i { color: var(--text-muted); }
+
+  /* ===================== DASH — VISITAS (cards menores) ===================== */
+
+  .dash-visitas-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.1rem;
+  }
+
+  .dash-visitas-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.1rem;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.9rem;
+      box-shadow: 0 6px 22px rgba(0,0,0,0.25);
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+      min-height: 86px;
+  }
+
+  .dash-visitas-card:hover {
+      transform: translateY(-1px);
+      border-color: var(--border-hover);
+      background: linear-gradient(180deg, rgba(59,130,246,0.05) 0%, rgba(255,255,255,0.015) 100%);
+  }
+
+  .dash-visitas-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(59,130,246,0.18);
+      flex-shrink: 0;
+  }
+
+  .dash-visitas-info {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.12rem;
+  }
+
+  .dash-visitas-value {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1.05;
+      color: var(--text-primary);
+  }
+
+  .dash-visitas-label {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 0.2px;
+  }
+
+  .dash-visitas-link {
+      justify-self: end;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.35rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.15);
+      transition: color .18s ease, border-color .18s ease, background .18s ease;
+      white-space: nowrap;
+  }
+
+  .dash-visitas-link:hover {
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+      background: rgba(255,255,255,0.03);
+  }
+
+  /* Card de status (mantém altura consistente) */
+  #dash-firestore-card .dash-visitas-value { letter-spacing: -0.2px; }
+  #dash-firestore-card .dash-visitas-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+  /* Realtime hint */
+  .dash-realtime-hint {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.02);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin: -0.25rem 0 1rem;
+  }
    
    .chart-container { min-height: 180px; }
    
