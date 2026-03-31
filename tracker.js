@@ -45,6 +45,90 @@
         return 'Início';
     }
 
+    // ========== ERROS DO CLIENTE (saúde do sistema) ==========
+    // Envia erros do site público para /eventos com eventName="client_error".
+    // O admin lê esses logs; nada é exibido ao visitante.
+    var _errQueue = [];
+    var _errSending = false;
+    var _errLastSentAt = 0;
+
+    function _pushErr(payload) {
+        try {
+            // Evita loop se erro acontecer dentro do próprio logger
+            payload = payload || {};
+            payload.page = getPageName();
+            payload.path = (window.location && window.location.pathname) ? String(window.location.pathname).slice(0, 120) : '';
+            payload.deviceId = getDeviceId();
+            payload.date = new Date().toISOString().slice(0, 10);
+            payload.timestamp = (typeof firebase !== 'undefined' && firebase.firestore)
+                ? firebase.firestore.FieldValue.serverTimestamp()
+                : null;
+            _errQueue.push(payload);
+            _flushErrQueue();
+        } catch (e) {}
+    }
+
+    function _flushErrQueue() {
+        if (_errSending) return;
+        var now = Date.now();
+        // rate limit simples: no máximo 1 envio a cada 4s
+        if (now - _errLastSentAt < 4000) return;
+        if (!_errQueue.length) return;
+        _errSending = true;
+        _errLastSentAt = now;
+        waitForFirebase(function() {
+            try {
+                var db = firebase.firestore();
+                var item = _errQueue.shift();
+                // timestamp pode ser null se firebase não está pronto; substitui
+                if (!item.timestamp) item.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                db.collection('eventos').add({
+                    deviceId: item.deviceId,
+                    eventName: 'client_error',
+                    page: item.page,
+                    date: item.date,
+                    timestamp: item.timestamp,
+                    eventData: {
+                        path: item.path || '',
+                        kind: (item.kind || 'error').slice(0, 24),
+                        message: (item.message || '').slice(0, 240),
+                        source: (item.source || '').slice(0, 140),
+                        stack: (item.stack || '').slice(0, 500),
+                    }
+                }).catch(function() {});
+            } catch (e) {}
+            finally {
+                _errSending = false;
+                // tenta enviar próximo (se houver)
+                if (_errQueue.length) setTimeout(_flushErrQueue, 800);
+            }
+        });
+    }
+
+    window.addEventListener('error', function(ev) {
+        try {
+            var err = ev && ev.error;
+            _pushErr({
+                kind: 'error',
+                message: (ev && ev.message) ? String(ev.message) : (err && err.message ? String(err.message) : 'Erro'),
+                source: (ev && ev.filename) ? String(ev.filename) + ':' + (ev.lineno || 0) : '',
+                stack: err && err.stack ? String(err.stack) : ''
+            });
+        } catch (e) {}
+    });
+
+    window.addEventListener('unhandledrejection', function(ev) {
+        try {
+            var r = ev && ev.reason;
+            _pushErr({
+                kind: 'promise',
+                message: r && r.message ? String(r.message) : String(r || 'Promise rejeitada'),
+                source: '',
+                stack: r && r.stack ? String(r.stack) : ''
+            });
+        } catch (e) {}
+    });
+
     // ========== PRESENÇA AO VIVO ==========
     // Atualiza doc em /presenca/{deviceId} a cada 60s
     // O admin filtra lastSeen >= agora-5min para "online agora"
