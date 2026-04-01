@@ -548,10 +548,15 @@
   
         // Mostra mensagem do usuário
         addUserMsg(text);
-        _logChat('chat_texto', { text: text.slice(0, 100), path: _chatPath.join('→') });
-  
+
         // Detecta intenção
         const intent = detectIntent(text);
+        _logChat('chat_texto', {
+            text: text.slice(0, 200),
+            intentDetected: intent ? intent.next : 'nenhuma',
+            path: _chatPath.join('→'),
+        });
+  
         if (intent) {
             setTimeout(() => goTo(intent.next, intent.waMsg || null), 600);
         } else {
@@ -578,7 +583,7 @@
         if (nodeKey === 'ver_imoveis_wa') {
             const msg = waMsg || 'Olá Leandro! Vim pelo site e gostaria de saber mais sobre os imóveis disponíveis.';
             window.open(KB.whatsappMsg(msg), '_blank');
-            _logChat('chat_whatsapp', { msg: msg.slice(0, 120), path: _chatPath.join('→') });
+            _logChat('chat_whatsapp', { msg: msg.slice(0, 200), waText: msg.slice(0, 200), path: _chatPath.join('→') });
             addBotMsg('✅ Te direcionei para o WhatsApp do Leandro! Ele responde rapidinho. 😊\n\nPosso ajudar em mais alguma coisa?');
             setTimeout(() => addOpts([
                 { label: '↩ Voltar ao início', next: 'inicio' },
@@ -590,7 +595,11 @@
         if (!node) return;
   
         if (nodeKey !== 'inicio') {
-            _logChat('chat_nav', { node: nodeKey, path: _chatPath.join('→') });
+            _logChat('chat_nav', {
+                node: nodeKey,
+                botMsg: (node.msg || '').slice(0, 200),
+                path: _chatPath.join('→'),
+            });
         }
   
         showTyping(() => {
