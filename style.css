@@ -969,8 +969,10 @@ footer::before {
     overflow: hidden;
     margin-top: 2rem;
     position: relative;
+    z-index: 1;
+    isolation: isolate;
 }
-
+Y
 /* Fade edges so text fades out gracefully */
 .featured-logos::before,
 .featured-logos::after {
@@ -998,7 +1000,7 @@ footer::before {
 .logo-track {
     display: flex;
     gap: 3rem;
-    animation: scroll 35s linear infinite;
+    animation: lbMarqueeX 35s linear infinite;
     white-space: nowrap;
     width: max-content;
     will-change: transform;
@@ -1025,7 +1027,7 @@ footer::before {
     font-size: 0.6rem;
 }
 
-@keyframes scroll {
+@keyframes lbMarqueeX {
     from { transform: translate3d(0,0,0); }
     to { transform: translate3d(-50%,0,0); }
 }
@@ -1783,6 +1785,14 @@ footer::before {
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--primary) #111;
+    contain: layout style;
+}
+
+/* Enquanto miniaturas são montadas fora do clique (openModal) */
+.modal-thumbs.modal-thumbs-loading {
+    min-height: 70px;
+    pointer-events: none;
+    opacity: 0.55;
 }
 
 .modal-thumbs::-webkit-scrollbar {
@@ -3635,8 +3645,12 @@ a, button, select, input, [onclick] {
     .gradient-sphere,
     .profile-ring,
     .profile-ring-outer { display: none !important; }
-    .logo-track { animation: none !important; }
-    .testimonial-track { animation: none !important; }
+    /* Faixa de bairros: mantém movimento lento (antes ficava parada por animation:none) */
+    .logo-track {
+        animation: lbMarqueeX 90s linear infinite !important;
+        animation-iteration-count: infinite !important;
+        animation-duration: 90s !important;
+    }
 }
 
 /* ── LAZY LOADING PLACEHOLDER ── */
