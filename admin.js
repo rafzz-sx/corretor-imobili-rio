@@ -3099,63 +3099,171 @@ function renderChatLogs(logs) {
 
     const today = new Date().toISOString().slice(0,10);
 
-    // Agrupa por sessão
+    // Agrupa por sessão, mantém ordem cronológica dentro de cada sessão
     const sessions = {};
     logs.forEach(l => {
-        if (!sessions[l.sessionId]) sessions[l.sessionId] = { sessionId:l.sessionId, deviceId:l.deviceId, date:l.date, events:[], hasWA:false, path:'' };
+        if (!sessions[l.sessionId]) sessions[l.sessionId] = {
+            sessionId: l.sessionId,
+            deviceId: l.deviceId,
+            date: l.date,
+            events: [],
+            hasWA: false,
+            hasText: false,
+            waMessages: [],
+            typedTexts: [],
+        };
         sessions[l.sessionId].events.push(l);
-        if (l.event === 'chat_whatsapp') sessions[l.sessionId].hasWA = true;
-        if (l.path) sessions[l.sessionId].path = l.path;
+        if (l.event === 'chat_whatsapp') {
+            sessions[l.sessionId].hasWA = true;
+            if (l.waText || l.msg) sessions[l.sessionId].waMessages.push(l.waText || l.msg);
+        }
+        if (l.event === 'chat_texto' && l.text) {
+            sessions[l.sessionId].hasText = true;
+            sessions[l.sessionId].typedTexts.push(l.text);
+        }
     });
 
     const sessionList = Object.values(sessions).sort((a,b) => {
-        const aT = a.events[0]?.timestamp?.seconds || 0;
-        const bT = b.events[0]?.timestamp?.seconds || 0;
+        // Sort by most recent event in session
+        const aT = Math.max(...a.events.map(e => e.timestamp?.seconds || 0));
+        const bT = Math.max(...b.events.map(e => e.timestamp?.seconds || 0));
         return bT - aT;
     });
 
     // KPIs
     const totalSessions = sessionList.length;
     const waSessions = sessionList.filter(s => s.hasWA).length;
+    const textSessions = sessionList.filter(s => s.hasText).length;
     const hojeS = sessionList.filter(s => s.date === today).length;
     const convRate = totalSessions > 0 ? Math.round((waSessions/totalSessions)*100) : 0;
+
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fmtTs(ts) {
+        if (!ts) return '—';
+        try {
+            const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+            return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        } catch { return '—'; }
+    }
+
+    // Render each session as a mini conversation timeline
+    function renderSession(s) {
+        // Sort events chronologically
+        const evts = [...s.events].sort((a,b) => (a.timestamp?.seconds||0) - (b.timestamp?.seconds||0));
+
+        const tsFirst = evts[0]?.timestamp;
+        const tsLast = evts[evts.length-1]?.timestamp;
+        const duration = (tsFirst && tsLast)
+            ? (() => {
+                const diff = (tsLast.seconds||0) - (tsFirst.seconds||0);
+                if (diff < 60) return diff + 's';
+                return Math.round(diff/60) + 'min';
+            })()
+            : null;
+
+        // Build timeline items
+        const timelineItems = evts.map(e => {
+            if (e.event === 'chat_aberto') {
+                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;">🟢</span>
+                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
+                    <span style="font-size:.75rem;color:var(--text-secondary);">Chat aberto na página <strong style="color:var(--text-primary);">${escHtml(e.page||'—')}</strong></span>
+                </div>`;
+            }
+            if (e.event === 'chat_texto') {
+                return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">💬</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:#93c5fd;">Usuário digitou</span>${e.intentDetected && e.intentDetected !== 'nenhuma' ? ` · intenção: <span style="color:var(--amber);">${escHtml(e.intentDetected)}</span>` : ' · <span style="color:var(--red);font-size:.68rem;">sem intenção detectada</span>'}</div>
+                        <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);border-radius:10px;border-bottom-left-radius:3px;padding:.4rem .75rem;font-size:.82rem;color:#e2e8f0;max-width:90%;word-break:break-word;">${escHtml(e.text)}</div>
+                    </div>
+                </div>`;
+            }
+            if (e.event === 'chat_click') {
+                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;">👆</span>
+                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
+                    <span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">${escHtml(e.label||'—')}</span>
+                    ${e.next ? `<span style="font-size:.7rem;color:var(--text-muted);">→ <span style="color:var(--text-secondary);">${escHtml(e.next)}</span></span>` : ''}
+                </div>`;
+            }
+            if (e.event === 'chat_chip') {
+                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;">⚡</span>
+                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
+                    <span style="background:rgba(245,158,11,.1);color:var(--amber);padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">Atalho: ${escHtml(e.label||'—')}</span>
+                </div>`;
+            }
+            if (e.event === 'chat_nav') {
+                return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">🤖</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:#34d399;">Bot respondeu</span> · nó: <span style="color:var(--text-secondary);font-family:monospace;">${escHtml(e.node||'—')}</span></div>
+                        ${e.botMsg ? `<div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.15);border-radius:10px;border-bottom-right-radius:3px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.75);max-width:90%;word-break:break-word;font-style:italic;">${escHtml(e.botMsg.slice(0,180))}${e.botMsg.length>180?'…':''}</div>` : ''}
+                    </div>
+                </div>`;
+            }
+            if (e.event === 'chat_whatsapp') {
+                return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">📱</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:var(--green);font-weight:600;">Abriu WhatsApp</span></div>
+                        ${(e.waText||e.msg) ? `<div style="background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.2);border-radius:10px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.8);max-width:90%;word-break:break-word;">${escHtml((e.waText||e.msg).slice(0,200))}</div>` : ''}
+                    </div>
+                </div>`;
+            }
+            return '';
+        }).filter(Boolean).join('');
+
+        const borderColor = s.hasWA ? 'var(--green)' : s.hasText ? 'var(--accent)' : 'var(--border)';
+
+        return `
+        <div style="border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);background:var(--bg-elevated);overflow:hidden;margin-bottom:.7rem;">
+            <!-- Session header -->
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.75rem 1rem;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;"
+                 onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.lb-chevron').style.transform=this.nextElementSibling.style.display==='none'?'':'rotate(180deg)'">
+                <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+                    <span style="font-size:.72rem;font-family:monospace;color:var(--text-muted);">${(s.deviceId||'').slice(0,24)}…</span>
+                    ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.67rem;padding:.12rem .5rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
+                    ${s.hasText ? '<span style="background:rgba(59,130,246,.12);color:#93c5fd;font-size:.67rem;padding:.12rem .5rem;border-radius:99px;font-weight:600;">💬 Digitou</span>' : ''}
+                    ${duration ? `<span style="font-size:.68rem;color:var(--text-muted);">⏱ ${duration}</span>` : ''}
+                    <span style="font-size:.68rem;color:var(--text-muted);">${evts.length} evento${evts.length!==1?'s':''}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:.5rem;">
+                    <span style="font-size:.72rem;color:var(--text-muted);">${fmtTs(tsFirst)}</span>
+                    <i class="fas fa-chevron-down lb-chevron" style="color:var(--text-muted);font-size:.65rem;transition:transform .2s;"></i>
+                </div>
+            </div>
+            <!-- Session timeline (expanded by default) -->
+            <div style="padding:.6rem 1rem .5rem;">
+                ${timelineItems || '<span style="color:var(--text-muted);font-size:.78rem;">Nenhum evento detalhado</span>'}
+            </div>
+        </div>`;
+    }
 
     content.innerHTML = `
     <div class="stats-grid" style="margin-bottom:1.5rem;">
         <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-comments"></i></div><div class="stat-info"><span class="stat-value">${totalSessions}</span><span class="stat-label">Conversas Totais</span></div></div>
         <div class="stat-card"><div class="stat-icon green"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><span class="stat-value">${hojeS}</span><span class="stat-label">Hoje</span></div></div>
+        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-keyboard"></i></div><div class="stat-info"><span class="stat-value">${textSessions}</span><span class="stat-label">Digitaram algo</span></div></div>
         <div class="stat-card"><div class="stat-icon amber"><i class="fab fa-whatsapp"></i></div><div class="stat-info"><span class="stat-value">${waSessions}</span><span class="stat-label">Foram ao WhatsApp</span></div></div>
-        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${convRate}%</span><span class="stat-label">Taxa de Conversão</span></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--green-soft);color:var(--green);"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${convRate}%</span><span class="stat-label">Taxa de Conversão</span></div></div>
     </div>
 
     <div class="dashboard-card" style="margin-bottom:1.5rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
             <h3><i class="fas fa-list-ul"></i> Histórico de Conversas</h3>
-            <span style="font-size:.78rem;color:var(--text-muted);">${sessionList.length} sessões</span>
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:.72rem;color:var(--text-muted);background:var(--bg-elevated);padding:.2rem .6rem;border-radius:6px;border:1px solid var(--border);">🟢 aberto &nbsp; 💬 digitou &nbsp; 👆 clique &nbsp; ⚡ atalho &nbsp; 🤖 bot &nbsp; 📱 WhatsApp</span>
+                <span style="font-size:.75rem;color:var(--text-muted);">${sessionList.length} sessões</span>
+            </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:.7rem;">
-        ${sessionList.slice(0,50).map(s => {
-            const clicks = s.events.filter(e => e.event === 'chat_click');
-            const firstEvent = s.events.find(e => e.timestamp);
-            const ts = firstEvent?.timestamp?.toDate?.() || null;
-            const tsStr = ts ? ts.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : s.date || '—';
-            return `
-            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem;background:var(--bg-elevated);
-                border-left:3px solid ${s.hasWA ? 'var(--green)' : 'var(--border)'};">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;">
-                    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-                        <span style="font-size:.72rem;font-family:monospace;color:var(--text-muted);">${(s.deviceId||'').slice(0,22)}…</span>
-                        ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.68rem;padding:.15rem .55rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
-                    </div>
-                    <span style="font-size:.73rem;color:var(--text-muted);">${tsStr}</span>
-                </div>
-                <div style="font-size:.76rem;color:var(--text-secondary);line-height:1.5;">
-                    ${clicks.length ? `<span style="color:var(--text-muted);">Caminho:</span> ${clicks.map(c=>`<span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.1rem .4rem;border-radius:4px;font-size:.7rem;">${c.label}</span>`).join(' → ')}` : '<span style="color:var(--text-muted);">Abriu mas não interagiu</span>'}
-                </div>
-                ${s.path ? `<div style="margin-top:.3rem;font-size:.7rem;color:var(--text-muted);">Fluxo: ${s.path}</div>` : ''}
-            </div>`;
-        }).join('')}
-        ${sessionList.length > 50 ? `<div style="text-align:center;padding:.7rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
+        <div>
+            ${sessionList.slice(0,50).map(renderSession).join('')}
+            ${sessionList.length > 50 ? `<div style="text-align:center;padding:.7rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
         </div>
     </div>`;
 }
