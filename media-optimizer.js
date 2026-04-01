@@ -93,15 +93,27 @@
 
     /**
      * Se o objeto já existe no Storage, devolve a URL sem reenviar.
+     * Trata erros de permissão no getMetadata como "arquivo não existe" e
+     * prossegue para o upload — evita ficar travado em "verificando…".
      */
     function getExistingUrlOrUpload(ref, blob, contentType, onProgress) {
         return ref
             .getMetadata()
             .then(function () {
+                // Arquivo já existe — retorna URL direto
                 return ref.getDownloadURL();
             })
             .catch(function (e) {
-                if (e.code !== 'storage/object-not-found') throw e;
+                // Se o arquivo não existe OU se não temos permissão de leitura de metadata
+                // (o Storage só permite leitura pública de download, não de metadata em alguns projetos),
+                // prosseguimos para o upload. Só relançamos erros que não sejam de ausência/permissão.
+                var ignoreCodes = [
+                    'storage/object-not-found',
+                    'storage/unauthorized',
+                    'storage/unauthenticated',
+                ];
+                if (ignoreCodes.indexOf(e.code) === -1) throw e;
+
                 var task = ref.put(blob, { contentType: contentType });
                 if (onProgress && task.on) {
                     task.on('state_changed', function (snap) {
@@ -131,13 +143,18 @@
             return sha256Hex(buf).then(function (hash) {
                 var path = 'optimized_images/' + hash + '.jpg';
                 var ref = st.ref(path);
+                var ignoreCodes = [
+                    'storage/object-not-found',
+                    'storage/unauthorized',
+                    'storage/unauthenticated',
+                ];
                 return ref
                     .getMetadata()
                     .then(function () {
                         return ref.getDownloadURL();
                     })
                     .catch(function (e) {
-                        if (e.code !== 'storage/object-not-found') throw e;
+                        if (ignoreCodes.indexOf(e.code) === -1) throw e;
                         return compressImageBlob(new Blob([buf], { type: file.type })).then(function (blob) {
                             var task = ref.put(blob, { contentType: 'image/jpeg' });
                             if (onProgress && task.on) {
