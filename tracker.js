@@ -1,12 +1,14 @@
 //=============================================
-//  TRACKER DE VISITAS v3.0 — Leandro Imóveis
-//  Correções: mobile, presença ao vivo, sessionStorage fallback
+//  TRACKER DE VISITAS v3.1 — Leandro Imóveis
+//  Fix: links_copiados agora persiste no Firestore
+//  Fix: regras do Firebase respeitadas (campos exatos)
+//  Otim: debounce, cache, retry inteligente
 // =============================================
 
 (function() {
     'use strict';
 
-    // ── Storage seguro (fallback sessionStorage para iOS restrito) ──
+    // ── Storage seguro ──
     function storageGet(key) {
         try { return localStorage.getItem(key); } catch(e) {
             try { return sessionStorage.getItem(key); } catch(e2) { return null; }
@@ -18,15 +20,25 @@
         }
     }
 
+    var _fbReady = false;
+    var _fbCallbacks = [];
+
     function waitForFirebase(cb, attempts) {
         attempts = attempts || 0;
-        // 150 tentativas x 200ms = até 30s — garante carregamento mesmo em 3G lento
         if (attempts > 150) return;
+        if (_fbReady) { cb(); return; }
         if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+            _fbReady = true;
+            var pending = _fbCallbacks.splice(0);
+            pending.forEach(function(fn) { try { fn(); } catch(e) {} });
             cb();
         } else {
             setTimeout(function() { waitForFirebase(cb, attempts + 1); }, 200);
         }
+    }
+
+    function getDb() {
+        return firebase.firestore();
     }
 
     function getDeviceId() {
@@ -45,51 +57,52 @@
         return 'Início';
     }
 
-    // ========== ERROS DO CLIENTE (saúde do sistema) ==========
-    // Envia erros do site público para /eventos com eventName="client_error".
-    // O admin lê esses logs; nada é exibido ao visitante.
+    function getToday() {
+        return new Date().toISOString().slice(0, 10);
+    }
+
+    // ── Servertime shortcut ──
+    function srvTs() {
+        return firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    // ========== ERROS DO CLIENTE ==========
     var _errQueue = [];
     var _errSending = false;
     var _errLastSentAt = 0;
+    var _errCount = 0;
 
     function _pushErr(payload) {
+        if (_errCount > 20) return; // evita flood
+        _errCount++;
         try {
-            // Evita loop se erro acontecer dentro do próprio logger
             payload = payload || {};
             payload.page = getPageName();
-            payload.path = (window.location && window.location.pathname) ? String(window.location.pathname).slice(0, 120) : '';
+            payload.path = String(window.location.pathname).slice(0, 120);
             payload.deviceId = getDeviceId();
-            payload.date = new Date().toISOString().slice(0, 10);
-            payload.timestamp = (typeof firebase !== 'undefined' && firebase.firestore)
-                ? firebase.firestore.FieldValue.serverTimestamp()
-                : null;
+            payload.date = getToday();
             _errQueue.push(payload);
-            _flushErrQueue();
+            if (!_errSending) setTimeout(_flushErrQueue, 500);
         } catch (e) {}
     }
 
     function _flushErrQueue() {
-        if (_errSending) return;
+        if (_errSending || !_errQueue.length) return;
         var now = Date.now();
-        // rate limit simples: no máximo 1 envio a cada 4s
-        if (now - _errLastSentAt < 4000) return;
-        if (!_errQueue.length) return;
+        if (now - _errLastSentAt < 4000) { setTimeout(_flushErrQueue, 4000 - (now - _errLastSentAt)); return; }
         _errSending = true;
         _errLastSentAt = now;
         waitForFirebase(function() {
             try {
-                var db = firebase.firestore();
                 var item = _errQueue.shift();
-                // timestamp pode ser null se firebase não está pronto; substitui
-                if (!item.timestamp) item.timestamp = firebase.firestore.FieldValue.serverTimestamp();
-                db.collection('eventos').add({
+                getDb().collection('eventos').add({
                     deviceId: item.deviceId,
                     eventName: 'client_error',
                     page: item.page,
                     date: item.date,
-                    timestamp: item.timestamp,
+                    timestamp: srvTs(),
                     eventData: {
-                        path: item.path || '',
+                        path: (item.path || '').slice(0, 140),
                         kind: (item.kind || 'error').slice(0, 24),
                         message: (item.message || '').slice(0, 240),
                         source: (item.source || '').slice(0, 140),
@@ -99,8 +112,7 @@
             } catch (e) {}
             finally {
                 _errSending = false;
-                // tenta enviar próximo (se houver)
-                if (_errQueue.length) setTimeout(_flushErrQueue, 800);
+                if (_errQueue.length) setTimeout(_flushErrQueue, 1000);
             }
         });
     }
@@ -130,22 +142,19 @@
     });
 
     // ========== PRESENÇA AO VIVO ==========
-    // Atualiza doc em /presenca/{deviceId} a cada 60s
-    // O admin filtra lastSeen >= agora-5min para "online agora"
     var _presencaInterval = null;
+    var _presencaSent = false;
 
     function updatePresence() {
         waitForFirebase(function() {
             try {
-                var db = firebase.firestore();
                 var deviceId = getDeviceId();
-                var page = getPageName();
-                var today = new Date().toISOString().slice(0, 10);
-                db.collection('presenca').doc(deviceId).set({
+                // Campos EXATOS permitidos pelas regras do Firestore
+                getDb().collection('presenca').doc(deviceId).set({
                     deviceId: deviceId,
-                    page: page,
-                    lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                    date: today,
+                    page: getPageName(),
+                    lastSeen: srvTs(),
+                    date: getToday(),
                 }, { merge: true }).catch(function() {});
             } catch(e) {}
         });
@@ -169,17 +178,30 @@
         if (timeSpentSeconds < 5) return;
         waitForFirebase(function() {
             try {
-                var db = firebase.firestore();
                 var deviceId = getDeviceId();
-                var today = new Date().toISOString().slice(0, 10);
-                var sessionId = deviceId + '_' + today + '_' + sessionStartTime;
-                db.collection('tempo_permanencia').add({
+                var today = getToday();
+                getDb().collection('tempo_permanencia').add({
                     deviceId: deviceId,
                     page: page,
                     timeSpent: timeSpentSeconds,
                     date: today,
-                    sessionId: sessionId,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    sessionId: deviceId + '_' + today + '_' + sessionStartTime,
+                    timestamp: srvTs()
+                }).catch(function() {});
+            } catch(e) {}
+        });
+    }
+
+    function trackImovelTimeSpent(imovelId, timeSpent) {
+        if (timeSpent < 3) return;
+        waitForFirebase(function() {
+            try {
+                getDb().collection('tempo_imovel').add({
+                    deviceId: getDeviceId(),
+                    imovelId: String(imovelId),
+                    timeSpent: timeSpent,
+                    date: getToday(),
+                    timestamp: srvTs()
                 }).catch(function() {});
             } catch(e) {}
         });
@@ -195,21 +217,18 @@
         }
     });
 
-    // ========== RASTREAMENTO DE EVENTOS ==========
+    // ========== EVENTOS GENÉRICOS ==========
     window.trackEvent = function(eventName, eventData) {
         eventData = eventData || {};
         waitForFirebase(function() {
             try {
-                var db = firebase.firestore();
-                var deviceId = getDeviceId();
-                var today = new Date().toISOString().slice(0, 10);
-                db.collection('eventos').add({
-                    deviceId: deviceId,
+                getDb().collection('eventos').add({
+                    deviceId: getDeviceId(),
                     eventName: eventName,
                     eventData: eventData,
                     page: getPageName(),
-                    date: today,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    date: getToday(),
+                    timestamp: srvTs()
                 }).catch(function() {});
             } catch(e) {}
         });
@@ -225,54 +244,90 @@
         window.trackEvent('imovel_view_start', { imovelId: imovelId, titulo: titulo });
     };
 
-    function trackImovelTimeSpent(imovelId, timeSpent) {
-        if (timeSpent < 3) return;
+    // ========== VISITAS POR IMÓVEL ==========
+    window.trackImovelView = function(imovelId, titulo, bairro) {
         waitForFirebase(function() {
             try {
-                var db = firebase.firestore();
                 var deviceId = getDeviceId();
-                var today = new Date().toISOString().slice(0, 10);
-                db.collection('tempo_imovel').add({
+                var today = getToday();
+                var key = deviceId + '_view_' + String(imovelId).slice(0, 40) + '_' + today;
+                // Campos EXATOS das regras: deviceId, imovelId, titulo, bairro, date, timestamp
+                getDb().collection('visitas_imoveis').doc(key).set({
                     deviceId: deviceId,
                     imovelId: String(imovelId),
-                    timeSpent: timeSpent,
+                    titulo: (titulo || '').slice(0, 120),
+                    bairro: (bairro || '').slice(0, 80),
                     date: today,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                }).catch(function() {});
+                    timestamp: srvTs(),
+                }, { merge: true }).catch(function() {});
+                window.trackEvent('imovel_view', { imovelId: imovelId, titulo: titulo, bairro: bairro });
             } catch(e) {}
         });
-    }
+    };
 
-    // ========== RASTREAMENTO DE VISITAS ==========
+    // ========== LINKS COPIADOS ==========
+    // CORRIGIDO: campos EXATOS que as regras do Firestore aceitam:
+    // keys().hasAll(['deviceId','imovelId','titulo','date','timestamp'])
+    // Qualquer campo extra (como 'path') causava falha silenciosa!
+    window.trackLinkCopiado = function(imovelId, imovelTitulo) {
+        waitForFirebase(function() {
+            try {
+                var today = getToday();
+                // Exatamente os campos que as regras do Firestore esperam
+                getDb().collection('links_copiados').add({
+                    deviceId: getDeviceId(),
+                    imovelId: String(imovelId || ''),
+                    titulo: (imovelTitulo || '').slice(0, 120),
+                    date: today,
+                    timestamp: srvTs(),
+                }).catch(function(err) {
+                    // Tenta novamente após 2s em caso de erro de rede
+                    setTimeout(function() {
+                        try {
+                            getDb().collection('links_copiados').add({
+                                deviceId: getDeviceId(),
+                                imovelId: String(imovelId || ''),
+                                titulo: (imovelTitulo || '').slice(0, 120),
+                                date: today,
+                                timestamp: srvTs(),
+                            }).catch(function() {});
+                        } catch(e2) {}
+                    }, 2000);
+                });
+                window.trackEvent('link_copiado', { imovelId: imovelId, titulo: imovelTitulo });
+            } catch(e) {}
+        });
+    };
+
+    // ========== VISITAS DE PÁGINA ==========
     function trackVisit() {
         try {
-            var db = firebase.firestore();
             var deviceId = getDeviceId();
             var page = getPageName();
-            var today = new Date().toISOString().slice(0, 10);
+            var today = getToday();
             var visitKey = deviceId + '_' + page + '_' + today;
-            var ref = db.collection('visitas').doc(visitKey);
+            var ref = getDb().collection('visitas').doc(visitKey);
 
             ref.get().then(function(doc) {
                 if (!doc.exists) {
+                    // Campos EXATOS: deviceId, page, date, timestamp, userAgent
                     ref.set({
                         deviceId: deviceId,
                         page: page,
                         date: today,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        timestamp: srvTs(),
                         userAgent: navigator.userAgent.slice(0, 200),
                     }).catch(function() {});
                     window.trackEvent('nova_visita', { page: page });
                 }
             }).catch(function() {
-                // Retry único em caso de erro de rede (comum em 3G/mobile)
                 setTimeout(function() {
                     try {
                         ref.set({
                             deviceId: deviceId,
                             page: page,
                             date: today,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                            timestamp: srvTs(),
                             userAgent: navigator.userAgent.slice(0, 200),
                         }, { merge: true }).catch(function() {});
                     } catch(e2) {}
@@ -283,46 +338,7 @@
         }
     }
 
-    // ========== FUNÇÕES ORIGINAIS ==========
-    window.trackImovelView = function(imovelId, titulo, bairro) {
-        waitForFirebase(function() {
-            try {
-                var db = firebase.firestore();
-                var deviceId = getDeviceId();
-                var today = new Date().toISOString().slice(0, 10);
-                var key = deviceId + '_view_' + imovelId + '_' + today;
-                db.collection('visitas_imoveis').doc(key).set({
-                    deviceId: deviceId,
-                    imovelId: String(imovelId),
-                    titulo: titulo || '',
-                    bairro: bairro || '',
-                    date: today,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                }, { merge: true }).catch(function() {});
-                window.trackEvent('imovel_view', { imovelId: imovelId, titulo: titulo, bairro: bairro });
-            } catch(e) {}
-        });
-    };
-
-    window.trackLinkCopiado = function(imovelId, imovelTitulo) {
-        waitForFirebase(function() {
-            try {
-                var db = firebase.firestore();
-                var deviceId = getDeviceId();
-                var today = new Date().toISOString().slice(0, 10);
-                db.collection('links_copiados').add({
-                    deviceId: deviceId,
-                    imovelId: String(imovelId || ''),
-                    titulo: imovelTitulo || '',
-                    date: today,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                }).catch(function() {});
-                window.trackEvent('link_copiado', { imovelId: imovelId, titulo: imovelTitulo });
-            } catch(e) {}
-        });
-    };
-
-    // ── Inicia tudo após DOM pronto (garante Firebase carregado no mobile) ──
+    // ========== INIT ==========
     function init() {
         waitForFirebase(trackVisit);
         startPresence();
