@@ -489,6 +489,28 @@
                             </div>
                         </div>
 
+                        <div class="form-row">
+                            <div class="form-group media-upload-panel">
+                                <label><i class="fas fa-compress-alt"></i> Envio otimizado <small style="font-weight:400;color:var(--text-muted)">(automático — cada arquivo só é processado 1×)</small></label>
+                                <p class="media-upload-hint">
+                                    Fotos: redimensionadas (máx. 1920px) e salvas como JPEG leve no Firebase Storage.
+                                    Vídeos: enviados ao Storage sem recompressão no navegador (evita travar); o mesmo arquivo não sobe de novo.
+                                </p>
+                                <div class="media-upload-actions">
+                                    <input type="file" id="lb-upload-fotos" accept="image/*" multiple class="sr-only">
+                                    <button type="button" class="btn-secondary" id="lb-btn-pick-fotos">
+                                        <i class="fas fa-images"></i> Escolher fotos
+                                    </button>
+                                    <input type="file" id="lb-upload-videos" accept="video/*" multiple class="sr-only">
+                                    <button type="button" class="btn-secondary" id="lb-btn-pick-videos">
+                                        <i class="fas fa-film"></i> Escolher vídeos
+                                    </button>
+                                </div>
+                                <div id="lb-upload-status" class="lb-upload-status" aria-live="polite"></div>
+                                <small>Requer regras do Storage liberando <code>optimized_images/*</code> e <code>optimized_videos/*</code> para usuários autenticados.</small>
+                            </div>
+                        </div>
+
                         <!-- VÍDEOS ILIMITADOS -->
                         <div class="form-row">
                             <div class="form-group">
@@ -766,7 +788,9 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="firebase-config.js"></script>
+    <script src="media-optimizer.js"></script>
     <script src="admin.js"></script>
 </body>
 </html>
