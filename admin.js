@@ -1974,55 +1974,142 @@ function setupMediaUploader() {
     btnF.addEventListener('click', () => inpF.click());
     if (btnV && inpV) btnV.addEventListener('click', () => inpV.click());
 
+    // ── Helper: atualiza status com barra de progresso embutida ──
+    function setStatus(msg, pct, type) {
+        if (!statusEl) return;
+        const colors = { ok: 'var(--green)', error: 'var(--red)', loading: 'var(--accent)' };
+        const color = colors[type] || colors.loading;
+        if (pct !== undefined && pct >= 0 && pct < 100) {
+            statusEl.innerHTML = `
+                <div style="display:flex;align-items:center;gap:.6rem;">
+                    <span style="color:${color};font-size:.78rem;flex:1;">${msg}</span>
+                    <span style="font-size:.72rem;font-weight:700;color:${color};min-width:36px;text-align:right;">${pct}%</span>
+                </div>
+                <div style="height:3px;background:rgba(255,255,255,.06);border-radius:99px;margin-top:.3rem;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width .2s ease;"></div>
+                </div>`;
+        } else if (pct === 100) {
+            statusEl.innerHTML = `<span style="color:var(--green);font-size:.78rem;">✅ ${msg}</span>`;
+            setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
+        } else if (type === 'error') {
+            statusEl.innerHTML = `<span style="color:var(--red);font-size:.78rem;">❌ ${msg}</span>`;
+            setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 5000);
+        } else {
+            statusEl.innerHTML = `<span style="color:${color};font-size:.78rem;">${msg}</span>`;
+        }
+    }
+
+    // ── FOTOS ──
     inpF.addEventListener('change', async () => {
         const MO = window.LBMediaOptimizer;
-        if (!MO) { showToast('Módulo de mídia não carregado.', 'error'); inpF.value = ''; return; }
-        if (!auth || !auth.currentUser) { showToast('Entre no painel para enviar arquivos.', 'error'); inpF.value = ''; return; }
+        if (!MO) {
+            setStatus('Módulo de mídia não carregado. Recarregue a página.', undefined, 'error');
+            showToast('Módulo de mídia não carregado.', 'error');
+            inpF.value = ''; return;
+        }
+        if (!auth || !auth.currentUser) {
+            setStatus('Faça login para enviar arquivos.', undefined, 'error');
+            showToast('Entre no painel para enviar arquivos.', 'error');
+            inpF.value = ''; return;
+        }
         const files = Array.from(inpF.files || []);
         inpF.value = '';
         if (!files.length) return;
-        let ok = 0;
+
+        // Desabilita botões durante upload
+        btnF.disabled = true;
+        if (btnV) btnV.disabled = true;
+
+        let ok = 0, erros = [];
         for (let i = 0; i < files.length; i++) {
             const f = files[i];
-            if (statusEl) statusEl.textContent = `Foto ${i + 1}/${files.length}: otimizando…`;
+            const label = `Foto ${i + 1}${files.length > 1 ? '/' + files.length : ''}: ${f.name.slice(0, 20)}`;
+            setStatus(`${label} — otimizando...`, 5, 'loading');
             try {
                 const url = await MO.uploadOptimizedImage(f, pct => {
-                    if (statusEl) statusEl.textContent = `Foto ${i + 1}/${files.length}: envio ${pct}%`;
+                    const fase = pct < 35 ? 'otimizando...' : pct < 100 ? `enviando...` : 'concluído';
+                    setStatus(`${label} — ${fase}`, pct, 'loading');
                 });
                 appendOptimizedUrlToFotos(url);
                 ok++;
+                if (files.length === 1) {
+                    setStatus(`Foto enviada com sucesso!`, 100, 'ok');
+                } else {
+                    setStatus(`${i + 1}/${files.length} fotos enviadas...`, Math.round(((i + 1) / files.length) * 100), 'loading');
+                }
             } catch (e) {
+                erros.push(f.name);
+                setStatus(`Erro: ${e.message || 'Falha no upload'}`, undefined, 'error');
                 showToast(e.message || 'Erro ao enviar foto', 'error');
+                console.error('Upload foto error:', e);
             }
         }
-        if (statusEl) statusEl.textContent = '';
-        if (ok) showToast(ok === 1 ? 'Foto otimizada e linkada.' : `${ok} fotos otimizadas e linkadas.`, 'success');
+
+        btnF.disabled = false;
+        if (btnV) btnV.disabled = false;
+
+        if (ok > 0 && erros.length === 0) {
+            setStatus(`${ok} foto${ok > 1 ? 's' : ''} enviada${ok > 1 ? 's' : ''} com sucesso! ✅`, 100, 'ok');
+            showToast(ok === 1 ? '📸 Foto otimizada e linkada!' : `📸 ${ok} fotos otimizadas!`, 'success');
+        } else if (ok > 0 && erros.length > 0) {
+            showToast(`${ok} ok, ${erros.length} com erro`, 'warning');
+        }
     });
 
+    // ── VÍDEOS ──
     if (inpV) {
         inpV.addEventListener('change', async () => {
             const MO = window.LBMediaOptimizer;
-            if (!MO) { showToast('Módulo de mídia não carregado.', 'error'); inpV.value = ''; return; }
-            if (!auth || !auth.currentUser) { showToast('Entre no painel para enviar arquivos.', 'error'); inpV.value = ''; return; }
+            if (!MO) {
+                setStatus('Módulo de mídia não carregado. Recarregue a página.', undefined, 'error');
+                showToast('Módulo de mídia não carregado.', 'error');
+                inpV.value = ''; return;
+            }
+            if (!auth || !auth.currentUser) {
+                setStatus('Faça login para enviar arquivos.', undefined, 'error');
+                showToast('Entre no painel para enviar arquivos.', 'error');
+                inpV.value = ''; return;
+            }
             const files = Array.from(inpV.files || []);
             inpV.value = '';
             if (!files.length) return;
-            let ok = 0;
+
+            btnF.disabled = true;
+            if (btnV) btnV.disabled = true;
+
+            let ok = 0, erros = [];
             for (let i = 0; i < files.length; i++) {
                 const f = files[i];
-                if (statusEl) statusEl.textContent = `Vídeo ${i + 1}/${files.length}: verificando / enviando…`;
+                const sizeMB = (f.size / 1024 / 1024).toFixed(0);
+                const label = `Vídeo ${i + 1}${files.length > 1 ? '/' + files.length : ''} (${sizeMB} MB)`;
+                setStatus(`${label} — verificando...`, 3, 'loading');
                 try {
                     const url = await MO.uploadOptimizedVideo(f, pct => {
-                        if (statusEl) statusEl.textContent = `Vídeo ${i + 1}/${files.length}: ${pct}%`;
+                        const fase = pct < 8 ? 'verificando...' : pct < 100 ? `enviando...` : 'concluído';
+                        setStatus(`${label} — ${fase}`, pct, 'loading');
                     });
                     appendOptimizedUrlToVideos(url);
                     ok++;
+                    if (files.length === 1) {
+                        setStatus(`Vídeo enviado com sucesso!`, 100, 'ok');
+                    }
                 } catch (e) {
+                    erros.push(f.name);
+                    setStatus(`Erro: ${e.message || 'Falha no upload'}`, undefined, 'error');
                     showToast(e.message || 'Erro ao enviar vídeo', 'error');
+                    console.error('Upload vídeo error:', e);
                 }
             }
-            if (statusEl) statusEl.textContent = '';
-            if (ok) showToast(ok === 1 ? 'Vídeo enviado (link único por arquivo).' : `${ok} vídeos processados.`, 'success');
+
+            btnF.disabled = false;
+            if (btnV) btnV.disabled = false;
+
+            if (ok > 0 && erros.length === 0) {
+                setStatus(`${ok} vídeo${ok > 1 ? 's' : ''} enviado${ok > 1 ? 's' : ''} com sucesso! ✅`, 100, 'ok');
+                showToast(ok === 1 ? '🎬 Vídeo enviado!' : `🎬 ${ok} vídeos enviados!`, 'success');
+            } else if (ok > 0 && erros.length > 0) {
+                showToast(`${ok} ok, ${erros.length} com erro`, 'warning');
+            }
         });
     }
 }
@@ -3059,25 +3146,25 @@ window.loadPerformanceImovel = loadPerformanceImovel;
 // ══════════════════════════════════════════════════════════
 
 let _chatLogsListener = null;
-
+ 
 async function loadChatLogs() {
     if (!db) return;
     const loading = document.getElementById('chat-logs-loading');
     const content = document.getElementById('chat-logs-content');
     if (loading) loading.style.display = 'flex';
     if (content) content.style.display = 'none';
-
+ 
     try {
         const snap = await db.collection('chat_logs')
             .orderBy('timestamp', 'desc')
-            .limit(200)
+            .limit(300)
             .get();
         const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
+ 
         if (loading) loading.style.display = 'none';
         if (content) { content.style.display = 'block'; renderChatLogs(logs); }
-
-        // Badge
+ 
+        // Badge — chats novos hoje
         const badge = document.getElementById('badge-chat-logs');
         const today = new Date().toISOString().slice(0,10);
         const hojeAbertos = logs.filter(l => l.event === 'chat_aberto' && l.date === today).length;
@@ -3087,30 +3174,38 @@ async function loadChatLogs() {
         if (content) { content.style.display = 'block'; content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Sem dados</h3><p>Nenhuma conversa registrada ainda.</p></div>'; }
     }
 }
-
+ 
 function renderChatLogs(logs) {
     const content = document.getElementById('chat-logs-content');
     if (!content) return;
-
+ 
     if (!logs.length) {
-        content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ainda</h3><p>Quando visitantes usarem o chat, os logs aparecerão aqui.</p></div>';
+        content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ainda</h3><p>Quando visitantes usarem o chat, os logs completos aparecerão aqui.</p></div>';
         return;
     }
-
+ 
     const today = new Date().toISOString().slice(0,10);
-
-    // Agrupa por sessão, mantém ordem cronológica dentro de cada sessão
+ 
+    // Agrupa por sessão
     const sessions = {};
     logs.forEach(l => {
         if (!sessions[l.sessionId]) sessions[l.sessionId] = {
-            sessionId: l.sessionId,
-            deviceId: l.deviceId,
-            date: l.date,
-            events: [],
-            hasWA: false,
-            hasText: false,
-            waMessages: [],
-            typedTexts: [],
+            sessionId:   l.sessionId,
+            deviceId:    l.deviceId,
+            date:        l.date,
+            ip:          l.ip || '—',
+            cidade:      l.cidade || '—',
+            regiao:      l.regiao || '—',
+            pais:        l.pais || '—',
+            isp:         l.isp || '—',
+            isProxy:     l.isProxy || false,
+            userAgent:   l.userAgent || '—',
+            events:      [],
+            hasWA:       false,
+            hasText:     false,
+            waMessages:  [],
+            typedTexts:  [],
+            botReplies:  [],
         };
         sessions[l.sessionId].events.push(l);
         if (l.event === 'chat_whatsapp') {
@@ -3121,129 +3216,253 @@ function renderChatLogs(logs) {
             sessions[l.sessionId].hasText = true;
             sessions[l.sessionId].typedTexts.push(l.text);
         }
+        if ((l.botResponse || l.botMsg) && !sessions[l.sessionId].botReplies.includes(l.botResponse || l.botMsg)) {
+            sessions[l.sessionId].botReplies.push((l.botResponse || l.botMsg).slice(0, 120));
+        }
+        // Pega IP/geo do primeiro evento que tiver
+        if (l.ip && l.ip !== '—' && sessions[l.sessionId].ip === '—') {
+            sessions[l.sessionId].ip      = l.ip;
+            sessions[l.sessionId].cidade  = l.cidade || '—';
+            sessions[l.sessionId].regiao  = l.regiao || '—';
+            sessions[l.sessionId].pais    = l.pais   || '—';
+            sessions[l.sessionId].isp     = l.isp    || '—';
+            sessions[l.sessionId].isProxy = l.isProxy || false;
+        }
     });
-
+ 
     const sessionList = Object.values(sessions).sort((a,b) => {
-        // Sort by most recent event in session
         const aT = Math.max(...a.events.map(e => e.timestamp?.seconds || 0));
         const bT = Math.max(...b.events.map(e => e.timestamp?.seconds || 0));
         return bT - aT;
     });
-
+ 
     // KPIs
     const totalSessions = sessionList.length;
-    const waSessions = sessionList.filter(s => s.hasWA).length;
-    const textSessions = sessionList.filter(s => s.hasText).length;
-    const hojeS = sessionList.filter(s => s.date === today).length;
-    const convRate = totalSessions > 0 ? Math.round((waSessions/totalSessions)*100) : 0;
-
+    const waSessions    = sessionList.filter(s => s.hasWA).length;
+    const textSessions  = sessionList.filter(s => s.hasText).length;
+    const hojeS         = sessionList.filter(s => s.date === today).length;
+    const convRate      = totalSessions > 0 ? Math.round((waSessions/totalSessions)*100) : 0;
+    const proxySessions = sessionList.filter(s => s.isProxy).length;
+ 
     function escHtml(str) {
         return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
-
+ 
     function fmtTs(ts) {
         if (!ts) return '—';
         try {
-            const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
-            return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds||0) * 1000);
+            return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
         } catch { return '—'; }
     }
-
-    // Render each session as a mini conversation timeline
+ 
+    function fmtHora(ts) {
+        if (!ts) return '';
+        try {
+            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds||0) * 1000);
+            return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        } catch { return ''; }
+    }
+ 
+    function intentBadge(intent) {
+        if (!intent || intent === 'nenhuma') return '<span style="font-size:.65rem;color:var(--red);background:rgba(239,68,68,.1);padding:.1rem .45rem;border-radius:6px;">sem intenção</span>';
+        if (intent.startsWith('flow:')) return `<span style="font-size:.65rem;color:var(--accent);background:var(--accent-soft);padding:.1rem .45rem;border-radius:6px;">${intent}</span>`;
+        if (intent.includes('answerFn')) return `<span style="font-size:.65rem;color:var(--green);background:var(--green-soft);padding:.1rem .45rem;border-radius:6px;">resposta dinâmica</span>`;
+        return `<span style="font-size:.65rem;color:var(--purple);background:var(--purple-soft);padding:.1rem .45rem;border-radius:6px;">${intent}</span>`;
+    }
+ 
     function renderSession(s) {
-        // Sort events chronologically
         const evts = [...s.events].sort((a,b) => (a.timestamp?.seconds||0) - (b.timestamp?.seconds||0));
-
         const tsFirst = evts[0]?.timestamp;
-        const tsLast = evts[evts.length-1]?.timestamp;
+        const tsLast  = evts[evts.length-1]?.timestamp;
         const duration = (tsFirst && tsLast)
-            ? (() => {
-                const diff = (tsLast.seconds||0) - (tsFirst.seconds||0);
-                if (diff < 60) return diff + 's';
-                return Math.round(diff/60) + 'min';
-            })()
+            ? (() => { const diff = (tsLast.seconds||0)-(tsFirst.seconds||0); return diff < 60 ? diff+'s' : Math.round(diff/60)+'min'; })()
             : null;
-
-        // Build timeline items
+        const borderColor = s.hasWA ? 'var(--green)' : s.hasText ? 'var(--accent)' : 'var(--border)';
+        const isToday = s.date === today;
+ 
+        const loc = [s.cidade, s.pais].filter(x => x && x !== '—').join(', ');
+ 
+        // Timeline de eventos
         const timelineItems = evts.map(e => {
+            const hora = e.horaStr || fmtTs(e.timestamp);
+            const horaShort = e.hora || fmtHora(e.timestamp);
+ 
             if (e.event === 'chat_aberto') {
-                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;">🟢</span>
-                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
-                    <span style="font-size:.75rem;color:var(--text-secondary);">Chat aberto na página <strong style="color:var(--text-primary);">${escHtml(e.page||'—')}</strong></span>
-                </div>`;
-            }
-            if (e.event === 'chat_texto') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">💬</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:#93c5fd;">Usuário digitou</span>${e.intentDetected && e.intentDetected !== 'nenhuma' ? ` · intenção: <span style="color:var(--amber);">${escHtml(e.intentDetected)}</span>` : ' · <span style="color:var(--red);font-size:.68rem;">sem intenção detectada</span>'}</div>
-                        <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);border-radius:10px;border-bottom-left-radius:3px;padding:.4rem .75rem;font-size:.82rem;color:#e2e8f0;max-width:90%;word-break:break-word;">${escHtml(e.text)}</div>
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;">🟢</span>
+                    <div style="font-size:.75rem;color:var(--text-secondary);">Chat aberto na página <strong style="color:var(--text-primary);">${escHtml(e.page||'—')}</strong>
+                        ${e.ip && e.ip !== '—' ? `<span style="color:var(--text-muted);font-family:monospace;"> · ${escHtml(e.ip)}</span>` : ''}
                     </div>
                 </div>`;
             }
-            if (e.event === 'chat_click') {
-                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;">👆</span>
-                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
-                    <span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">${escHtml(e.label||'—')}</span>
-                    ${e.next ? `<span style="font-size:.7rem;color:var(--text-muted);">→ <span style="color:var(--text-secondary);">${escHtml(e.next)}</span></span>` : ''}
+ 
+            if (e.event === 'chat_texto') {
+                return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;margin-top:.1rem;">💬</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin-bottom:.2rem;">
+                            <span style="font-size:.68rem;color:#93c5fd;font-weight:600;">Usuário</span>
+                            ${intentBadge(e.intentDetected)}
+                        </div>
+                        <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);border-radius:10px;border-bottom-left-radius:3px;padding:.4rem .75rem;font-size:.82rem;color:#e2e8f0;max-width:90%;word-break:break-word;">${escHtml(e.text||'')}</div>
+                        ${(e.botResponse||e.botMsg) ? `<div style="margin-top:.3rem;display:flex;align-items:flex-start;gap:.35rem;">
+                            <span style="font-size:.68rem;color:#34d399;font-weight:600;flex-shrink:0;">🤖 Bot:</span>
+                            <span style="font-size:.72rem;color:rgba(226,232,240,.65);font-style:italic;word-break:break-word;">${escHtml((e.botResponse||e.botMsg||'').slice(0,180))}${((e.botResponse||e.botMsg||'').length>180?'…':'')}</span>
+                        </div>` : ''}
+                    </div>
                 </div>`;
             }
+ 
+            if (e.event === 'chat_click') {
+                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;">👆</span>
+                    <span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">${escHtml(e.label||'—')}</span>
+                    ${e.next ? `<span style="font-size:.7rem;color:var(--text-muted);">→ <span style="color:var(--text-secondary);">${escHtml(e.next)}</span></span>` : ''}
+                    ${(e.botResponse) ? `<span style="font-size:.65rem;color:rgba(52,212,135,.6);">→ ${escHtml(e.botResponse.slice(0,60))}</span>` : ''}
+                </div>`;
+            }
+ 
             if (e.event === 'chat_chip') {
                 return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;">⚡</span>
-                    <span style="font-size:.73rem;color:var(--text-muted);">${fmtTs(e.timestamp)}</span>
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;">⚡</span>
                     <span style="background:rgba(245,158,11,.1);color:var(--amber);padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">Atalho: ${escHtml(e.label||'—')}</span>
                 </div>`;
             }
+ 
             if (e.event === 'chat_nav') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">🤖</span>
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;margin-top:.1rem;">🤖</span>
                     <div style="flex:1;min-width:0;">
-                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:#34d399;">Bot respondeu</span> · nó: <span style="color:var(--text-secondary);font-family:monospace;">${escHtml(e.node||'—')}</span></div>
-                        ${e.botMsg ? `<div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.15);border-radius:10px;border-bottom-right-radius:3px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.75);max-width:90%;word-break:break-word;font-style:italic;">${escHtml(e.botMsg.slice(0,180))}${e.botMsg.length>180?'…':''}</div>` : ''}
+                        <div style="font-size:.68rem;color:#34d399;font-weight:600;margin-bottom:.2rem;">Bot respondeu · nó: <span style="font-family:monospace;color:var(--text-secondary);">${escHtml(e.node||'—')}</span></div>
+                        ${(e.botMsg||e.botResponse) ? `<div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.12);border-radius:10px;border-bottom-right-radius:3px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.7);max-width:90%;word-break:break-word;font-style:italic;">${escHtml((e.botMsg||e.botResponse||'').slice(0,200))}${((e.botMsg||e.botResponse||'').length>200?'…':'')}</div>` : ''}
                     </div>
                 </div>`;
             }
+ 
             if (e.event === 'chat_whatsapp') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                    <span style="width:20px;text-align:center;font-size:.75rem;margin-top:.1rem;">📱</span>
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;margin-top:.1rem;">📱</span>
                     <div style="flex:1;min-width:0;">
-                        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;">${fmtTs(e.timestamp)} · <span style="color:var(--green);font-weight:600;">Abriu WhatsApp</span></div>
-                        ${(e.waText||e.msg) ? `<div style="background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.2);border-radius:10px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.8);max-width:90%;word-break:break-word;">${escHtml((e.waText||e.msg).slice(0,200))}</div>` : ''}
+                        <div style="font-size:.72rem;color:var(--green);font-weight:700;margin-bottom:.2rem;">✅ CONVERTEU — Abriu WhatsApp</div>
+                        ${(e.waText||e.msg) ? `<div style="background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.2);border-radius:10px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.8);max-width:90%;word-break:break-word;">${escHtml((e.waText||e.msg||'').slice(0,200))}</div>` : ''}
                     </div>
                 </div>`;
             }
             return '';
         }).filter(Boolean).join('');
-
-        const borderColor = s.hasWA ? 'var(--green)' : s.hasText ? 'var(--accent)' : 'var(--border)';
-
+ 
         return `
-        <div style="border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);background:var(--bg-elevated);overflow:hidden;margin-bottom:.7rem;">
-            <!-- Session header -->
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.75rem 1rem;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;"
-                 onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.lb-chevron').style.transform=this.nextElementSibling.style.display==='none'?'':'rotate(180deg)'">
-                <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
-                    <span style="font-size:.72rem;font-family:monospace;color:var(--text-muted);">${(s.deviceId||'').slice(0,24)}…</span>
-                    ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.67rem;padding:.12rem .5rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
-                    ${s.hasText ? '<span style="background:rgba(59,130,246,.12);color:#93c5fd;font-size:.67rem;padding:.12rem .5rem;border-radius:99px;font-weight:600;">💬 Digitou</span>' : ''}
-                    ${duration ? `<span style="font-size:.68rem;color:var(--text-muted);">⏱ ${duration}</span>` : ''}
-                    <span style="font-size:.68rem;color:var(--text-muted);">${evts.length} evento${evts.length!==1?'s':''}</span>
+        <div style="border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);background:${s.isProxy ? 'rgba(239,68,68,.03)' : 'var(--bg-elevated)'};overflow:hidden;margin-bottom:.8rem;">
+            <!-- Cabeçalho da sessão -->
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;padding:.85rem 1rem;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;"
+                 onclick="const det=this.nextElementSibling;det.style.display=det.style.display==='none'?'block':'none';this.querySelector('.lb-chev').style.transform=det.style.display==='none'?'':'rotate(180deg)'">
+                <div style="display:flex;align-items:flex-start;gap:.65rem;flex-wrap:wrap;">
+                    <div>
+                        <!-- IP + GEO -->
+                        <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.2rem;">
+                            <span style="font-family:monospace;font-size:.72rem;font-weight:700;color:var(--text-primary);">${escHtml(s.ip)}</span>
+                            ${loc ? `<span style="font-size:.7rem;color:var(--text-muted);">· ${escHtml(loc)}</span>` : ''}
+                            ${s.isProxy ? '<span style="background:rgba(239,68,68,.2);color:var(--red);font-size:.62rem;padding:.1rem .45rem;border-radius:6px;font-weight:700;">⚠️ Proxy/VPN</span>' : ''}
+                            ${isToday ? '<span style="background:rgba(52,212,135,.15);color:var(--green);font-size:.62rem;padding:.1rem .45rem;border-radius:6px;font-weight:700;">Hoje</span>' : ''}
+                        </div>
+                        <!-- Device + data -->
+                        <div style="font-size:.7rem;color:var(--text-muted);display:flex;gap:.4rem;flex-wrap:wrap;">
+                            <span style="font-family:monospace;">${(s.deviceId||'').slice(0,22)}…</span>
+                            <span>·</span>
+                            <span>${fmtTs(evts[0]?.timestamp)}</span>
+                            ${duration ? `<span>· ⏱ ${duration}</span>` : ''}
+                            <span>· ${evts.length} evento${evts.length !== 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:.5rem;">
-                    <span style="font-size:.72rem;color:var(--text-muted);">${fmtTs(tsFirst)}</span>
-                    <i class="fas fa-chevron-down lb-chevron" style="color:var(--text-muted);font-size:.65rem;transition:transform .2s;"></i>
+                <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;flex-shrink:0;">
+                    ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.67rem;padding:.15rem .55rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
+                    ${s.hasText ? `<span style="background:rgba(59,130,246,.12);color:#93c5fd;font-size:.67rem;padding:.15rem .55rem;border-radius:99px;font-weight:600;">💬 ${s.typedTexts.length} msg${s.typedTexts.length !== 1 ? 's' : ''}</span>` : ''}
+                    ${s.isp && s.isp !== '—' ? `<span style="font-size:.63rem;color:var(--text-muted);">${escHtml(s.isp.slice(0,30))}</span>` : ''}
+                    <i class="fas fa-chevron-down lb-chev" style="color:var(--text-muted);font-size:.65rem;transition:transform .2s;"></i>
                 </div>
             </div>
-            <!-- Session timeline (expanded by default) -->
-            <div style="padding:.6rem 1rem .5rem;">
-                ${timelineItems || '<span style="color:var(--text-muted);font-size:.78rem;">Nenhum evento detalhado</span>'}
+ 
+            <!-- Detalhe da sessão (colapsável) -->
+            <div style="display:none;">
+                <!-- Meta da sessão -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem;padding:.6rem 1rem;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">IP</span>
+                        <span style="color:var(--text-primary);font-family:monospace;">${escHtml(s.ip)}
+                            ${s.ip && s.ip !== '—' ? `<a href="https://ipinfo.io/${s.ip}" target="_blank" style="color:var(--accent);margin-left:.3rem;font-size:.6rem;"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                        </span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Localização</span>
+                        <span style="color:var(--text-primary);">${escHtml([s.cidade, s.regiao, s.pais].filter(x => x && x !== '—').join(', ')) || '—'}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">ISP</span>
+                        <span style="color:var(--text-primary);">${escHtml(s.isp || '—')}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Proxy/VPN</span>
+                        <span style="color:${s.isProxy ? 'var(--red)' : 'var(--green)'};">${s.isProxy ? '🔴 SIM' : '✅ Não detectado'}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Msgs digitadas</span>
+                        <span style="color:var(--text-primary);">${s.typedTexts.length}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Converteu WA</span>
+                        <span style="color:${s.hasWA ? 'var(--green)' : 'var(--text-muted)'};">${s.hasWA ? '✅ Sim' : '✖ Não'}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Duração</span>
+                        <span style="color:var(--text-primary);">${duration || '—'}</span>
+                    </div>
+                    <div style="font-size:.68rem;">
+                        <span style="color:var(--text-muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;">Início</span>
+                        <span style="color:var(--text-primary);">${fmtTs(evts[0]?.timestamp)}</span>
+                    </div>
+                </div>
+ 
+                ${s.typedTexts.length ? `
+                <!-- O que o usuário perguntou -->
+                <div style="padding:.55rem 1rem;background:rgba(59,130,246,.04);border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="font-size:.65rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;">💬 Perguntas do usuário</div>
+                    ${s.typedTexts.map(t => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">"${escHtml(t.slice(0,200))}"</div>`).join('')}
+                </div>` : ''}
+ 
+                ${s.waMessages.length ? `
+                <!-- Mensagens enviadas ao WA -->
+                <div style="padding:.55rem 1rem;background:rgba(37,211,102,.04);border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="font-size:.65rem;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;">📱 Mensagens enviadas ao WhatsApp</div>
+                    ${s.waMessages.map(m => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">${escHtml(m.slice(0,300))}</div>`).join('')}
+                </div>` : ''}
+ 
+                <!-- Timeline completa com horários -->
+                <div style="padding:.6rem 1rem 1rem;">
+                    <div style="font-size:.65rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;">📋 Timeline completa</div>
+                    <div style="font-family:monospace;font-size:.63rem;color:var(--text-muted);margin-bottom:.5rem;display:flex;gap:1rem;">
+                        <span style="min-width:52px;">Hora</span>
+                        <span>Evento</span>
+                    </div>
+                    ${timelineItems || '<span style="color:var(--text-muted);font-size:.78rem;">Nenhum evento detalhado</span>'}
+                </div>
+ 
+                <!-- UA -->
+                <details style="padding:0 1rem .65rem;">
+                    <summary style="font-size:.68rem;color:var(--text-muted);cursor:pointer;user-select:none;padding:.3rem 0;">▶ User Agent completo</summary>
+                    <div style="margin-top:.3rem;font-size:.65rem;color:var(--text-muted);word-break:break-all;font-family:monospace;background:var(--bg-elevated);padding:.4rem .6rem;border-radius:4px;border:1px solid var(--border);">${escHtml(s.userAgent || '—')}</div>
+                </details>
             </div>
         </div>`;
     }
-
+ 
     content.innerHTML = `
     <div class="stats-grid" style="margin-bottom:1.5rem;">
         <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-comments"></i></div><div class="stat-info"><span class="stat-value">${totalSessions}</span><span class="stat-label">Conversas Totais</span></div></div>
@@ -3251,22 +3470,84 @@ function renderChatLogs(logs) {
         <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-keyboard"></i></div><div class="stat-info"><span class="stat-value">${textSessions}</span><span class="stat-label">Digitaram algo</span></div></div>
         <div class="stat-card"><div class="stat-icon amber"><i class="fab fa-whatsapp"></i></div><div class="stat-info"><span class="stat-value">${waSessions}</span><span class="stat-label">Foram ao WhatsApp</span></div></div>
         <div class="stat-card"><div class="stat-icon" style="background:var(--green-soft);color:var(--green);"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-value">${convRate}%</span><span class="stat-label">Taxa de Conversão</span></div></div>
+        ${proxySessions > 0 ? `<div class="stat-card"><div class="stat-icon" style="background:var(--red-soft);color:var(--red);"><i class="fas fa-user-secret"></i></div><div class="stat-info"><span class="stat-value" style="color:var(--red);">${proxySessions}</span><span class="stat-label">Proxy/VPN detectados</span></div></div>` : ''}
     </div>
-
-    <div class="dashboard-card" style="margin-bottom:1.5rem;">
+ 
+    <!-- Legenda de ícones -->
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;padding:.55rem .9rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:1.2rem;font-size:.67rem;color:var(--text-muted);">
+        <strong style="color:var(--text-secondary);">LEGENDA:</strong>
+        🟢 Abriu chat &nbsp;|&nbsp; 💬 Texto digitado &nbsp;|&nbsp; 🤖 Resposta do bot &nbsp;|&nbsp; 👆 Clicou opção &nbsp;|&nbsp; ⚡ Usou atalho &nbsp;|&nbsp; 📱 Abriu WhatsApp &nbsp;|&nbsp; <strong>Hora</strong> = coluna da esquerda (HH:MM:SS)
+    </div>
+ 
+    <!-- Ações -->
+    <div style="display:flex;justify-content:flex-end;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem;">
+        <button onclick="loadChatLogs()" class="btn-secondary"><i class="fas fa-sync-alt"></i> Atualizar</button>
+        <button onclick="_exportarChatLogs()" class="btn-secondary"><i class="fas fa-file-csv" style="color:var(--green)"></i> Exportar CSV</button>
+        <button onclick="_limparChatLogs()" class="btn-danger" style="opacity:.75;"><i class="fas fa-broom"></i> Limpar logs</button>
+    </div>
+ 
+    <!-- Lista de sessões -->
+    <div class="dashboard-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
-            <h3><i class="fas fa-list-ul"></i> Histórico de Conversas</h3>
-            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                <span style="font-size:.72rem;color:var(--text-muted);background:var(--bg-elevated);padding:.2rem .6rem;border-radius:6px;border:1px solid var(--border);">🟢 aberto &nbsp; 💬 digitou &nbsp; 👆 clique &nbsp; ⚡ atalho &nbsp; 🤖 bot &nbsp; 📱 WhatsApp</span>
-                <span style="font-size:.75rem;color:var(--text-muted);">${sessionList.length} sessões</span>
-            </div>
+            <h3><i class="fas fa-list-ul"></i> Histórico de Conversas <span style="font-size:.72rem;color:var(--text-muted);font-weight:400;">(clique para expandir)</span></h3>
+            <span style="font-size:.75rem;color:var(--text-muted);">${sessionList.length} sessões${sessionList.length > 50 ? ' · mostrando 50' : ''}</span>
         </div>
-        <div>
-            ${sessionList.slice(0,50).map(renderSession).join('')}
-            ${sessionList.length > 50 ? `<div style="text-align:center;padding:.7rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
-        </div>
+        ${sessionList.slice(0, 50).map(renderSession).join('')}
+        ${sessionList.length > 50 ? `<div style="text-align:center;padding:.8rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
     </div>`;
 }
+ 
+// Exportar CSV dos chat logs
+async function _exportarChatLogs() {
+    if (!db) return;
+    try {
+        showToast('Gerando CSV...','info');
+        const snap = await db.collection('chat_logs').orderBy('timestamp','desc').limit(500).get();
+        const rows = [['Data','Hora','Sessão','DeviceID','IP','Cidade','País','ISP','Proxy','Evento','Texto/Label','Intenção','Bot Respondeu','Página']];
+        snap.docs.forEach(d => {
+            const v = d.data();
+            rows.push([
+                v.date||'',
+                v.horaStr||v.hora||'',
+                (v.sessionId||'').slice(-12),
+                (v.deviceId||'').slice(0,20),
+                v.ip||'',
+                v.cidade||'',
+                v.pais||'',
+                v.isp||'',
+                v.isProxy ? 'Sim' : 'Não',
+                v.event||'',
+                (v.text||v.label||v.waText||v.msg||'').slice(0,120),
+                v.intentDetected||'',
+                (v.botResponse||v.botMsg||'').slice(0,120),
+                v.page||'',
+            ]);
+        });
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+        const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `chat-logs-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        showToast(`✅ CSV exportado — ${snap.size} eventos`);
+    } catch(e) { showToast('Erro ao exportar','error'); }
+}
+ 
+async function _limparChatLogs() {
+    if (!confirm('Limpar TODOS os logs de chat? Esta ação não pode ser desfeita.')) return;
+    try {
+        const snap = await db.collection('chat_logs').get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        showToast('Logs apagados.');
+        loadChatLogs();
+    } catch(e) { showToast('Erro ao limpar','error'); }
+}
+ 
+window._exportarChatLogs = _exportarChatLogs;
+window._limparChatLogs   = _limparChatLogs;
+window.loadChatLogs      = loadChatLogs;
 
 // ── Real-time badge para novos chats ──
 function startChatLogsListener() {
