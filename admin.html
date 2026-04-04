@@ -303,6 +303,70 @@
                                 <small>Deixe 0 para terrenos</small>
                             </div>
                         </div>
+                        <div style="padding:.55rem .9rem;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.12);border-radius:var(--radius-sm);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--green);">
+                            <i class="fas fa-list-ul"></i> Detalhes opcionais — preencha o que souber
+                        </div>
+                        
+                        <div class="form-row three-columns">
+                            <div class="form-group">
+                                <label for="imovel-suites">Suítes</label>
+                                <input type="number" id="imovel-suites" min="0" max="10" placeholder="0" value="0">
+                                <small>Quartos com banheiro privativo</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-banheiros">Banheiros totais</label>
+                                <input type="number" id="imovel-banheiros" min="0" max="20" placeholder="0" value="0">
+                                <small>Incluindo lavabos e suítes</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-andar">Andar</label>
+                                <input type="number" id="imovel-andar" min="0" max="100" placeholder="Ex: 5">
+                                <small>Deixe vazio se não souber</small>
+                            </div>
+                        </div>
+                        <div class="form-row three-columns">
+                            <div class="form-group">
+                                <label for="imovel-sol">Posição solar</label>
+                                <select id="imovel-sol">
+                                    <option value="">Não informado</option>
+                                    <option value="manha">☀️ Sol da manhã</option>
+                                    <option value="tarde">🌅 Sol da tarde</option>
+                                    <option value="manha-tarde">☀️🌅 Sol manhã e tarde</option>
+                                    <option value="noite">🌙 Noite / Sem sol direto</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-posicao">Posição no prédio</label>
+                                <select id="imovel-posicao">
+                                    <option value="">Não informado</option>
+                                    <option value="frente">Frente</option>
+                                    <option value="fundos">Fundos</option>
+                                    <option value="lateral">Lateral</option>
+                                    <option value="esquina">Esquina</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-mobiliado">Mobiliado</label>
+                                <select id="imovel-mobiliado">
+                                    <option value="">Não informado</option>
+                                    <option value="nao">Não mobiliado</option>
+                                    <option value="semi">Semi-mobiliado</option>
+                                    <option value="sim">Mobiliado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row two-columns">
+                            <div class="form-group">
+                                <label for="imovel-area-privativa">Área Privativa (m²)</label>
+                                <input type="number" id="imovel-area-privativa" min="0" placeholder="Ex: 75">
+                                <small>Diferente da área total se houver</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="imovel-total-andares">Total de andares do prédio</label>
+                                <input type="number" id="imovel-total-andares" min="0" placeholder="Ex: 20">
+                                <small>Opcional</small>
+                            </div>
+                        </div>
                         <div class="form-row two-columns">
                             <div class="form-group">
                                 <label for="imovel-tipo">Tipo *</label>
