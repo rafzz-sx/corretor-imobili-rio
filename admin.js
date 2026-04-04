@@ -1805,6 +1805,14 @@ function setupFormListeners() {
             topografia:  isTerreno ? (getVal('imovel-topografia') || null) : null,
             localidade:  isTerreno ? (getVal('imovel-localidade') || null) : null,
             precoTipo:   isTerreno ? (getVal('imovel-preco-tipo') || 'total') : 'total',
+            suites: parseInt(getVal('imovel-suites')) || 0,
+            banheiros: parseInt(getVal('imovel-banheiros')) || 0,
+            andar: getVal('imovel-andar') ? parseInt(getVal('imovel-andar')) : null,
+            sol: getVal('imovel-sol') || null,
+            posicao: getVal('imovel-posicao') || null,
+            mobiliado: getVal('imovel-mobiliado') || null,
+            areaPrivativa: getVal('imovel-area-privativa') ? parseFloat(getVal('imovel-area-privativa')) : null,
+            totalAndares: getVal('imovel-total-andares') ? parseInt(getVal('imovel-total-andares')) : null,
             // Anúncio flutuante
             anuncioAtivo,
             anuncioDuracao,
@@ -1812,7 +1820,7 @@ function setupFormListeners() {
                 ? new Date(Date.now() + anuncioDuracao * 86400000).toISOString()
                 : (anuncioAtivo ? null : null), // null = sem prazo quando permanente
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        };
+        };  
 
         const btn = document.querySelector('#imovel-form .btn-primary');
         btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true;
@@ -1831,6 +1839,12 @@ function setupFormListeners() {
             btn.innerHTML = '<i class="fas fa-save"></i><span id="btn-submit-text">Salvar Imóvel</span>';
             btn.disabled = false;
         }
+        ['imovel-suites','imovel-banheiros','imovel-andar',
+            'imovel-sol','imovel-posicao','imovel-mobiliado',
+            'imovel-area-privativa','imovel-total-andares'].forEach(id => {
+               const el = document.getElementById(id);
+               if (el) el.value = el.type === 'number' ? '0' : '';
+           });
     });
 }
 
@@ -2140,6 +2154,14 @@ async function editImovel(id) {
         setF('imovel-vagas', d.vagas || 0);
         setF('imovel-condominio', d.condominio || 0);
         setF('imovel-iptu', d.tipo === 'Terreno' ? 0 : (d.iptu || 0));
+        setF('imovel-suites',        d.suites || 0);
+        setF('imovel-banheiros',     d.banheiros || 0);
+        setF('imovel-andar',         d.andar ?? '');
+        setF('imovel-sol',           d.sol ?? '');
+        setF('imovel-posicao',       d.posicao ?? '');
+        setF('imovel-mobiliado',     d.mobiliado ?? '');
+        setF('imovel-area-privativa',d.areaPrivativa ?? '');
+        setF('imovel-total-andares', d.totalAndares ?? '');
 
         // ── Campos de Terreno ──
         const isTerreno = d.tipo === 'Terreno';
