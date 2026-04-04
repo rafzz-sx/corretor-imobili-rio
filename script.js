@@ -640,6 +640,11 @@ function renderGallery(lista, containerId = 'gallery') {
         } else {
             if (imo.quartos) detailTags += `<span class="detail-tag"><i class="fas fa-bed"></i> ${imo.quartos} qto${imo.quartos > 1 ? 's' : ''}</span>`;
             if (imo.vagas) detailTags += `<span class="detail-tag"><i class="fas fa-car"></i> ${imo.vagas}</span>`;
+            if (imo.suites)    detailTags += `<span class="detail-tag"><i class="fas fa-bath"></i> ${imo.suites} suíte${imo.suites>1?'s':''}</span>`;
+            if (imo.banheiros) detailTags += `<span class="detail-tag"><i class="fas fa-shower"></i> ${imo.banheiros} banh.</span>`;
+            const solIcons = { manha:'☀️ Manhã', tarde:'🌅 Tarde', 'manha-tarde':'☀️ Manhã/Tarde', noite:'🌙 Sem sol' };
+            if (imo.sol && solIcons[imo.sol]) detailTags += `<span class="detail-tag">${solIcons[imo.sol]}</span>`;
+            if (imo.andar) detailTags += `<span class="detail-tag"><i class="fas fa-layer-group"></i> ${imo.andar}º andar</span>`;
         }
         if (imo.tipo) detailTags += `<span class="detail-tag">${imo.tipo}</span>`;
 
@@ -749,6 +754,13 @@ function openModal(imovelId) {
             if (imo.quartos) html += `<span class="modal-tag"><i class="fas fa-bed"></i> ${imo.quartos} quartos</span>`;
             if (imo.vagas)   html += `<span class="modal-tag"><i class="fas fa-car"></i> ${imo.vagas} vaga${imo.vagas>1?'s':''}</span>`;
             if (imo.condominio) html += `<span class="modal-tag"><i class="fas fa-home"></i> Cond. R$ ${imo.condominio.toLocaleString('pt-BR')}</span>`;
+            if (imo.suites)       html += `<span class="modal-tag"><i class="fas fa-bath"></i> ${imo.suites} suíte${imo.suites>1?'s':''}</span>`;
+            if (imo.banheiros)    html += `<span class="modal-tag"><i class="fas fa-shower"></i> ${imo.banheiros} banheiro${imo.banheiros>1?'s':''}</span>`;
+            if (imo.andar)        html += `<span class="modal-tag"><i class="fas fa-layer-group"></i> ${imo.andar}º andar${imo.totalAndares?' de '+imo.totalAndares:''}</span>`;
+            if (imo.sol) { const sm = {manha:'☀️ Sol da manhã',tarde:'🌅 Sol da tarde','manha-tarde':'☀️ Sol manhã e tarde',noite:'🌙 Sem sol direto'}; if(sm[imo.sol]) html += `<span class="modal-tag">${sm[imo.sol]}</span>`; }
+            if (imo.posicao)      html += `<span class="modal-tag"><i class="fas fa-compass"></i> ${imo.posicao.charAt(0).toUpperCase()+imo.posicao.slice(1)}</span>`;
+            if (imo.mobiliado && imo.mobiliado !== 'nao') { const mm={semi:'Semi-mobiliado',sim:'Mobiliado'}; html += `<span class="modal-tag"><i class="fas fa-couch"></i> ${mm[imo.mobiliado]||''}</span>`; }
+            if (imo.areaPrivativa) html += `<span class="modal-tag"><i class="fas fa-ruler-combined"></i> ${imo.areaPrivativa}m² privativa</span>`;
         }
         tags.innerHTML = html;
     }
