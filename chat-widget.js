@@ -1,5 +1,5 @@
 // ============================================================
-//  CHAT FLUTUANTE v2.0 — Leandro Bomfim Imóveis
+//  CHAT FLUTUANTE v7.0 — Leandro Bomfim Imóveis
 //  NLP ultra-robusto: 900+ padrões, fuzzy, sinonímia total
 //  Atalhos APENAS na barra inferior (nunca dentro do chat)
 //  Respostas corretas para qualquer variação de pergunta
@@ -238,7 +238,16 @@
     }
     function _renderCard(im) {
         const preco = im.precoModo === 'lancamento' ? '🚀 Lançamento' : _formatPreco(im.preco);
-        const det   = im.tipo === 'Terreno' ? `${im.area}m²` : `${im.quartos || '?'} qtos · ${im.area || '?'}m²`;
+        let det;
+        if (im.tipo === 'Terreno') {
+            det = `${im.area}m²`;
+        } else {
+            const qtos   = im.quartos ? `${im.quartos} qto${im.quartos > 1 ? 's' : ''}` : null;
+            const suites = im.suites  ? `${im.suites} suíte${im.suites > 1 ? 's' : ''}` : null;
+            const area   = im.area    ? `${im.area}m²` : null;
+            const partes = [qtos, suites, area].filter(Boolean);
+            det = partes.join(' · ');
+        }
         return `🏠 **${im.titulo}**\n📍 ${im.bairro} · ${det}\n💰 ${preco}`;
     }
     function _resumoEstoque() {
@@ -323,6 +332,24 @@
         if (/\b(2|dois|duas)\b/.test(t) && t.includes('quarto')) return 2;
         if (/\b(1|um|uma)\b/.test(t) && t.includes('quarto')) return 1;
         return null;
+    }
+
+    function _extractSuites(text) {
+        const t = normFull(text);
+        if (!t.includes('suite') && !t.includes('suites')) return null;
+        if (/\b(4|quatro)\b/.test(t)) return 4;
+        if (/\b(3|tres)\b/.test(t))   return 3;
+        if (/\b(2|dois|duas)\b/.test(t)) return 2;
+        if (/\b(1|um|uma)\b/.test(t))  return 1;
+        return 1; // pediu suíte mas sem número → assume pelo menos 1
+    }
+
+    function _getBySuites(q) {
+        return _catalogoImoveis.filter(i => {
+            const n = parseInt(i.suites || 0);
+            if (!n) return false; // sem dado de suítes → exclui
+            return q >= 4 ? n >= 4 : n === q;
+        });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -422,6 +449,12 @@
         if (matchAny(t, ['2 quartos','dois quartos','2 dormitorios','2qto'])) return { intent: 'QUARTOS_2' };
         if (matchAny(t, ['3 quartos','tres quartos','3 dormitorios','3qto'])) return { intent: 'QUARTOS_3' };
         if (matchAny(t, ['4 quartos','quatro quartos','4 dormitorios','4qto','4 ou mais'])) return { intent: 'QUARTOS_4' };
+
+        // ── SUÍTES ──
+        if (matchAny(t, ['1 suite','uma suite','suite','tem suite','com suite','quero suite','suite master','suite casal'])) return { intent: 'SUITES_1' };
+        if (matchAny(t, ['2 suites','duas suites','dois suites'])) return { intent: 'SUITES_2' };
+        if (matchAny(t, ['3 suites','tres suites'])) return { intent: 'SUITES_3' };
+        if (matchAny(t, ['4 suites','quatro suites','4 ou mais suites'])) return { intent: 'SUITES_4' };
 
         // ── INFO BAIRROS ESPECÍFICOS ──
         if (matchAny(t, ['sobre ipanema','em ipanema','imoveis ipanema','apartamento ipanema','ipanema como e','ipanema bairro','quero ipanema'])) return { intent: 'INFO_BAIRRO', bairro: 'ipanema' };
@@ -624,6 +657,7 @@
         const tipoFound    = _extractTipo(t);
         const precoFound   = _extractPreco(t);
         const quartosFound = _extractQuartos(t);
+        const suitesFound  = _extractSuites(t);
 
         const temBuscaSignal = matchAny(t, [
             'tem','quero','busco','procuro','existe','disponivel','encontrar','achar',
@@ -631,8 +665,8 @@
             'estou procurando','estou buscando','estou querendo',
         ]);
 
-        if ((bairroFound || tipoFound || precoFound || quartosFound) && (temBuscaSignal || bairroFound)) {
-            return { intent: 'BUSCA_ESPECIFICA', bairro: bairroFound, tipo: tipoFound, preco: precoFound, quartos: quartosFound };
+        if ((bairroFound || tipoFound || precoFound || quartosFound || suitesFound) && (temBuscaSignal || bairroFound)) {
+            return { intent: 'BUSCA_ESPECIFICA', bairro: bairroFound, tipo: tipoFound, preco: precoFound, quartos: quartosFound, suites: suitesFound };
         }
 
         // Bairro puro mencionado (sem verbo de busca mas com info suficiente)
@@ -660,13 +694,23 @@
             if (tipo)    lista = lista.filter(i => norm(i.tipo || '') === norm(tipo));
             if (preco)   lista = lista.filter(i => parseFloat(i.preco || 0) <= preco);
             if (quartos) lista = lista.filter(i => quartos === 4 ? parseInt(i.quartos || 0) >= 4 : parseInt(i.quartos || 0) === quartos);
+            if (intentObj.suites) lista = lista.filter(i => {
+                const n = parseInt(i.suites || 0);
+                return intentObj.suites >= 4 ? n >= 4 : n === intentObj.suites;
+            });
 
             if (!_catalogoLoaded) return {
                 text: '📊 Carregando catálogo em tempo real... Um momento!',
                 opts: [{ label: '🏠 Ver no site', action: () => { window.location.href = 'imoveis.html'; } }],
             };
 
-            const filtros = [bairro, tipo, preco ? `até ${_formatPreco(preco)}` : null, quartos ? `${quartos}+ quartos` : null].filter(Boolean).join(', ');
+            const filtros = [
+                bairro,
+                tipo,
+                preco ? `até ${_formatPreco(preco)}` : null,
+                quartos ? `${quartos}+ quartos` : null,
+                intentObj.suites ? `${intentObj.suites}+ suíte${intentObj.suites > 1 ? 's' : ''}` : null,
+            ].filter(Boolean).join(', ');
 
             if (!lista.length) return {
                 text: `🔍 Não encontrei imóveis com **${filtros}** agora.\n\nMas o **Leandro** tem acesso a imóveis **exclusivos não anunciados** — vale perguntar!`,
@@ -783,6 +827,24 @@
                 const label = n === 4 ? '4 ou mais quartos' : `${n} quarto${n !== 1 ? 's' : ''}`;
                 if (!lista.length) return { text: `🛏️ Não há imóveis com ${label} agora. O Leandro pode encontrar!`, opts: [{ label: '📱 Consultar Leandro', action: () => window.open(KB.wa(`Olá Leandro! Procuro imóvel com ${label}.`), '_blank') }, { label: '↩ Menu', next: 'inicio' }] };
                 return { text: `🛏️ **${lista.length} imóvel${lista.length !== 1 ? 'is' : ''} com ${label}:**\n\n${lista.slice(0, 3).map(_renderCard).join('\n\n')}${lista.length > 3 ? `\n\n_...e mais ${lista.length - 3}_` : ''}`, opts: _buildVerOpts(lista, `Olá Leandro! Quero imóvel com ${label}.`) };
+            }
+
+            // ── SUÍTES ──
+            case 'SUITES_1': case 'SUITES_2': case 'SUITES_3': case 'SUITES_4': {
+                const n = { SUITES_1: 1, SUITES_2: 2, SUITES_3: 3, SUITES_4: 4 }[intent];
+                const lista = _getBySuites(n);
+                const label = n === 4 ? '4 ou mais suítes' : `${n} suíte${n !== 1 ? 's' : ''}`;
+                if (!lista.length) return {
+                    text: `🛁 Não encontrei imóveis com **${label}** no catálogo agora. Mas o Leandro tem acesso a opções exclusivas!\n\nPergunte a ele diretamente.`,
+                    opts: [
+                        { label: '📱 Consultar Leandro', action: () => window.open(KB.wa(`Olá Leandro! Procuro imóvel com ${label}.`), '_blank') },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+                return {
+                    text: `🛁 **${lista.length} imóvel${lista.length !== 1 ? 'is' : ''} com ${label}:**\n\n${lista.slice(0, 3).map(_renderCard).join('\n\n')}${lista.length > 3 ? `\n\n_...e mais ${lista.length - 3}_` : ''}`,
+                    opts: _buildVerOpts(lista, `Olá Leandro! Quero imóvel com ${label} no Rio.`),
+                };
             }
 
             // ── INFO BAIRRO ──
@@ -1305,7 +1367,10 @@
     let _sessionId = null;
     let _msgCount  = 0;
     let _chatPath  = [];
-    let _announceDismissed = false;
+
+    // ── Anúncio: persiste em localStorage para não repetir entre páginas ──
+    const _ANNOUNCE_KEY = '_lb_chat_announce_dismissed';
+    let _announceDismissed = !!localStorage.getItem(_ANNOUNCE_KEY);
 
     function _getDeviceId() {
         let id = localStorage.getItem('_lb_did');
@@ -1473,6 +1538,34 @@
         .lb-chip { background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.2);border-radius:99px;padding:.22rem .65rem;color:#93c5fd;font-size:.69rem;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap; }
         .lb-chip:hover { background:rgba(52,152,219,.22);border-color:rgba(52,152,219,.45); }
 
+        /* ── Botões de opção dentro das mensagens ── */
+        .lb-opts {
+            display: flex; flex-direction: column; gap: .35rem;
+            align-self: flex-start; width: 100%; max-width: 96%;
+            margin-top: .1rem;
+            animation: lb-msgIn .25s ease both;
+        }
+        .lb-opt-btn {
+            background: rgba(52,152,219,.08);
+            border: 1px solid rgba(52,152,219,.22);
+            border-radius: 10px;
+            color: #93c5fd;
+            font-size: .8rem; font-weight: 500;
+            font-family: inherit;
+            padding: .48rem .85rem;
+            text-align: left;
+            cursor: pointer;
+            transition: background .18s, border-color .18s, transform .12s, color .15s;
+            white-space: normal; line-height: 1.35;
+        }
+        .lb-opt-btn:hover {
+            background: rgba(52,152,219,.2);
+            border-color: rgba(52,152,219,.55);
+            color: #bfdbfe;
+            transform: translateX(3px);
+        }
+        .lb-opt-btn:active { transform: scale(.97); }
+
         /* Footer */
         .lb-chat-footer { padding:.32rem .8rem;border-top:1px solid rgba(255,255,255,.04);font-size:.6rem;color:rgba(255,255,255,.15);text-align:center;flex-shrink:0; }
 
@@ -1499,6 +1592,8 @@
         // ── Mini anúncio lateral ──
         const announce = document.createElement('div');
         announce.id = 'lb-chat-announce';
+        // Se já foi dispensado em qualquer página, não mostra de novo
+        if (_announceDismissed) announce.classList.add('hidden');
         announce.innerHTML = `<div class="lb-announce-arrow"></div><div class="lb-announce-box"><span class="lb-announce-icon">💬</span><div class="lb-announce-text"><strong><span class="lb-announce-dot"></span>Assistente Online</strong>Dúvidas sobre imóveis? Fale comigo!</div><button class="lb-announce-close" id="lb-announce-close" title="Fechar" aria-label="Fechar">✕</button></div>`;
 
         wrapper.appendChild(btn);
@@ -1565,6 +1660,7 @@
     function dismissAnnounce() {
         if (_announceDismissed) return;
         _announceDismissed = true;
+        try { localStorage.setItem(_ANNOUNCE_KEY, '1'); } catch(_) {}
         const el = document.getElementById('lb-chat-announce');
         if (el) el.classList.add('hidden');
     }
@@ -1737,6 +1833,35 @@
     function scrollBottom() {
         const msgs = document.getElementById('lb-messages');
         if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    // ── Renderiza botões de opção dentro da área de mensagens ──
+    function addOpts(opts) {
+        if (!opts || !opts.length) return;
+        const msgs = document.getElementById('lb-messages');
+        if (!msgs) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'lb-opts';
+
+        opts.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'lb-opt-btn';
+            btn.textContent = opt.label;
+            btn.addEventListener('click', () => {
+                // Remove todos os opts ao clicar
+                msgs.querySelectorAll('.lb-opts').forEach(el => el.remove());
+                if (opt.action) {
+                    opt.action();
+                } else if (opt.next) {
+                    goTo(opt.next);
+                }
+            });
+            wrap.appendChild(btn);
+        });
+
+        msgs.appendChild(wrap);
+        scrollBottom();
     }
 
     // ═══════════════════════════════════════════════════════
