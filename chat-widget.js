@@ -1444,7 +1444,10 @@
             animation-delay: 3s;
         }
         @keyframes lb-announceIn { from{opacity:0;transform:translateX(-10px) scale(.95);}to{opacity:1;transform:translateX(0) scale(1);} }
-        #lb-chat-announce.hidden { opacity:0!important; pointer-events:none; transform:scale(.8); transition:opacity .3s,transform .3s; }
+        #lb-chat-announce.hidden {
+            display: none !important;
+            animation: none !important;
+        }
         .lb-announce-arrow { width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-right:8px solid rgba(52,152,219,.25);flex-shrink:0; }
         .lb-announce-box {
             background: rgba(15,25,40,.97); border: 1px solid rgba(52,152,219,.3);
@@ -1538,33 +1541,6 @@
         .lb-chip { background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.2);border-radius:99px;padding:.22rem .65rem;color:#93c5fd;font-size:.69rem;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap; }
         .lb-chip:hover { background:rgba(52,152,219,.22);border-color:rgba(52,152,219,.45); }
 
-        /* ── Botões de opção dentro das mensagens ── */
-        .lb-opts {
-            display: flex; flex-direction: column; gap: .35rem;
-            align-self: flex-start; width: 100%; max-width: 96%;
-            margin-top: .1rem;
-            animation: lb-msgIn .25s ease both;
-        }
-        .lb-opt-btn {
-            background: rgba(52,152,219,.08);
-            border: 1px solid rgba(52,152,219,.22);
-            border-radius: 10px;
-            color: #93c5fd;
-            font-size: .8rem; font-weight: 500;
-            font-family: inherit;
-            padding: .48rem .85rem;
-            text-align: left;
-            cursor: pointer;
-            transition: background .18s, border-color .18s, transform .12s, color .15s;
-            white-space: normal; line-height: 1.35;
-        }
-        .lb-opt-btn:hover {
-            background: rgba(52,152,219,.2);
-            border-color: rgba(52,152,219,.55);
-            color: #bfdbfe;
-            transform: translateX(3px);
-        }
-        .lb-opt-btn:active { transform: scale(.97); }
 
         /* Footer */
         .lb-chat-footer { padding:.32rem .8rem;border-top:1px solid rgba(255,255,255,.04);font-size:.6rem;color:rgba(255,255,255,.15);text-align:center;flex-shrink:0; }
@@ -1662,7 +1638,12 @@
         _announceDismissed = true;
         try { localStorage.setItem(_ANNOUNCE_KEY, '1'); } catch(_) {}
         const el = document.getElementById('lb-chat-announce');
-        if (el) el.classList.add('hidden');
+        if (!el) return;
+        // Animação de saída suave, depois esconde de verdade
+        el.style.transition = 'opacity .25s ease, transform .25s ease';
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-8px) scale(.92)';
+        setTimeout(() => { el.classList.add('hidden'); }, 260);
     }
 
     // ── Chips de atalho — APENAS na barra inferior ──
@@ -1773,7 +1754,6 @@
     function goTo(nodeKey) {
         _chatPath.push(nodeKey);
         // Remove os opts da última mensagem para manter chat limpo
-        document.querySelectorAll('#lb-messages .lb-opts').forEach(el => el.remove());
 
         const node = FLOWS[nodeKey];
         if (!node) { goTo('inicio'); return; }
@@ -1840,25 +1820,6 @@
         if (!opts || !opts.length) return;
         const msgs = document.getElementById('lb-messages');
         if (!msgs) return;
-
-        const wrap = document.createElement('div');
-        wrap.className = 'lb-opts';
-
-        opts.forEach(opt => {
-            const btn = document.createElement('button');
-            btn.className = 'lb-opt-btn';
-            btn.textContent = opt.label;
-            btn.addEventListener('click', () => {
-                // Remove todos os opts ao clicar
-                msgs.querySelectorAll('.lb-opts').forEach(el => el.remove());
-                if (opt.action) {
-                    opt.action();
-                } else if (opt.next) {
-                    goTo(opt.next);
-                }
-            });
-            wrap.appendChild(btn);
-        });
 
         msgs.appendChild(wrap);
         scrollBottom();
