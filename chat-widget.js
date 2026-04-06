@@ -9,6 +9,10 @@
 (function () {
     'use strict';
 
+    // Guard: nunca executar duas vezes na mesma página
+    if (window._lbChatWidgetLoaded) return;
+    window._lbChatWidgetLoaded = true;
+
     // ═══════════════════════════════════════════════════════
     //  NORMALIZAÇÃO — remove acentos, pontuação, espaços
     // ═══════════════════════════════════════════════════════
