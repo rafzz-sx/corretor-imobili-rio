@@ -371,7 +371,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', saude:'Saúde do Sistema', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual' };
+    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', saude:'Saúde do Sistema', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual', banner:'Banner Promocional' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
@@ -384,6 +384,7 @@ function showSection(name) {
     else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
     else if (name === 'chat-logs') { loadChatLogs(); return; }
+    else if (name === 'banner') { loadBannerConfig(); return; }
     else if (name === 'seguranca') { loadSeguranca().then(() => carregarIPSessaoAtual()); return; }
     else stopSessaoCountdown();
 }
@@ -2852,6 +2853,103 @@ async function saveSiteConfig() {
     try { await db.collection('config').doc('site').set(cfg); showToast('✅ Configurações salvas!'); }
     catch(e) { showToast('Erro ao salvar','error'); }
 }
+// ========== BANNER PROMOCIONAL ==========
+async function loadBannerConfig() {
+    try {
+        const doc = await db.collection('config').doc('banner').get();
+        const cfg = doc.exists ? doc.data() : {};
+        const el = (id) => document.getElementById(id);
+        if (el('banner-ativo')) el('banner-ativo').checked = !!cfg.ativo;
+        if (el('banner-imagem-url')) el('banner-imagem-url').value = cfg.imagemUrl || '';
+        if (el('banner-titulo')) el('banner-titulo').value = cfg.titulo || '';
+        if (el('banner-subtitulo')) el('banner-subtitulo').value = cfg.subtitulo || '';
+        if (el('banner-btn-texto')) el('banner-btn-texto').value = cfg.btnTexto || '';
+        if (el('banner-btn-link')) el('banner-btn-link').value = cfg.btnLink || '';
+        if (el('banner-posicao')) el('banner-posicao').value = cfg.posicao || 'topo';
+        updateBannerPreview();
+    } catch(e) { console.error('loadBannerConfig:', e); }
+}
+
+async function saveBannerConfig() {
+    try {
+        const cfg = {
+            ativo: !!document.getElementById('banner-ativo')?.checked,
+            imagemUrl: (document.getElementById('banner-imagem-url')?.value || '').trim(),
+            titulo: (document.getElementById('banner-titulo')?.value || '').trim(),
+            subtitulo: (document.getElementById('banner-subtitulo')?.value || '').trim(),
+            btnTexto: (document.getElementById('banner-btn-texto')?.value || '').trim(),
+            btnLink: (document.getElementById('banner-btn-link')?.value || '').trim(),
+            posicao: document.getElementById('banner-posicao')?.value || 'topo',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        };
+        await db.collection('config').doc('banner').set(cfg);
+        showToast('✅ Banner salvo com sucesso!');
+    } catch(e) {
+        showToast('Erro ao salvar banner', 'error');
+        console.error('saveBannerConfig:', e);
+    }
+}
+
+function handleBannerUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    if (file.size > 5 * 1024 * 1024) { showToast('Arquivo muito grande (máx 5MB)', 'error'); return; }
+    const status = document.getElementById('banner-upload-status');
+    const area = document.getElementById('banner-upload-area');
+    if (!storage) { showToast('Firebase Storage não disponível', 'error'); return; }
+    const ext = file.name.split('.').pop().toLowerCase();
+    const fileName = 'banners/banner_' + Date.now() + '.' + ext;
+    const ref = storage.ref(fileName);
+    const task = ref.put(file, { contentType: file.type });
+    if (status) status.innerHTML = '<span class="loading"></span> Enviando...';
+    if (area) area.style.borderColor = 'var(--accent)';
+    task.on('state_changed',
+        (snap) => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            if (status) status.textContent = `Enviando... ${pct}%`;
+        },
+        (err) => {
+            if (status) status.textContent = 'Erro no upload: ' + err.message;
+            if (area) area.style.borderColor = 'var(--red)';
+            showToast('Erro no upload', 'error');
+        },
+        async () => {
+            const url = await ref.getDownloadURL();
+            const urlInput = document.getElementById('banner-imagem-url');
+            if (urlInput) urlInput.value = url;
+            if (status) status.innerHTML = '✅ Imagem enviada com sucesso!';
+            if (area) {
+                area.style.borderColor = 'var(--green)';
+                area.innerHTML = `<img src="${url}" style="max-height:120px;border-radius:8px;object-fit:cover;"><span style="font-size:.78rem;color:var(--green);">Imagem carregada • Clique para trocar</span>`;
+            }
+            updateBannerPreview();
+            showToast('🖼️ Imagem do banner enviada!');
+        }
+    );
+}
+
+function updateBannerPreview() {
+    const preview = document.getElementById('banner-preview');
+    if (!preview) return;
+    const img = (document.getElementById('banner-imagem-url')?.value || '').trim();
+    const titulo = (document.getElementById('banner-titulo')?.value || '').trim();
+    const sub = (document.getElementById('banner-subtitulo')?.value || '').trim();
+    const btnTexto = (document.getElementById('banner-btn-texto')?.value || '').trim();
+    if (!img && !titulo) {
+        preview.innerHTML = '<div class="banner-preview-empty"><i class="fas fa-image"></i><span>Preencha os campos acima para ver o preview</span></div>';
+        return;
+    }
+    preview.innerHTML = `
+        <div class="banner-preview-card" style="background:${img ? `linear-gradient(135deg,rgba(10,15,30,.75),rgba(10,15,30,.5)),url('${img}') center/cover` : 'linear-gradient(135deg,#1a1f35,#0f1420)'};">
+            <div class="banner-preview-content">
+                ${titulo ? `<h2 style="font-size:1.4rem;font-weight:800;color:#fff;margin:0 0 .4rem;line-height:1.2;">${titulo}</h2>` : ''}
+                ${sub ? `<p style="font-size:.88rem;color:rgba(255,255,255,.8);margin:0 0 .8rem;line-height:1.4;">${sub}</p>` : ''}
+                ${btnTexto ? `<span style="display:inline-block;background:linear-gradient(135deg,var(--accent),#6366f1);color:#fff;padding:.5rem 1.2rem;border-radius:99px;font-size:.82rem;font-weight:700;">${btnTexto}</span>` : ''}
+            </div>
+        </div>
+    `;
+}
+
 // ========================================================
 //  MELHORIAS SSS — BACKUP, EXPORT E SEGURANÇA
 // ========================================================
