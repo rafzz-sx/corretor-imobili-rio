@@ -1715,10 +1715,44 @@ function injectSchemaOrg(imo) {
 }
 
 // ══════════════════════════════════════════════════════════
+//  BANNER PROMOCIONAL DINÂMICO
+// ══════════════════════════════════════════════════════════
+function loadPromoBanner() {
+    const container = safeEl('promo-banner-container');
+    if (!container || !db) return;
+    db.collection('config').doc('banner').get().then(doc => {
+        if (!doc.exists) return;
+        const cfg = doc.data();
+        if (!cfg.ativo) return;
+        const img = cfg.imagemUrl || '';
+        const titulo = cfg.titulo || '';
+        const sub = cfg.subtitulo || '';
+        const btnTexto = cfg.btnTexto || '';
+        const btnLink = cfg.btnLink || '';
+        if (!img && !titulo) return;
+
+        container.innerHTML = `
+            <div class="promo-banner" style="background:${img ? `linear-gradient(135deg,rgba(10,15,30,.78),rgba(10,15,30,.45)),url('${img}') center/cover no-repeat` : 'linear-gradient(135deg,#1a1f35,#0f1420)'};">
+                <div class="promo-banner-content">
+                    ${titulo ? `<h2 class="promo-banner-title">${titulo}</h2>` : ''}
+                    ${sub ? `<p class="promo-banner-subtitle">${sub}</p>` : ''}
+                    ${btnTexto ? `<a href="${btnLink || '#'}" class="promo-banner-cta">${btnTexto} <i class="fas fa-arrow-right"></i></a>` : ''}
+                </div>
+                <button class="promo-banner-close" onclick="this.closest('.promo-banner').style.display='none'" aria-label="Fechar banner">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        container.style.animation = 'fadeInBanner .5s ease both';
+    }).catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
     loadSiteConfig();
+    loadPromoBanner();
     if (document.querySelector('.testimonials-carousel')) window._carousel = new TestimonialsCarousel();
     setupMobileMenu();
     setupParallax();
