@@ -99,6 +99,9 @@
                 <a href="#" class="nav-item" data-section="site">
                     <i class="fas fa-sliders-h"></i><span>Config. do Site</span>
                 </a>
+                <a href="#" class="nav-item" data-section="banner">
+                    <i class="fas fa-image"></i><span>Banner Promo</span>
+                </a>
                 <a href="#" class="nav-item" data-section="saude">
                     <i class="fas fa-heartbeat"></i><span>Saúde do Sistema</span>
                 </a>
@@ -659,6 +662,92 @@
                 <div id="site-content"></div>
             </section>
 
+            <!-- BANNER PROMOCIONAL -->
+            <section id="section-banner" class="admin-section">
+                <div style="max-width:820px;">
+                    <div class="dashboard-card" style="margin-bottom:1.2rem;">
+                        <h3 style="margin-bottom:1rem;"><i class="fas fa-image" style="color:var(--accent)"></i> Banner Promocional</h3>
+                        <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:1.2rem;">Crie banners chamativos com foto e texto para exibir no site público. Ideal para promover imóveis, ofertas e novidades.</p>
+                        
+                        <div style="display:flex;flex-direction:column;gap:1rem;">
+                            <!-- Ativar/Desativar -->
+                            <label class="fx-toggle" style="justify-content:space-between;gap:1rem;">
+                                <span style="color:var(--text-secondary);font-size:.85rem;">
+                                    <strong style="color:var(--text-primary);">Ativar banner no site</strong><br>
+                                    <span style="color:var(--text-muted);font-size:.75rem;">Quando ativo, o banner aparece na página inicial do site público.</span>
+                                </span>
+                                <input type="checkbox" id="banner-ativo">
+                            </label>
+
+                            <!-- Upload de Foto -->
+                            <div class="form-group">
+                                <label class="form-label"><i class="fas fa-camera" style="color:var(--accent);margin-right:.3rem;"></i> Foto do Banner</label>
+                                <div class="banner-upload-area" id="banner-upload-area" onclick="document.getElementById('banner-file-input').click()">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <span>Clique para enviar uma foto</span>
+                                    <small>JPG, PNG ou WebP — máx. 5MB</small>
+                                </div>
+                                <input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handleBannerUpload(this)">
+                                <div id="banner-upload-status" style="font-size:.78rem;color:var(--text-muted);margin-top:.4rem;"></div>
+                            </div>
+
+                            <!-- URL da imagem (alternativa) -->
+                            <div class="form-group">
+                                <label class="form-label">Ou cole a URL da imagem</label>
+                                <input type="text" id="banner-imagem-url" class="form-control" placeholder="https://exemplo.com/banner.jpg" oninput="updateBannerPreview()">
+                            </div>
+
+                            <!-- Textos -->
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                                <div class="form-group" style="grid-column:1/-1;">
+                                    <label class="form-label"><i class="fas fa-heading" style="color:var(--amber);margin-right:.3rem;"></i> Título Chamativo</label>
+                                    <input type="text" id="banner-titulo" class="form-control" placeholder="Ex: Seu Novo Lar Te Espera!" maxlength="60" oninput="updateBannerPreview()">
+                                </div>
+                                <div class="form-group" style="grid-column:1/-1;">
+                                    <label class="form-label">Subtítulo</label>
+                                    <input type="text" id="banner-subtitulo" class="form-control" placeholder="Ex: Imóveis exclusivos em Ipanema com até 20% OFF" maxlength="100" oninput="updateBannerPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Texto do Botão</label>
+                                    <input type="text" id="banner-btn-texto" class="form-control" placeholder="Ex: Ver Oferta" maxlength="25" oninput="updateBannerPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Link do Botão</label>
+                                    <input type="text" id="banner-btn-link" class="form-control" placeholder="Ex: imoveis.html?bairro=Ipanema">
+                                </div>
+                            </div>
+
+                            <!-- Posição -->
+                            <div class="form-group">
+                                <label class="form-label">Posição do banner</label>
+                                <select id="banner-posicao" class="form-control">
+                                    <option value="topo">Topo da página</option>
+                                    <option value="hero">Sobre o hero</option>
+                                    <option value="meio">Após os destaques</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview -->
+                    <div class="dashboard-card" style="margin-bottom:1.2rem;">
+                        <h3 style="margin-bottom:1rem;"><i class="fas fa-eye" style="color:var(--green)"></i> Preview do Banner</h3>
+                        <div id="banner-preview" class="banner-preview-box">
+                            <div class="banner-preview-empty">
+                                <i class="fas fa-image"></i>
+                                <span>Preencha os campos acima para ver o preview</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ações -->
+                    <div style="display:flex;justify-content:flex-end;gap:.8rem;flex-wrap:wrap;">
+                        <button onclick="loadBannerConfig()" class="btn-secondary"><i class="fas fa-undo"></i> Descartar</button>
+                        <button onclick="saveBannerConfig()" class="btn-primary"><i class="fas fa-save"></i> Salvar Banner</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- SEGURANÇA — HISTÓRICO DE LOGINS -->
             <section id="section-seguranca" class="admin-section">
                 <div id="seguranca-loading" style="display:none;justify-content:center;align-items:center;padding:4rem;gap:1rem;color:var(--text-muted);">
@@ -765,6 +854,10 @@
                 <button class="mobile-more-item" onclick="mobileNavMore('site')">
                     <span class="mobile-more-icon amber"><i class="fas fa-sliders-h"></i></span>
                     <span>Config. Site</span>
+                </button>
+                <button class="mobile-more-item" onclick="mobileNavMore('banner')">
+                    <span class="mobile-more-icon" style="background:rgba(99,102,241,.15);color:#818cf8;"><i class="fas fa-image"></i></span>
+                    <span>Banner Promo</span>
                 </button>
                 <button class="mobile-more-item" onclick="mobileNavMore('configuracoes')">
                     <span class="mobile-more-icon" style="background:var(--bg-elevated);color:var(--text-secondary);"><i class="fas fa-cog"></i></span>
