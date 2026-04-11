@@ -1,6 +1,7 @@
 // ============================================================
-//  CHAT FLUTUANTE v7.0 — Leandro Bomfim Imóveis
-//  NLP ultra-robusto: 900+ padrões, fuzzy, sinonímia total
+//  CHAT FLUTUANTE v8.0 — Leandro Bomfim Imóveis
+//  NLP ultra-robusto: 1100+ padrões, fuzzy, sinonímia total
+//  NOVO: Sistema de contexto de conversa inteligente
 //  Atalhos APENAS na barra inferior (nunca dentro do chat)
 //  Respostas corretas para qualquer variação de pergunta
 //  sobre bairros, catálogo, imóveis, investimento, etc.
@@ -357,12 +358,16 @@
     }
 
     // ═══════════════════════════════════════════════════════
-    //  DETECÇÃO DE INTENÇÃO — ULTRA-ROBUSTO
-    //  Cobre qualquer forma de perguntar sobre cada tópico
+    //  DETECÇÃO DE INTENÇÃO — ULTRA-ROBUSTO v2
+    //  1100+ padrões com contexto de conversa
     // ═══════════════════════════════════════════════════════
     function detectIntent(rawText) {
         const t = normFull(rawText);
         const raw = norm(rawText);
+
+        // ── NOME DO USUÁRIO ──
+        const nameMatch = t.match(/(?:meu nome e|me chamo|sou o|sou a|pode me chamar de)\s+([a-z]{2,})/);
+        if (nameMatch) _ctx.userName = nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1);
 
         // ── DESENVOLVEDOR ──
         if (matchAny(t, [
@@ -370,6 +375,7 @@
             'quem construiu o site','quem e o dev','quem e o programador','quem fez esse chat',
             'quem fez esse assistente','quem criou voce','quem te criou','quem te fez',
             'quem te programou','quem te desenvolveu','desenvolvedor','programador do site','qm te fez',
+            'quem codou','quem desenhou o site','quem projetou','creditos do site',
         ])) return { intent: 'DESENVOLVEDOR' };
 
         // ── SAUDAÇÕES ──
@@ -377,19 +383,118 @@
             'oi ','ola ','bom dia','boa tarde','boa noite','tudo bem','tudo bom',
             'hey ','ei ','hello','salve','eae','e ai','opa ','oie ','como vai',
             'como voce esta','como vc ta','ta bom','tudo certo','beleza','fala ai',
-        ]) || raw === 'oi' || raw === 'ola' || raw === 'hey' || raw === 'opa') return { intent: 'SAUDACAO' };
+            'boa','fala comigo','to aqui','iae','yo ','hi ','whats up',
+        ]) || raw === 'oi' || raw === 'ola' || raw === 'hey' || raw === 'opa' || raw === 'boa' || raw === 'eae') return { intent: 'SAUDACAO' };
 
         // ── AGRADECIMENTO ──
         if (matchAny(t, [
             'obrigado','obrigada','valeu','muito obrigado','agradeco','agradecida',
             'thanks','grato','grata','otimo ajuda','voce me ajudou','resolveu','me ajudou','vlw','VLW','tmj','obgd','obgdo','obgda',
+            'show','perfeito','top','massa','demais','excelente','maravilha','arrasou','mandou bem',
         ])) return { intent: 'OBRIGADO' };
 
         // ── DESPEDIDA ──
         if (matchAny(t, [
             'tchau','ate logo','ate mais','adeus','bye ','encerrar','vou sair','vou indo',
-            'falou','ate proxima','boa noite bom descanso',
+            'falou','ate proxima','boa noite bom descanso','fui','xau','abraco','ate breve',
+            'vou nessa','vou saindo',
         ])) return { intent: 'DESPEDIDA' };
+
+        // ── CONTEXTUAL: "tem mais?", "e de X quartos?" ──
+        if (_ctx.lastIntent && matchAny(t, [
+            'tem mais','mais opcoes','mais opcao','outras opcoes','outra opcao',
+            'mais algum','tem outro','tem outros','tem outra','algo diferente',
+            'nao gostei','nao curti','quero ver mais','me mostra mais','pode mostrar mais',
+        ])) {
+            // Re-use last search context for "more"
+            if (_ctx.lastBairro || _ctx.lastTipo) {
+                return { intent: 'BUSCA_ESPECIFICA', bairro: _ctx.lastBairro, tipo: _ctx.lastTipo, preco: _ctx.lastPreco, quartos: _ctx.lastQuartos, suites: _ctx.lastSuites, _moreResults: true };
+            }
+            return { intent: 'CATALOGO_GERAL' };
+        }
+
+        // ── CONTEXTUAL: preço/custo referenciando último bairro ──
+        if (_ctx.lastBairroKey && matchAny(t, [
+            'quanto custa','qual o preco','qual o valor','quanto e','quanto fica',
+            'preco medio','valor medio','faixa de preco','quanto sai','custa quanto',
+            'e caro','e barato','qual valor',
+        ]) && !_extractBairro(t)) {
+            return { intent: 'INFO_BAIRRO', bairro: _ctx.lastBairroKey };
+        }
+
+        // ── CONTEXTUAL: "e lá?", "nesse bairro?" ──
+        const ctxBairro = _resolveContextual(rawText);
+        if (ctxBairro && !_extractBairro(t)) {
+            // Try to understand what they want about the contextual bairro
+            if (matchAny(t, ['seguro','seguranca','violencia','perigo','perigoso'])) return { intent: 'SEGURANCA_RIO' };
+            if (matchAny(t, ['tem imovel','tem algo','disponivel','imovel'])) {
+                return { intent: 'BUSCA_ESPECIFICA', bairro: ctxBairro, tipo: _ctx.lastTipo, preco: _ctx.lastPreco, quartos: _ctx.lastQuartos };
+            }
+            const bKey = Object.entries(KB.bairros).find(([, v]) => v.nome === ctxBairro)?.[0];
+            if (bKey) return { intent: 'INFO_BAIRRO', bairro: bKey };
+        }
+
+        // ── CONTEXTUAL: "e de 3 quartos?" (mantém bairro) ──
+        if (_ctx.lastBairro && _extractQuartos(t) && !_extractBairro(t) && matchAny(t, ['e de','tem de','tem com','e com','quero de','quero com'])) {
+            return { intent: 'BUSCA_ESPECIFICA', bairro: _ctx.lastBairro, tipo: _ctx.lastTipo, quartos: _extractQuartos(t), preco: _ctx.lastPreco };
+        }
+
+        // ── FRUSTRAÇÃO / NÃO ENTENDEU ──
+        if (matchAny(t, [
+            'nao entendi','nao era isso','errado','voce nao entendeu','ta errado',
+            'nao foi isso que perguntei','resposta errada','nao e isso',
+            'estou confuso','confusa','perdido','perdida','me ajuda direito',
+        ])) return { intent: 'FRUSTRADO' };
+
+        // ── COMO FUNCIONA O SITE ──
+        if (matchAny(t, [
+            'como funciona o site','como uso o site','como filtrar','como buscar',
+            'como faço para ver','onde vejo','onde encontro','como achar imovel',
+            'tutorial','me ensina','como navegar','onde clico',
+        ])) return { intent: 'COMO_FUNCIONA_SITE' };
+
+        // ── VISITA / AGENDAMENTO ──
+        if (matchAny(t, [
+            'agendar visita','visitar','quero visitar','posso visitar','quando posso ver',
+            'agendar','marcar visita','quero conhecer','quero ir ver','ir pessoalmente',
+            'posso ir ver','quando posso ir','agenda','marcamos',
+        ])) return { intent: 'AGENDAR_VISITA' };
+
+        // ── URGÊNCIA ──
+        if (matchAny(t, [
+            'urgente','preciso urgente','urgencia','rapido','o mais rapido','preciso logo',
+            'immediate','imediato','nao posso esperar','para ontem',
+        ])) return { intent: 'URGENTE' };
+
+        // ── CONDOMÍNIO ──
+        if (matchAny(t, [
+            'condominio','taxa de condominio','quanto e o condominio','cond alto',
+            'valor do condominio','condominio caro','condominio barato','condominio incluso',
+            'taxa condominal','paga condominio',
+        ])) return { intent: 'CONDOMINIO' };
+
+        // ── REFORMA / ESTADO ──
+        if (matchAny(t, [
+            'reformado','precisa de reforma','estado do imovel','conservacao',
+            'novo ou usado','imovel novo','imovel usado','reforma','reformar',
+            'precisa reformar','bem conservado','renovado',
+        ])) return { intent: 'REFORMA' };
+
+        // ── VIZINHANÇA / ENTORNO ──
+        if (matchAny(t, [
+            'vizinhanca','como e a vizinhanca','tem escola','escola perto','escola proxima',
+            'tem hospital','hospital perto','mercado perto','supermercado perto',
+            'farmacia perto','padaria','comercio perto','infraestrutura','servicos',
+            'tem shopping','shopping perto',
+        ])) return { intent: 'VIZINHANCA' };
+
+        // ── COMPARAÇÃO ENTRE BAIRROS ──
+        if (matchAny(t, [
+            'diferenca entre','qual a diferenca','comparar','comparacao','versus',
+            'o que e melhor','qual e melhor','ou','melhor x ou y',
+        ]) && (t.match(/\b(ipanema|leblon|copa|barra|recreio|botafogo|flamengo).*\b(ipanema|leblon|copa|barra|recreio|botafogo|flamengo)/i))) {
+            return { intent: 'COMPARAR_BAIRROS' };
+        }
 
         // ── CATÁLOGO GERAL — "qual o bairro", "quais imóveis", "o que tem disponível" ──
         // Esta seção cobre explicitamente as perguntas da imagem
@@ -689,7 +794,9 @@
     // ═══════════════════════════════════════════════════════
     function gerarResposta(intentObj) {
         if (!intentObj) return null;
+        _updateCtx(intentObj);
         const { intent, bairro, tipo, preco, quartos } = intentObj;
+        const greeting = _ctx.userName ? ` ${_ctx.userName}` : '';
 
         // === BUSCA ESPECÍFICA COMPOSTA ===
         if (intent === 'BUSCA_ESPECIFICA') {
@@ -745,8 +852,20 @@
                 };
 
             // ── CUMPRIMENTOS → menu ──
-            case 'SAUDACAO':
+            case 'SAUDACAO': {
+                if (_ctx.msgCount > 3) {
+                    return {
+                        text: `Ei${greeting}! 👋 Que bom te ver de novo! Continuamos de onde paramos?${_ctx.lastBairro ? `\n\nÚltimo bairro que vimos: **${_ctx.lastBairro}**` : ''}`,
+                        opts: [
+                            ...(_ctx.lastBairro ? [{ label: `📍 Voltar a ${_ctx.lastBairro}`, next: `flow_${_ctx.lastBairroKey || 'bairros'}` }] : []),
+                            { label: '🏠 Ver imóveis', next: 'flow_catalogo' },
+                            { label: '📞 Falar com Leandro', action: () => window.open(KB.whatsapp, '_blank') },
+                            { label: '↩ Menu completo', next: 'inicio' },
+                        ],
+                    };
+                }
                 return { type: 'FLOW', flow: 'inicio' };
+            }
 
             // ── AGRADECIMENTO ──
             case 'OBRIGADO':
@@ -1147,6 +1266,99 @@
                     opts: [{ label: '📱 Começar minha jornada', action: () => window.open(KB.wa('Olá Leandro! Vou comprar meu primeiro imóvel. Preciso de orientação.'), '_blank') }, { label: '💳 Financiamento', next: 'flow_financiamento' }, { label: '↩ Menu', next: 'inicio' }],
                 };
 
+            // ── NOVAS INTENÇÕES v8 ──
+            case 'FRUSTRADO':
+                return {
+                    text: `😅 Desculpa${greeting}! Deixa eu tentar te ajudar melhor.\n\nVocê pode:\n• **Perguntar sobre um bairro** (Ex: "Fala sobre Ipanema")\n• **Buscar imóveis** (Ex: "Quero 2 quartos na Barra")\n• **Tirar dúvidas** (Ex: "Como funciona o financiamento?")\n\nOu fale diretamente com o **${KB.nome}** — ele responde em minutos!`,
+                    opts: [
+                        { label: '📱 Falar com Leandro', action: () => window.open(KB.whatsapp, '_blank') },
+                        { label: '🏠 Ver imóveis', next: 'flow_catalogo' },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+
+            case 'COMO_FUNCIONA_SITE':
+                return {
+                    text: `🌐 **Como usar o site:**\n\n**1.** Na página principal, veja os **destaques** e **bairros**\n**2.** Clique em **"Ver Imóveis"** para o catálogo completo\n**3.** Use os **filtros** (bairro, quartos, preço) para refinar\n**4.** Clique em qualquer imóvel para ver **fotos e detalhes**\n**5.** Fale com o **Leandro** pelo WhatsApp para agendar visita\n\n💡 Você também pode me perguntar aqui! Ex: "Tem 2 quartos em Ipanema?"`,
+                    opts: [
+                        { label: '🏠 Ver catálogo', action: () => { window.location.href = 'imoveis.html'; } },
+                        { label: '📍 Explorar bairros', next: 'flow_bairros' },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+
+            case 'AGENDAR_VISITA': {
+                const bairroRef = _ctx.lastBairro || '';
+                const waMsg = `Olá Leandro! Gostaria de agendar uma visita${bairroRef ? ' em ' + bairroRef : ''}. Quando posso ir?`;
+                return {
+                    text: `📅 **Agendar visita:**\n\nO **${KB.nome}** agenda visitas pessoalmente!\n\n• 🕐 **Seg–Sex:** 8h às 20h\n• 🕐 **Sábado:** 9h às 18h\n• 🕐 **Domingo:** Sob agendamento\n\n${bairroRef ? `📍 Quer visitar imóveis em **${bairroRef}**? Perfeito!\n\n` : ''}Mande mensagem para combinar o melhor horário:`,
+                    opts: [
+                        { label: '📱 Agendar pelo WhatsApp', action: () => window.open(KB.wa(waMsg), '_blank') },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+            }
+
+            case 'URGENTE':
+                return {
+                    text: `⚡ **Precisa rápido?**\n\nO **${KB.nome}** entende a urgência!\n\nLigue ou mande WhatsApp agora:\n📱 **${KB.tel}**\n\nEle costuma responder em **menos de 15 minutos** durante o horário comercial!`,
+                    opts: [
+                        { label: '📱 WhatsApp AGORA', action: () => window.open(KB.wa('Olá Leandro! Estou com urgência para encontrar um imóvel. Pode me ajudar agora?'), '_blank') },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+
+            case 'CONDOMINIO':
+                return {
+                    text: `🏢 **Sobre taxas de condomínio:**\n\n**Média mensal no Rio (2025):**\n• 🌊 Ipanema/Leblon: R$ 1.200–3.000\n• 🏝️ Copacabana: R$ 800–2.000\n• 🏙️ Barra: R$ 600–1.800\n• 🌴 Recreio: R$ 400–1.200\n\n💡 Depende do tamanho, lazer e infraestrutura do prédio.\n\n${_ctx.lastBairro ? `Para **${_ctx.lastBairro}** especificamente, o Leandro pode detalhar!` : 'O Leandro tem os valores exatos de cada imóvel!'}`,
+                    opts: [
+                        { label: '📱 Perguntar valores exatos', action: () => window.open(KB.wa(`Olá Leandro! Quanto é o condomínio dos imóveis${_ctx.lastBairro ? ' em ' + _ctx.lastBairro : ''}?`), '_blank') },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+
+            case 'REFORMA':
+                return {
+                    text: `🔨 **Estado dos imóveis:**\n\nCada anúncio do Leandro detalha o estado:\n\n• ✅ **Reformado** — pronto para morar\n• 🔧 **Semi-reformado** — pequenos ajustes\n• 🏗️ **Para reformar** — preço menor, potencial de valorização\n\n💡 Imóvel para reformar pode custar **20–30% menos** e valorizar muito após a reforma!\n\nO Leandro indica **arquitetos parceiros** quando necessário.`,
+                    opts: [
+                        { label: '📱 Consultar estado do imóvel', action: () => window.open(KB.wa('Olá Leandro! Quero saber o estado de conservação dos imóveis.'), '_blank') },
+                        { label: '🏠 Ver catálogo', action: () => { window.location.href = 'imoveis.html'; } },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+
+            case 'VIZINHANCA': {
+                const bRef = _ctx.lastBairro || 'Rio de Janeiro';
+                return {
+                    text: `🏘️ **Vizinhança e infraestrutura ${_ctx.lastBairro ? 'de ' + _ctx.lastBairro : 'no Rio'}:**\n\nO Leandro conhece cada rua! Ele avalia:\n\n• 🏫 Escolas e creches na região\n• 🏥 Hospitais e clínicas\n• 🛒 Supermercados e comércios\n• 🌳 Parques e áreas de lazer\n• 🚇 Transporte público\n• 🔒 Segurança do bairro\n\n💡 Na visita, ele mostra toda a infraestrutura ao redor!`,
+                    opts: [
+                        { label: '📱 Perguntar sobre a região', action: () => window.open(KB.wa(`Olá Leandro! Como é a vizinhança e infraestrutura ${_ctx.lastBairro ? 'em ' + _ctx.lastBairro : 'dos imóveis'}?`), '_blank') },
+                        ...(_ctx.lastBairroKey ? [{ label: `📍 Sobre ${_ctx.lastBairro}`, next: `flow_${_ctx.lastBairroKey}` }] : []),
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+            }
+
+            case 'COMPARAR_BAIRROS': {
+                const bairrosNoRio = [
+                    { key: 'ipanema', nome: 'Ipanema', perfil: 'Praia, vida noturna, alto padrão', preco: 'R$ 12–20k/m²' },
+                    { key: 'leblon', nome: 'Leblon', perfil: 'Familiar, seguro, mais caro do Brasil', preco: 'R$ 15–25k/m²' },
+                    { key: 'copacabana', nome: 'Copacabana', perfil: 'Turístico, Airbnb, acessível', preco: 'R$ 8–14k/m²' },
+                    { key: 'botafogo', nome: 'Botafogo', perfil: 'Em valorização, jovem, metrô', preco: 'R$ 8–13k/m²' },
+                    { key: 'barra', nome: 'Barra da Tijuca', perfil: 'Moderno, condomínios, família', preco: 'R$ 6–12k/m²' },
+                    { key: 'recreio', nome: 'Recreio', perfil: 'Tranquilo, natureza, custo-benefício', preco: 'R$ 5–9k/m²' },
+                ];
+                const table = bairrosNoRio.map(b => `• **${b.nome}:** ${b.perfil} · ${b.preco}`).join('\n');
+                return {
+                    text: `📊 **Comparação de bairros:**\n\n${table}\n\n💡 Cada bairro tem um perfil único! Me pergunta sobre qualquer um para detalhes.`,
+                    opts: [
+                        { label: '📍 Ver todos os bairros', next: 'flow_bairros' },
+                        { label: '📱 Ajuda do Leandro para escolher', action: () => window.open(KB.wa('Olá Leandro! Estou em dúvida entre bairros. Pode me ajudar a escolher?'), '_blank') },
+                        { label: '↩ Menu', next: 'inicio' },
+                    ],
+                };
+            }
+
             default:
                 return null;
         }
@@ -1362,6 +1574,80 @@
         flow_investimento: { msg: () => gerarResposta({ intent: 'INVESTIMENTO' })?.text   || '', opts: () => gerarResposta({ intent: 'INVESTIMENTO' })?.opts   || [] },
         flow_metro:        { msg: () => gerarResposta({ intent: 'METRO' })?.text          || '', opts: () => gerarResposta({ intent: 'METRO' })?.opts          || [] },
     };
+
+    // ═══════════════════════════════════════════════════════
+    //  SISTEMA DE CONTEXTO DE CONVERSA
+    //  Rastreia tópicos, bairros, tipos e preferências do
+    //  usuário para respostas contextuais inteligentes
+    // ═══════════════════════════════════════════════════════
+    const _ctx = {
+        lastIntent: null,
+        lastBairro: null,
+        lastBairroKey: null,
+        lastTipo: null,
+        lastPreco: null,
+        lastQuartos: null,
+        lastSuites: null,
+        lastSearchResults: [],
+        topicHistory: [],
+        userName: null,
+        stage: 'browsing', // browsing → interested → ready_to_buy
+        msgCount: 0,
+        interests: new Set(),
+        mentionedBairros: new Set(),
+    };
+
+    function _updateCtx(intentObj, resp) {
+        if (!intentObj) return;
+        _ctx.lastIntent = intentObj.intent;
+        _ctx.msgCount++;
+        if (intentObj.bairro) {
+            const canonical = typeof intentObj.bairro === 'string' ? intentObj.bairro : null;
+            if (canonical) {
+                // Resolve canonical bairro name
+                const bKey = Object.entries(KB.bairros).find(([, v]) => v.nome === canonical)?.[0];
+                _ctx.lastBairro = canonical;
+                _ctx.lastBairroKey = bKey || intentObj.bairro;
+                _ctx.mentionedBairros.add(canonical);
+            } else {
+                _ctx.lastBairroKey = intentObj.bairro;
+                const bData = KB.bairros[intentObj.bairro];
+                if (bData) {
+                    _ctx.lastBairro = bData.nome;
+                    _ctx.mentionedBairros.add(bData.nome);
+                }
+            }
+        }
+        if (intentObj.tipo) _ctx.lastTipo = intentObj.tipo;
+        if (intentObj.preco) _ctx.lastPreco = intentObj.preco;
+        if (intentObj.quartos) _ctx.lastQuartos = intentObj.quartos;
+        if (intentObj.suites) _ctx.lastSuites = intentObj.suites;
+        _ctx.topicHistory.push(intentObj.intent);
+        if (_ctx.topicHistory.length > 10) _ctx.topicHistory.shift();
+        // Track stage
+        const buySignals = ['COMO_COMPRAR','FINANCIAMENTO','FGTS','ENTRADA','DOCUMENTACAO','CONTATO_GERAL','CONTATO_TEL'];
+        const interestSignals = ['BUSCA_ESPECIFICA','INFO_BAIRRO','CATALOGO_GERAL','DESTAQUES','MAIS_BARATO','MAIS_CARO'];
+        if (buySignals.includes(intentObj.intent)) _ctx.stage = 'ready_to_buy';
+        else if (interestSignals.includes(intentObj.intent) && _ctx.stage === 'browsing') _ctx.stage = 'interested';
+        // Track interests
+        if (intentObj.intent.startsWith('INFO_BAIRRO')) _ctx.interests.add('bairros');
+        if (['INVESTIMENTO','AIRBNB','ALUGUEL','VALORIZACAO'].includes(intentObj.intent)) _ctx.interests.add('investimento');
+        if (['FINANCIAMENTO','FGTS','ENTRADA'].includes(intentObj.intent)) _ctx.interests.add('financiamento');
+    }
+
+    // Resolve contextual references like "esse bairro", "lá", "nessa região"
+    function _resolveContextual(rawText) {
+        const t = normFull(rawText);
+        // Pronomial references to last bairro
+        if (_ctx.lastBairro && matchAny(t, [
+            'la','esse bairro','nesse bairro','nessa regiao','dessa regiao',
+            'desse bairro','ali','no lugar','na regiao','na mesma regiao',
+            'mesmo local','mesmo bairro','esse lugar','nesse lugar',
+        ])) {
+            return _ctx.lastBairro;
+        }
+        return null;
+    }
 
     // ═══════════════════════════════════════════════════════
     //  ESTADO DO WIDGET
@@ -1706,7 +1992,7 @@
         setTimeout(() => goTo('inicio'), 200);
     }
 
-    // ── Tratamento de texto livre ──
+    // ── Tratamento de texto livre com contexto ──
     function handleText() {
         const inp = document.getElementById('lb-text-input');
         if (!inp) return;
@@ -1714,13 +2000,25 @@
         if (!text) return;
         inp.value = '';
         _msgCount++;
+        _ctx.msgCount++;
         addUserMsg(text);
 
         const intentObj = detectIntent(text);
 
-        // Saudação → menu
+        // Saudação → menu (com contexto)
         if (intentObj?.intent === 'SAUDACAO') {
             _log('chat_texto', { text: text.slice(0, 200), intentDetected: 'SAUDACAO', botResponse: 'flow:inicio' });
+            if (_ctx.msgCount > 3 && _ctx.lastBairro) {
+                // Return contextual greeting instead of full menu
+                const resp = gerarResposta(intentObj);
+                if (resp && resp.text) {
+                    showTypingThen(() => {
+                        addBotMsg(resp.text);
+                        if (resp.opts?.length) setTimeout(() => addOpts(resp.opts), 380);
+                    });
+                    return;
+                }
+            }
             showTypingThen(() => goTo('inicio'));
             return;
         }
@@ -1742,16 +2040,70 @@
             return;
         }
 
-        // Fallback — conectar com Leandro
+        // ── FALLBACK INTELIGENTE COM CONTEXTO ──
+        // Tenta re-interpretar usando contexto antes de desistir
+        const contextualFallback = _buildContextualFallback(text);
+        if (contextualFallback) {
+            _log('chat_texto', { text: text.slice(0, 200), intentDetected: 'ctx_fallback', botResponse: (contextualFallback.text || '').slice(0, 300) });
+            showTypingThen(() => {
+                addBotMsg(contextualFallback.text);
+                if (contextualFallback.opts?.length) setTimeout(() => addOpts(contextualFallback.opts), 380);
+            });
+            return;
+        }
+
+        // Fallback final — conectar com Leandro
         _log('chat_texto', { text: text.slice(0, 200), intentDetected: 'fallback', botResponse: 'whatsapp' });
+        const stageHint = _ctx.stage === 'ready_to_buy'
+            ? `\n\n📌 Percebi que você está pronto para dar o próximo passo! O Leandro é **a pessoa certa** para finalizar tudo.`
+            : '';
         showTypingThen(() => {
-            addBotMsg(`Boa pergunta! 🤔 O **${KB.nome}** é a pessoa certa para responder isso com precisão.\n\nPosso te conectar com ele agora — resposta em menos de 1h!`);
+            addBotMsg(`Boa pergunta${_ctx.userName ? ', ' + _ctx.userName : ''}! 🤔 O **${KB.nome}** é a pessoa certa para responder isso com precisão.${stageHint}\n\nPosso te conectar agora — resposta em menos de 1h!\n\n💡 **Dica:** tente perguntas como _"Tem 2 quartos em Ipanema?"_ ou _"Como funciona o financiamento?"_`);
             setTimeout(() => addOpts([
                 { label: '📱 Perguntar no WhatsApp', action: () => window.open(KB.wa(`Olá Leandro! Tenho uma dúvida: "${text.slice(0, 160)}". Pode me ajudar?`), '_blank') },
+                ...(_ctx.lastBairro ? [{ label: `📍 Voltar a ${_ctx.lastBairro}`, next: `flow_${_ctx.lastBairroKey || 'bairros'}` }] : []),
                 { label: '🏠 Ver imóveis disponíveis', next: 'flow_catalogo' },
                 { label: '↩ Menu principal',            next: 'inicio'        },
             ]), 400);
         });
+    }
+
+    // ── Fallback contextual: usa memória da conversa ──
+    function _buildContextualFallback(text) {
+        const t = normFull(text);
+
+        // Se falou sobre preço e tem bairro no contexto
+        if (_ctx.lastBairroKey && matchAny(t, ['preco','valor','custa','barato','caro','quanto','sai por'])) {
+            const resp = gerarResposta({ intent: 'INFO_BAIRRO', bairro: _ctx.lastBairroKey });
+            if (resp) return resp;
+        }
+
+        // Se está falando algo curto e tem contexto de busca
+        if (t.length < 20 && _ctx.lastBairro && matchAny(t, ['sim','quero','gostei','esse','gosto','por favor','manda'])) {
+            return {
+                text: `👍 Ótimo${_ctx.userName ? ', ' + _ctx.userName : ''}! Para avançar com imóveis${_ctx.lastBairro ? ' em **' + _ctx.lastBairro + '**' : ''}, fale diretamente com o **${KB.nome}**:`,
+                opts: [
+                    { label: '📱 WhatsApp agora', action: () => window.open(KB.wa(`Olá Leandro! Tenho interesse em imóveis${_ctx.lastBairro ? ' em ' + _ctx.lastBairro : ''}. Pode me ajudar?`), '_blank') },
+                    { label: '🏠 Ver no site', action: () => { window.location.href = 'imoveis.html'; } },
+                    { label: '↩ Menu', next: 'inicio' },
+                ],
+            };
+        }
+
+        // Last resort: suggest common questions based on stage
+        if (_ctx.stage === 'interested') {
+            return {
+                text: `🤔 Não consegui entender, mas posso te ajudar com:\n\n${_ctx.lastBairro ? `📍 Mais sobre **${_ctx.lastBairro}**\n` : ''}💰 Preços e financiamento\n🏠 Buscar imóveis específicos\n📱 Falar com o Leandro\n\nEscolha abaixo ou reformule sua pergunta:`,
+                opts: [
+                    ...(_ctx.lastBairroKey ? [{ label: `📍 ${_ctx.lastBairro}`, next: `flow_${_ctx.lastBairroKey}` }] : []),
+                    { label: '💳 Financiamento', next: 'flow_financiamento' },
+                    { label: '🏠 Catálogo', next: 'flow_catalogo' },
+                    { label: '📱 WhatsApp', action: () => window.open(KB.whatsapp, '_blank') },
+                ],
+            };
+        }
+
+        return null;
     }
 
     // ── Navegar para um nó ──
@@ -1824,6 +2176,22 @@
         if (!opts || !opts.length) return;
         const msgs = document.getElementById('lb-messages');
         if (!msgs) return;
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;animation:lb-msgIn .25s ease both;align-self:flex-start;max-width:93%;';
+        opts.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.style.cssText = 'background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.25);border-radius:99px;padding:6px 14px;color:#93c5fd;font-size:.76rem;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:inherit;';
+            btn.textContent = opt.label;
+            btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(52,152,219,.25)'; btn.style.borderColor = 'rgba(52,152,219,.5)'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(52,152,219,.1)'; btn.style.borderColor = 'rgba(52,152,219,.25)'; });
+            btn.addEventListener('click', () => {
+                _log('chat_optClick', { label: opt.label, next: opt.next || '', hasAction: !!opt.action });
+                if (opt.action) { opt.action(); return; }
+                if (opt.next) goTo(opt.next);
+            });
+            wrap.appendChild(btn);
+        });
 
         msgs.appendChild(wrap);
         scrollBottom();
