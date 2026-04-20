@@ -3,13 +3,12 @@
 // ============================================================
 
 
-let auth, db, storage;
+let auth, db;
 function initFirebase() {
     try {
         if (typeof firebase === 'undefined' || !firebase.apps.length) { return false; }
         auth = firebase.auth();
         db = firebase.firestore();
-        storage = typeof firebase.storage === 'function' ? firebase.storage() : null;
         if (window._secureLog) window._secureLog('✅ Firebase admin pronto');
         return true;
     } catch (e) { return false; }
@@ -18,7 +17,48 @@ function initFirebase() {
 let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], deleteId = null;
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas
 const SESSION_KEY = '_lb_session_start';
+/** Mesmo UID autorizado nas regras Firebase (gestor / CEO) */
+const CEO_UID = 'IFOjzjZ77iSShCZTemhwCza1uc53';
+const CEO_SEC_SESSION_KEY = '_lb_ceo_security_unlock_v1';
 let sessionTimer = null;
+
+function isCeoUser() {
+    return !!(currentUser && currentUser.uid === CEO_UID);
+}
+
+function escHtml(str) {
+    if (str == null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function applyRoleNavVisibility() {
+    document.querySelectorAll('.nav-item[data-section="seguranca"]').forEach(el => {
+        el.style.display = isCeoUser() ? '' : 'none';
+    });
+}
+
+function openCeoSecurityGateIfNeeded() {
+    return new Promise(resolve => {
+        if (!isCeoUser()) { resolve(false); return; }
+        if (sessionStorage.getItem(CEO_SEC_SESSION_KEY) === '1') { resolve(true); return; }
+        const pw = window.prompt('Confirme a senha da conta Firebase (gestor) para abrir Segurança & IP:');
+        if (pw == null || pw === '') { resolve(false); return; }
+        if (!auth || !currentUser || !currentUser.email) { resolve(false); return; }
+        const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, pw);
+        currentUser.reauthenticateWithCredential(cred).then(() => {
+            sessionStorage.setItem(CEO_SEC_SESSION_KEY, '1');
+            showToast('Área de segurança desbloqueada neste navegador.', 'success');
+            resolve(true);
+        }).catch(() => {
+            showToast('Senha incorreta ou conta não usa e-mail/senha.', 'error');
+            resolve(false);
+        });
+    });
+}
 
 // ========== AUTENTICAÇÃO ==========
 function setupAuthListener() {
@@ -28,7 +68,7 @@ function setupAuthListener() {
             const sessionStart = localStorage.getItem(SESSION_KEY);
             const now = Date.now();
             if (sessionStart && (now - parseInt(sessionStart)) > SESSION_DURATION_MS) {
-                
+
                 localStorage.removeItem(SESSION_KEY);
                 auth.signOut();
                 return;
@@ -44,7 +84,7 @@ function setupAuthListener() {
                 if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
                     Notification.requestPermission().then(p => {
                         if (p === 'granted') showToast('🔔 Notificações push ativadas!', 'success');
-                    }).catch(()=>{});
+                    }).catch(() => { });
                 }
             }, 3000);
 
@@ -64,31 +104,32 @@ async function coletarInfoDispositivo() {
     const ua = navigator.userAgent || '';
     const info = {
         ua,
-        browser:        detectBrowser(ua),
-        browserVer:     detectBrowserVersion(ua),
-        os:             detectOS(ua),
-        device:         detectDevice(ua),
-        language:       navigator.language || '—',
-        languages:      (navigator.languages || []).join(', ') || '—',
-        screenW:        screen.width,
-        screenH:        screen.height,
-        screenDepth:    screen.colorDepth ? screen.colorDepth + ' bits' : '—',
-        viewport:       window.innerWidth + '×' + window.innerHeight,
-        timezone:       Intl.DateTimeFormat().resolvedOptions().timeZone || '—',
+        browser: detectBrowser(ua),
+        browserVer: detectBrowserVersion(ua),
+        os: detectOS(ua),
+        device: detectDevice(ua),
+        language: navigator.language || '—',
+        languages: (navigator.languages || []).join(', ') || '—',
+        screenW: screen.width,
+        screenH: screen.height,
+        screenDepth: screen.colorDepth ? screen.colorDepth + ' bits' : '—',
+        viewport: window.innerWidth + '×' + window.innerHeight,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '—',
         timezoneOffset: new Date().getTimezoneOffset() + ' min',
-        platform:       navigator.platform || '—',
+        platform: navigator.platform || '—',
         cookiesEnabled: navigator.cookieEnabled,
-        onLine:         navigator.onLine,
-        cores:          navigator.hardwareConcurrency || '—',
-        ram:            navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '—',
-        touchPoints:    navigator.maxTouchPoints || 0,
-        doNotTrack:     navigator.doNotTrack === '1' ? 'Ativado' : 'Desativado',
+        onLine: navigator.onLine,
+        cores: navigator.hardwareConcurrency || '—',
+        ram: navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '—',
+        touchPoints: navigator.maxTouchPoints || 0,
+        doNotTrack: navigator.doNotTrack === '1' ? 'Ativado' : 'Desativado',
         connectionType: '—',
-        connectionSpeed:'—',
-        ip:             '—',
+        connectionSpeed: '—',
+        ip: '—',
         cidade: '—', regiao: '—', pais: '—', paisCode: '—',
-        isp:    '—', asn: '—', org: '—',
+        isp: '—', asn: '—', org: '—',
         isVPN: '—', isProxy: '—', isMobile: '—', isHosting: '—',
+        vpnSummary: '—',
         lat: '—', lon: '—', cep: '—',
         riskScore: 0,
         mac: 'Indisponível — bloqueado pelo navegador por segurança',
@@ -98,17 +139,17 @@ async function coletarInfoDispositivo() {
     try {
         const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
         if (conn) {
-            info.connectionType  = conn.effectiveType || conn.type || '—';
+            info.connectionType = conn.effectiveType || conn.type || '—';
             info.connectionSpeed = conn.downlink ? conn.downlink + ' Mbps' : '—';
         }
-    } catch(_) {}
+    } catch (_) { }
 
     // IP via ipify
     try {
         const r = await fetch('https://api.ipify.org?format=json');
         const d = await r.json();
         info.ip = d.ip || '—';
-    } catch(_) { info.ip = '—'; }
+    } catch (_) { info.ip = '—'; }
 
     // Geolocalização + ISP + ASN + VPN/Proxy via ip-api.com
     if (info.ip !== '—') {
@@ -117,41 +158,44 @@ async function coletarInfoDispositivo() {
             const r2 = await fetch('https://ip-api.com/json/' + info.ip + '?fields=' + fields);
             const d2 = await r2.json();
             if (d2.status === 'success') {
-                info.cidade    = d2.city        || '—';
-                info.regiao    = d2.regionName  || d2.region || '—';
-                info.pais      = d2.country     || '—';
-                info.paisCode  = d2.countryCode || '—';
-                info.isp       = d2.isp         || '—';
-                info.asn       = d2.as          || '—';
-                info.org       = d2.org         || '—';
-                info.lat       = d2.lat         || '—';
-                info.lon       = d2.lon         || '—';
-                info.cep       = d2.zip         || '—';
-                info.isMobile  = d2.mobile  ? '⚠️ Rede móvel'       : '✅ Não';
-                info.isProxy   = d2.proxy   ? '🔴 SIM'              : '✅ Não detectado';
+                info.cidade = d2.city || '—';
+                info.regiao = d2.regionName || d2.region || '—';
+                info.pais = d2.country || '—';
+                info.paisCode = d2.countryCode || '—';
+                info.isp = d2.isp || '—';
+                info.asn = d2.as || '—';
+                info.org = d2.org || '—';
+                info.lat = d2.lat || '—';
+                info.lon = d2.lon || '—';
+                info.cep = d2.zip || '—';
+                info.isMobile = d2.mobile ? '⚠️ Rede móvel' : '✅ Não';
+                info.isProxy = d2.proxy ? '🔴 SIM' : '✅ Não detectado';
                 info.isHosting = d2.hosting ? '⚠️ SIM (data center)' : '✅ Não';
-                info.isVPN     = d2.proxy   ? '🔴 Possível VPN/Proxy': '✅ Não detectado';
+                info.isVPN = d2.proxy ? '🔴 Possível VPN/Proxy' : '✅ Não detectado';
+                info.vpnSummary = (!d2.proxy && !d2.hosting)
+                    ? '✅ Sem proxy/hosting (ip-api)'
+                    : [d2.proxy ? '🔴 Proxy/VPN' : null, d2.hosting ? '⚠️ Datacenter / hosting' : null].filter(Boolean).join(' · ');
                 // Score de risco automático
                 let risk = 0;
-                if (d2.proxy)   risk += 50;
+                if (d2.proxy) risk += 50;
                 if (d2.hosting) risk += 25;
-                if (d2.mobile)  risk += 5;
+                if (d2.mobile) risk += 5;
                 info.riskScore = risk;
             }
-        } catch(_) {}
+        } catch (_) { }
         // Fallback ipapi.co
         if (info.isp === '—') {
             try {
                 const r3 = await fetch('https://ipapi.co/' + info.ip + '/json/');
                 const d3 = await r3.json();
                 if (!d3.error) {
-                    info.cidade = info.cidade !== '—' ? info.cidade : (d3.city         || '—');
-                    info.regiao = info.regiao !== '—' ? info.regiao : (d3.region        || '—');
-                    info.pais   = info.pais   !== '—' ? info.pais   : (d3.country_name  || '—');
-                    info.isp    = info.isp    !== '—' ? info.isp    : (d3.org           || '—');
-                    info.asn    = info.asn    !== '—' ? info.asn    : (d3.asn           || '—');
+                    info.cidade = info.cidade !== '—' ? info.cidade : (d3.city || '—');
+                    info.regiao = info.regiao !== '—' ? info.regiao : (d3.region || '—');
+                    info.pais = info.pais !== '—' ? info.pais : (d3.country_name || '—');
+                    info.isp = info.isp !== '—' ? info.isp : (d3.org || '—');
+                    info.asn = info.asn !== '—' ? info.asn : (d3.asn || '—');
                 }
-            } catch(_) {}
+            } catch (_) { }
         }
     }
     return info;
@@ -159,29 +203,29 @@ async function coletarInfoDispositivo() {
 
 function detectBrowser(ua) {
     if (!ua) return 'Desconhecido';
-    if (/Edg\//i.test(ua))                          return 'Microsoft Edge';
-    if (/OPR\//i.test(ua) || /Opera\//i.test(ua))   return 'Opera';
-    if (/YaBrowser\//i.test(ua))                    return 'Yandex Browser';
-    if (/SamsungBrowser\//i.test(ua))               return 'Samsung Internet';
-    if (/UCBrowser\//i.test(ua))                    return 'UC Browser';
-    if (/Brave\//i.test(ua))                        return 'Brave';
-    if (/Vivaldi\//i.test(ua))                      return 'Vivaldi';
-    if (/Chrome\/[0-9]/i.test(ua))                  return 'Google Chrome';
-    if (/Firefox\/[0-9]/i.test(ua))                 return 'Mozilla Firefox';
+    if (/Edg\//i.test(ua)) return 'Microsoft Edge';
+    if (/OPR\//i.test(ua) || /Opera\//i.test(ua)) return 'Opera';
+    if (/YaBrowser\//i.test(ua)) return 'Yandex Browser';
+    if (/SamsungBrowser\//i.test(ua)) return 'Samsung Internet';
+    if (/UCBrowser\//i.test(ua)) return 'UC Browser';
+    if (/Brave\//i.test(ua)) return 'Brave';
+    if (/Vivaldi\//i.test(ua)) return 'Vivaldi';
+    if (/Chrome\/[0-9]/i.test(ua)) return 'Google Chrome';
+    if (/Firefox\/[0-9]/i.test(ua)) return 'Mozilla Firefox';
     if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) return 'Apple Safari';
-    if (/MSIE|Trident\//i.test(ua))                 return 'Internet Explorer';
+    if (/MSIE|Trident\//i.test(ua)) return 'Internet Explorer';
     return 'Outro';
 }
 
 function detectBrowserVersion(ua) {
     if (!ua) return '';
     let m;
-    if ((m = ua.match(/Edg\/([0-9.]+)/i)))          return 'v' + m[1].split('.')[0];
-    if ((m = ua.match(/OPR\/([0-9.]+)/i)))           return 'v' + m[1].split('.')[0];
-    if ((m = ua.match(/SamsungBrowser\/([0-9.]+)/i)))return 'v' + m[1].split('.')[0];
-    if ((m = ua.match(/Chrome\/([0-9.]+)/i)))        return 'v' + m[1].split('.')[0];
-    if ((m = ua.match(/Firefox\/([0-9.]+)/i)))       return 'v' + m[1].split('.')[0];
-    if ((m = ua.match(/Version\/([0-9.]+).*Safari/i)))return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Edg\/([0-9.]+)/i))) return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/OPR\/([0-9.]+)/i))) return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/SamsungBrowser\/([0-9.]+)/i))) return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Chrome\/([0-9.]+)/i))) return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Firefox\/([0-9.]+)/i))) return 'v' + m[1].split('.')[0];
+    if ((m = ua.match(/Version\/([0-9.]+).*Safari/i))) return 'v' + m[1].split('.')[0];
     return '';
 }
 
@@ -226,8 +270,8 @@ async function registrarLoginHistorico(user) {
             status: 'ativo',
             ...info,
         });
-        
-    } catch(e) {  }
+
+    } catch (e) { }
 }
 
 // Marca sessão como encerrada no Firestore ao fazer logout
@@ -242,7 +286,7 @@ async function encerrarSessaoHistorico() {
             logoutAt: firebase.firestore.FieldValue.serverTimestamp(),
             logoutAtStr: new Date().toLocaleString('pt-BR'),
         });
-    } catch(_) {}
+    } catch (_) { }
 }
 
 function startSessionTimer() {
@@ -271,9 +315,9 @@ function clearSessionTimer() { if (sessionTimer) { clearTimeout(sessionTimer); s
 
 // ── Rate limit local: bloqueia após 5 falhas por 60s ──
 const _LOGIN_ATTEMPTS_KEY = '_lb_login_attempts';
-const _LOGIN_BLOCK_KEY    = '_lb_login_block';
+const _LOGIN_BLOCK_KEY = '_lb_login_block';
 const _LOGIN_MAX_ATTEMPTS = 5;
-const _LOGIN_BLOCK_MS     = 60 * 1000; // 60 segundos
+const _LOGIN_BLOCK_MS = 60 * 1000; // 60 segundos
 
 // Usa localStorage para que o bloqueio persista mesmo ao fechar e reabrir a aba
 function _getLoginAttempts() { return parseInt(localStorage.getItem(_LOGIN_ATTEMPTS_KEY) || '0'); }
@@ -333,11 +377,11 @@ function setupLoginForm() {
             const attempts = _getLoginAttempts();
             if (attempts >= _LOGIN_MAX_ATTEMPTS) {
                 _blockLogin();
-                errorDiv.textContent = `Conta bloqueada por ${_LOGIN_BLOCK_MS/1000}s por segurança.`;
+                errorDiv.textContent = `Conta bloqueada por ${_LOGIN_BLOCK_MS / 1000}s por segurança.`;
             } else {
-                const msgs = { 'auth/invalid-credential':'Email ou senha incorretos.', 'auth/user-not-found':'Usuário não encontrado.', 'auth/wrong-password':'Senha incorreta.', 'auth/invalid-email':'Email inválido.', 'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.' };
+                const msgs = { 'auth/invalid-credential': 'Email ou senha incorretos.', 'auth/user-not-found': 'Usuário não encontrado.', 'auth/wrong-password': 'Senha incorreta.', 'auth/invalid-email': 'Email inválido.', 'auth/too-many-requests': 'Muitas tentativas. Tente mais tarde.' };
                 const remaining = _LOGIN_MAX_ATTEMPTS - attempts;
-                errorDiv.textContent = (msgs[err.code] || 'Erro ao entrar.') + (remaining <= 2 ? ` (${remaining} tentativa${remaining>1?'s':''} restante${remaining>1?'s':''})` : '');
+                errorDiv.textContent = (msgs[err.code] || 'Erro ao entrar.') + (remaining <= 2 ? ` (${remaining} tentativa${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''})` : '');
             }
             btn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>Entrar</span>'; btn.disabled = false;
         }
@@ -364,6 +408,7 @@ function showLoginScreen() { document.getElementById('login-screen').style.displ
 function showAdminPanel() {
     document.getElementById('login-screen').style.display = 'none'; document.getElementById('admin-panel').style.display = 'flex';
     const el = document.getElementById('user-email'); if (el && currentUser) el.textContent = currentUser.email;
+    applyRoleNavVisibility();
 }
 
 function showSection(name) {
@@ -371,7 +416,7 @@ function showSection(name) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const section = document.getElementById('section-' + name); if (section) section.classList.add('active');
     const nav = document.querySelector('.nav-item[data-section="' + name + '"]'); if (nav) nav.classList.add('active');
-    const titles = { dashboard:'Dashboard', imoveis:'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira:'Lixeira', analytics:'Analytics', visitas:'Relatório de Visitas', configuracoes:'Configurações', seguranca:'Segurança & Logins', site:'Configurações do Site', saude:'Saúde do Sistema', perfil:'Perfil de Visitante', 'chat-logs':'Logs do Assistente Virtual', banner:'Banner Promocional' };
+    const titles = { dashboard: 'Dashboard', imoveis: 'Gerenciar Imóveis', adicionar: document.getElementById('imovel-id')?.value ? 'Editar Imóvel' : 'Adicionar Imóvel', lixeira: 'Lixeira', analytics: 'Analytics', visitas: 'Relatório de Visitas', configuracoes: 'Configurações', seguranca: 'Segurança & Logins', site: 'Configurações do Site', saude: 'Saúde do Sistema', perfil: 'Perfil de Visitante', 'chat-logs': 'Logs do Assistente Virtual', banner: 'Banner Promocional' };
     document.getElementById('page-title').textContent = titles[name] || 'Painel';
     if (name === 'dashboard') loadDashboard();
     else if (name === 'imoveis') { renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); }
@@ -383,9 +428,27 @@ function showSection(name) {
     else if (name === 'saude') loadSaudeSistema();
     else if (name === 'perfil') loadPerfilVisitante();
     else if (name === 'configuracoes') loadConfiguracoes();
+    else if (name === 'crm') carregarLeads();
     else if (name === 'chat-logs') { loadChatLogs(); return; }
     else if (name === 'banner') { loadBannerConfig(); return; }
-    else if (name === 'seguranca') { loadSeguranca().then(() => carregarIPSessaoAtual()); return; }
+    else if (name === 'seguranca') {
+        if (!isCeoUser()) {
+            showToast('Área exclusiva do gestor (CEO).', 'error');
+            showSection('dashboard');
+            return;
+        }
+        openCeoSecurityGateIfNeeded().then(ok => {
+            if (!ok) {
+                showSection('dashboard');
+                return;
+            }
+            loadSeguranca().then(() => {
+                carregarIPSessaoAtual();
+                appendCeoVpnMonitorSection();
+            });
+        });
+        return;
+    }
     else stopSessaoCountdown();
 }
 
@@ -407,11 +470,11 @@ function setupNavigation() {
 
 // ========== DASHBOARD ==========
 const STATIC_IMOVEIS_SEED = [
-    { bairro:'Ipanema', quartos:2, preco:850000, area:80, titulo:'Apartamento Moderno em Ipanema', descricao:'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.', imagem:'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg', fotos:['https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg','https://files.catbox.moe/ihe3p5.png','https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/0tg1le.png'] },
-    { bairro:'Barra da Tijuca', quartos:3, preco:1200000, area:140, titulo:'Cobertura na Barra da Tijuca', descricao:'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.', imagem:'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg', fotos:['https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg','https://files.catbox.moe/o4xhj9.png','https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/ihe3p5.png'] },
-    { bairro:'Recreio dos Bandeirantes', quartos:2, preco:520000, area:70, titulo:'Apartamento Moderno no Recreio', descricao:'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.', imagem:'https://files.catbox.moe/ihe3p5.png', fotos:['https://files.catbox.moe/ihe3p5.png','https://files.catbox.moe/0tg1le.png'] },
-    { bairro:'Leblon', quartos:3, preco:1500000, area:110, titulo:'Apartamento de Luxo no Leblon', descricao:'Sofisticado apartamento de 3 quartos no bairro mais valorizado do Rio.', imagem:'https://files.catbox.moe/ta8pp6.png', fotos:['https://files.catbox.moe/ta8pp6.png','https://files.catbox.moe/ihe3p5.png'] },
-    { bairro:'Copacabana', quartos:1, preco:420000, area:45, titulo:'Studio em Copacabana', descricao:'Studio moderno e bem localizado em Copacabana, ideal para investimento.', imagem:'https://files.catbox.moe/0tg1le.png', fotos:['https://files.catbox.moe/0tg1le.png'] }
+    { bairro: 'Ipanema', quartos: 2, preco: 850000, area: 80, titulo: 'Apartamento Moderno em Ipanema', descricao: 'Lindo apartamento com 2 quartos a poucos passos da praia. Totalmente reformado com acabamentos de alto padrão.', imagem: 'https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg', fotos: ['https://remax.azureedge.net/userimages/60/LargeWM/L_b74eaab9-55e3-43c2-8814-06f6152a1f05.jpg', 'https://files.catbox.moe/ihe3p5.png', 'https://files.catbox.moe/ta8pp6.png', 'https://files.catbox.moe/0tg1le.png'] },
+    { bairro: 'Barra da Tijuca', quartos: 3, preco: 1200000, area: 140, titulo: 'Cobertura na Barra da Tijuca', descricao: 'Cobertura ampla com 3 quartos, piscina privativa e acabamentos de altíssimo padrão com vista deslumbrante.', imagem: 'https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg', fotos: ['https://imovio.com.br/wp-content/uploads/2023/02/3478296843.jpg', 'https://files.catbox.moe/o4xhj9.png', 'https://files.catbox.moe/ta8pp6.png', 'https://files.catbox.moe/ihe3p5.png'] },
+    { bairro: 'Recreio dos Bandeirantes', quartos: 2, preco: 520000, area: 70, titulo: 'Apartamento Moderno no Recreio', descricao: 'Apartamento compacto e moderno no Recreio, próximo à praia e comércios locais.', imagem: 'https://files.catbox.moe/ihe3p5.png', fotos: ['https://files.catbox.moe/ihe3p5.png', 'https://files.catbox.moe/0tg1le.png'] },
+    { bairro: 'Leblon', quartos: 3, preco: 1500000, area: 110, titulo: 'Apartamento de Luxo no Leblon', descricao: 'Sofisticado apartamento de 3 quartos no bairro mais valorizado do Rio.', imagem: 'https://files.catbox.moe/ta8pp6.png', fotos: ['https://files.catbox.moe/ta8pp6.png', 'https://files.catbox.moe/ihe3p5.png'] },
+    { bairro: 'Copacabana', quartos: 1, preco: 420000, area: 45, titulo: 'Studio em Copacabana', descricao: 'Studio moderno e bem localizado em Copacabana, ideal para investimento.', imagem: 'https://files.catbox.moe/0tg1le.png', fotos: ['https://files.catbox.moe/0tg1le.png'] }
 ];
 
 async function seedStaticImoveis() {
@@ -423,9 +486,9 @@ async function seedStaticImoveis() {
             batch.set(ref, { ...im, createdAt: ts, updatedAt: ts });
         });
         await batch.commit();
-        
+
         showToast('✅ Imóveis de exemplo importados para o banco de dados!');
-    } catch(e) {
+    } catch (e) {
         console.error('Erro ao fazer seed:', e);
     }
 }
@@ -447,13 +510,13 @@ async function loadDashboard() {
                 const snap2 = await db.collection('imoveis').get();
                 imoveisData = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
             }
-        } catch(e) {}
+        } catch (e) { }
         const total = imoveisData.length;
         const bairros = [...new Set(imoveisData.map(i => i.bairro))];
-        const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s,i) => s+(parseInt(i.quartos)||0),0)/total) : 0;
-        const precoMedio = total > 0 ? Math.round(imoveisData.reduce((s,i) => s+(parseFloat(i.preco)||0),0)/total) : 0;
+        const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s, i) => s + (parseInt(i.quartos) || 0), 0) / total) : 0;
+        const precoMedio = total > 0 ? Math.round(imoveisData.reduce((s, i) => s + (parseFloat(i.preco) || 0), 0) / total) : 0;
         setEl('total-imoveis', total); setEl('total-bairros', bairros.length);
-        setEl('media-quartos', mediaQ); setEl('preco-medio', 'R$ '+precoMedio.toLocaleString('pt-BR'));
+        setEl('media-quartos', mediaQ); setEl('preco-medio', 'R$ ' + precoMedio.toLocaleString('pt-BR'));
         setEl('badge-imoveis', total);
         syncMobileBadges();
         loadDashboardVisitas();
@@ -465,7 +528,7 @@ async function loadDashboard() {
         if (badgeEl) { badgeEl.textContent = lCount > 0 ? lCount : ''; badgeEl.style.display = lCount > 0 ? '' : 'none'; }
         // Verifica logins suspeitos para o badge de segurança
         try {
-            const secSnap = await db.collection('login_historico').where('status','==','suspeito').get();
+            const secSnap = await db.collection('login_historico').where('status', '==', 'suspeito').get();
             const secBadge = document.getElementById('badge-seguranca');
             if (secBadge) { secBadge.style.display = secSnap.size > 0 ? '' : 'none'; secBadge.textContent = secSnap.size > 0 ? secSnap.size : '!'; }
             const banner = document.getElementById('security-alert-banner');
@@ -473,17 +536,23 @@ async function loadDashboard() {
             if (banner) banner.style.display = secSnap.size > 0 ? 'flex' : 'none';
             if (bannerMsg && secSnap.size > 0) bannerMsg.textContent = `${secSnap.size} login(s) marcado(s) como suspeito. Revise agora.`;
             if (secSnap.size > 0) showNotification('⚠️ Alerta de segurança', secSnap.size + ' login(s) marcado(s) como suspeito', 'red');
-        } catch(_) {}
+        } catch (_) { }
+
+        // Inicia escuta silenciosa dos Leads para o Badge
+        if (typeof carregarLeads === 'function') {
+            carregarLeads(); // mantem a UI do badge atualizada
+        }
+
     } catch (e) { console.error(e); }
 }
 
 async function loadDashboardVisitas() {
     try {
-        const hoje = new Date().toISOString().slice(0,10);
+        const hoje = new Date().toISOString().slice(0, 10);
         const [visitasSnap, imoveisViewsSnap, copiadosSnap] = await Promise.all([
             db.collection('visitas').get(),
             db.collection('visitas_imoveis').get(),
-            db.collection('links_copiados').where('date','==',hoje).get(),
+            db.collection('links_copiados').where('date', '==', hoje).get(),
         ]);
 
         // Total de registros de visita (todas as páginas, todos os dias)
@@ -503,10 +572,10 @@ async function loadDashboardVisitas() {
                 counts[v.imovelId].count++;
             }
         });
-        const top = Object.values(counts).sort((a,b) => b.count - a.count)[0];
+        const top = Object.values(counts).sort((a, b) => b.count - a.count)[0];
         const elTop = document.getElementById('dash-imovel-top');
         if (elTop) elTop.innerHTML = top
-            ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count>1?'s':''} hoje</span>`
+            ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count > 1 ? 's' : ''} hoje</span>`
             : `<strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>`;
 
         // Links copiados hoje
@@ -626,7 +695,7 @@ async function loadSaudeSistema() {
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
                 <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
                     <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Conexão</div>
-                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.ok?'var(--green)':'var(--red)'};">${r.ok?'OK':'ERRO'}</div>
+                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.ok ? 'var(--green)' : 'var(--red)'};">${r.ok ? 'OK' : 'ERRO'}</div>
                     <div style="margin-top:.25rem;color:var(--text-secondary);font-size:.82rem;">${r.msg}</div>
                 </div>
                 <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
@@ -636,7 +705,7 @@ async function loadSaudeSistema() {
                 </div>
                 <div style="padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);">
                     <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Presença</div>
-                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.presencaOk?'var(--green)':'var(--red)'};">${r.presencaOk?'OK':'FALHOU'}</div>
+                    <div style="margin-top:.35rem;font-family:var(--font-display);font-weight:800;font-size:1.25rem;color:${r.presencaOk ? 'var(--green)' : 'var(--red)'};">${r.presencaOk ? 'OK' : 'FALHOU'}</div>
                     <div style="margin-top:.25rem;color:var(--text-secondary);font-size:.82rem;">Online agora depende de /presenca</div>
                 </div>
             </div>
@@ -662,13 +731,13 @@ async function loadSaudeSistema() {
         c2.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:.7rem;">
                 ${rows.map(e => {
-                    const ed = e.eventData || {};
-                    const msg = (ed.message || '').toString();
-                    const kind = (ed.kind || 'error').toString();
-                    const src = (ed.source || '').toString();
-                    const path = (ed.path || '').toString();
-                    const when = _fmtTs(e.timestamp);
-                    return `
+            const ed = e.eventData || {};
+            const msg = (ed.message || '').toString();
+            const kind = (ed.kind || 'error').toString();
+            const src = (ed.source || '').toString();
+            const path = (ed.path || '').toString();
+            const when = _fmtTs(e.timestamp);
+            return `
                         <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elevated);padding:.9rem 1rem;">
                             <div style="display:flex;gap:.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap;">
                                 <div style="display:flex;gap:.5rem;align-items:center;min-width:0;">
@@ -681,10 +750,10 @@ async function loadSaudeSistema() {
                                 ${path ? `<span><i class="fas fa-link" style="opacity:.6;"></i> ${path}</span>` : ''}
                                 ${src ? `<span><i class="fas fa-file-alt" style="opacity:.6;"></i> ${src}</span>` : ''}
                             </div>
-                            ${ed.stack ? `<details style="margin-top:.55rem;"><summary style="cursor:pointer;color:var(--text-secondary);font-size:.78rem;">Stack</summary><pre style="white-space:pre-wrap;color:var(--text-muted);font-size:.75rem;margin-top:.5rem;">${String(ed.stack).replace(/</g,'&lt;')}</pre></details>` : ''}
+                            ${ed.stack ? `<details style="margin-top:.55rem;"><summary style="cursor:pointer;color:var(--text-secondary);font-size:.78rem;">Stack</summary><pre style="white-space:pre-wrap;color:var(--text-muted);font-size:.75rem;margin-top:.5rem;">${String(ed.stack).replace(/</g, '&lt;')}</pre></details>` : ''}
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
             </div>
         `;
     } catch (e) {
@@ -694,14 +763,14 @@ async function loadSaudeSistema() {
 
 function renderBairrosChart(containerId) {
     const el = document.getElementById(containerId); if (!el) return;
-    const counts = {}; imoveisData.forEach(i => counts[i.bairro] = (counts[i.bairro]||0)+1);
-    const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]); const max = sorted[0]?.[1]||1;
-    el.innerHTML = sorted.map(([b,n]) => `<div class="chart-bar"><span class="chart-label">${b}</span><div class="chart-track"><div class="chart-fill" style="width:${(n/max)*100}%"></div></div><span class="chart-value">${n}</span></div>`).join('') || '<p class="empty-message">Nenhum imóvel cadastrado</p>';
+    const counts = {}; imoveisData.forEach(i => counts[i.bairro] = (counts[i.bairro] || 0) + 1);
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]); const max = sorted[0]?.[1] || 1;
+    el.innerHTML = sorted.map(([b, n]) => `<div class="chart-bar"><span class="chart-label">${b}</span><div class="chart-track"><div class="chart-fill" style="width:${(n / max) * 100}%"></div></div><span class="chart-value">${n}</span></div>`).join('') || '<p class="empty-message">Nenhum imóvel cadastrado</p>';
 }
 
 function renderRecentList(containerId, limit) {
     const el = document.getElementById(containerId); if (!el) return;
-    const recent = [...imoveisData].sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,limit);
+    const recent = [...imoveisData].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, limit);
     if (!recent.length) { el.innerHTML = '<p class="empty-message">Nenhum imóvel cadastrado</p>'; return; }
     el.innerHTML = recent.map(i => `<div class="recent-item"><img src="${i.imagem}" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"><div class="recent-info"><strong>${i.titulo}</strong><span>${i.bairro} · ${i.quartos} qts</span></div><span class="recent-price">R$ ${Number(i.preco).toLocaleString('pt-BR')}</span></div>`).join('');
 }
@@ -714,10 +783,10 @@ async function loadImoveisTable() {
         if (_realtimeActive && imoveisData.length > 0) {
             renderImoveisTable(imoveisData); updateBairroFilter(imoveisData); return;
         }
-        const snap = await db.collection('imoveis').orderBy('createdAt','desc').get();
+        const snap = await db.collection('imoveis').orderBy('createdAt', 'desc').get();
         imoveisData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderImoveisTable(imoveisData); updateBairroFilter(imoveisData);
-    } catch (e) { showToast('Erro ao carregar imóveis','error'); }
+    } catch (e) { showToast('Erro ao carregar imóveis', 'error'); }
 }
 
 function renderImoveisTable(list) {
@@ -725,15 +794,15 @@ function renderImoveisTable(list) {
     if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Nenhum imóvel encontrado</td></tr>'; return; }
     tbody.innerHTML = list.map(i => {
         const isDestaque = i.destaque === true;
-        return `<tr style="${isDestaque?'background:rgba(245,158,11,0.04);border-left:2px solid var(--amber);':''}">
+        return `<tr style="${isDestaque ? 'background:rgba(245,158,11,0.04);border-left:2px solid var(--amber);' : ''}">
             <td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td>
-            <td style="color:var(--text-primary);font-weight:500;">${i.titulo}${isDestaque?' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>':''}</td>
+            <td style="color:var(--text-primary);font-weight:500;">${i.titulo}${isDestaque ? ' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>' : ''}</td>
             <td>${i.bairro}</td><td>${i.quartos} qts</td><td>${i.area} m²</td>
-            <td><span class="status-badge status-${i.status||'disponivel'}">${({disponivel:'Disponível',vendido:'Vendido',reservado:'Reservado',alugado:'Alugado'})[i.status||'disponivel']||'Disponível'}</span></td>
+            <td><span class="status-badge status-${i.status || 'disponivel'}">${({ disponivel: 'Disponível', vendido: 'Vendido', reservado: 'Reservado', alugado: 'Alugado' })[i.status || 'disponivel'] || 'Disponível'}</span></td>
             <td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td>
             <td>
                 <div class="table-actions">
-                    <button onclick="toggleDestaque('${i.id}',${isDestaque})" class="btn-edit" title="${isDestaque?'Remover destaque':'Marcar como destaque'}" style="${isDestaque?'color:var(--amber);border-color:var(--amber);':''}">
+                    <button onclick="toggleDestaque('${i.id}',${isDestaque})" class="btn-edit" title="${isDestaque ? 'Remover destaque' : 'Marcar como destaque'}" style="${isDestaque ? 'color:var(--amber);border-color:var(--amber);' : ''}">
                         <i class="fas fa-star"></i>
                     </button>
                     <button onclick="editImovel('${i.id}')" class="btn-edit" title="Editar"><i class="fas fa-pen"></i></button>
@@ -748,7 +817,7 @@ async function toggleDestaque(id, isDestaque) {
     try {
         if (!isDestaque) {
             // Remove destaque de qualquer outro imóvel
-            const snap = await db.collection('imoveis').where('destaque','==',true).get();
+            const snap = await db.collection('imoveis').where('destaque', '==', true).get();
             const batch = db.batch();
             snap.docs.forEach(d => batch.update(d.ref, { destaque: false }));
             batch.update(db.collection('imoveis').doc(id), { destaque: true });
@@ -759,7 +828,7 @@ async function toggleDestaque(id, isDestaque) {
             showToast('Destaque removido.');
         }
         loadImoveisTable();
-    } catch(e) { showToast('Erro ao alterar destaque','error'); }
+    } catch (e) { showToast('Erro ao alterar destaque', 'error'); }
 }
 
 function updateBairroFilter(list) {
@@ -773,12 +842,12 @@ async function moveToLixeira(id) {
     if (!db) return;
     try {
         const doc = await db.collection('imoveis').doc(id).get();
-        if (!doc.exists) { showToast('Imóvel não encontrado','error'); return; }
+        if (!doc.exists) { showToast('Imóvel não encontrado', 'error'); return; }
         const data = doc.data(); data.deletedAt = firebase.firestore.FieldValue.serverTimestamp(); data.originalId = id;
         await db.collection('lixeira').doc(id).set(data);
         await db.collection('imoveis').doc(id).delete();
         showToast('Imóvel movido para a lixeira.');
-    } catch (e) { console.error(e); showToast('Erro ao mover para lixeira','error'); }
+    } catch (e) { console.error(e); showToast('Erro ao mover para lixeira', 'error'); }
 }
 
 async function loadLixeira() {
@@ -787,7 +856,7 @@ async function loadLixeira() {
         const snap = await db.collection('lixeira').get();
         lixeiraData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderLixeiraTable(lixeiraData);
-    } catch (e) { showToast('Erro ao carregar lixeira','error'); }
+    } catch (e) { showToast('Erro ao carregar lixeira', 'error'); }
 }
 
 function renderLixeiraTable(list) {
@@ -803,12 +872,12 @@ async function restaurarImovel(id) {
     if (!db) return;
     try {
         const doc = await db.collection('lixeira').doc(id).get();
-        if (!doc.exists) { showToast('Item não encontrado','error'); return; }
+        if (!doc.exists) { showToast('Item não encontrado', 'error'); return; }
         const data = doc.data(); delete data.deletedAt; delete data.originalId;
         await db.collection('imoveis').doc(id).set(data);
         await db.collection('lixeira').doc(id).delete();
         showToast('Imóvel restaurado! ✅');
-    } catch (e) { console.error(e); showToast('Erro ao restaurar','error'); }
+    } catch (e) { console.error(e); showToast('Erro ao restaurar', 'error'); }
 }
 
 function deletePerma(id) {
@@ -840,7 +909,7 @@ async function confirmDelete() {
             await db.collection('lixeira').doc(deleteId).delete(); showToast('Excluído permanentemente.');
         }
         closeDeleteModal();
-    } catch (e) { showToast('Erro ao excluir','error'); }
+    } catch (e) { showToast('Erro ao excluir', 'error'); }
 }
 
 function closeDeleteModal() {
@@ -862,17 +931,17 @@ async function loadVisitas() {
     const content = document.getElementById('visitas-content');
     if (loading) loading.style.display = 'flex'; if (content) content.style.display = 'none';
     try {
-        const snap = await db.collection('visitas').orderBy('timestamp','desc').get();
+        const snap = await db.collection('visitas').orderBy('timestamp', 'desc').get();
         visitasData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderVisitasReport(visitasData);
         if (loading) loading.style.display = 'none'; if (content) content.style.display = 'block';
-    } catch (e) { console.error(e); showToast('Erro ao carregar visitas','error'); if (loading) loading.style.display = 'none'; }
+    } catch (e) { console.error(e); showToast('Erro ao carregar visitas', 'error'); if (loading) loading.style.display = 'none'; }
 }
 
 function getFilteredVisitas(data) {
     const days = parseInt(visitasFilter.period) || 14;
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1);
-    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
     return data.filter(v => {
         const matchPage = !visitasFilter.page || v.page === visitasFilter.page;
         const matchDate = !v.date || v.date >= cutoffStr;
@@ -881,34 +950,57 @@ function getFilteredVisitas(data) {
 }
 
 function parseUA(ua) {
-    if (!ua) return { browser:'Desconhecido', os:'Desconhecido', device:'desktop' };
-    let browser='Outro', os='Outro', device='desktop';
+    if (!ua) return { browser: 'Desconhecido', os: 'Desconhecido', device: 'desktop' };
+    let browser = 'Outro', os = 'Outro', device = 'desktop';
     if (/Mobi|Android|iPhone|iPad/i.test(ua)) device = /iPad/i.test(ua) ? 'tablet' : 'mobile';
-    if (/Chrome\/[0-9]/i.test(ua) && !/Edg|OPR/i.test(ua)) browser='Chrome';
-    else if (/Firefox\//i.test(ua)) browser='Firefox';
-    else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browser='Safari';
-    else if (/Edg\//i.test(ua)) browser='Edge';
-    else if (/OPR\//i.test(ua)) browser='Opera';
-    if (/Windows/i.test(ua)) os='Windows';
-    else if (/Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) os='macOS';
-    else if (/iPhone/i.test(ua)) os='iOS';
-    else if (/iPad/i.test(ua)) os='iPadOS';
-    else if (/Android/i.test(ua)) os='Android';
-    else if (/Linux/i.test(ua)) os='Linux';
+    if (/Chrome\/[0-9]/i.test(ua) && !/Edg|OPR/i.test(ua)) browser = 'Chrome';
+    else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+    else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+    else if (/Edg\//i.test(ua)) browser = 'Edge';
+    else if (/OPR\//i.test(ua)) browser = 'Opera';
+    if (/Windows/i.test(ua)) os = 'Windows';
+    else if (/Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) os = 'macOS';
+    else if (/iPhone/i.test(ua)) os = 'iOS';
+    else if (/iPad/i.test(ua)) os = 'iPadOS';
+    else if (/Android/i.test(ua)) os = 'Android';
+    else if (/Linux/i.test(ua)) os = 'Linux';
     return { browser, os, device };
 }
 
+/** Família do aparelho (alinha ao tracker.js) — fallback para registros antigos sem deviceFamily */
+function inferDeviceFamily(ua) {
+    if (!ua) return '—';
+    if (/iPhone/i.test(ua)) return 'iPhone';
+    if (/iPad/i.test(ua)) return 'iPad';
+    if (/iPod/i.test(ua)) return 'iPod';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Windows/i.test(ua)) return 'Windows';
+    if (/CrOS/i.test(ua)) return 'Chrome OS';
+    if (/Mac OS X/i.test(ua)) return 'Mac';
+    if (/Ubuntu/i.test(ua)) return 'Ubuntu';
+    if (/Linux/i.test(ua)) return 'Linux';
+    return 'Outro';
+}
+
+function deviceCategoryFromVisit(v, p) {
+    const dt = String(v.deviceType || '').toLowerCase();
+    if (dt.includes('smartphone') || dt.includes('iphone')) return 'mobile';
+    if (dt.includes('tablet') || dt.includes('ipad')) return 'tablet';
+    if (dt.includes('tv')) return 'desktop';
+    return p.device;
+}
+
 function deviceIconHTML(device) {
-    if (device==='mobile') return '<i class="fas fa-mobile-alt" style="color:var(--accent)"></i>';
-    if (device==='tablet') return '<i class="fas fa-tablet-alt" style="color:var(--purple)"></i>';
+    if (device === 'mobile') return '<i class="fas fa-mobile-alt" style="color:var(--accent)"></i>';
+    if (device === 'tablet') return '<i class="fas fa-tablet-alt" style="color:var(--purple)"></i>';
     return '<i class="fas fa-desktop" style="color:var(--green)"></i>';
 }
 
 function pageColor(page) {
-    const p = (page||'').toLowerCase()
-        .replace(/[àáâãä]/g,'a').replace(/[èéêë]/g,'e')
-        .replace(/[ìíîï]/g,'i').replace(/[òóôõö]/g,'o')
-        .replace(/[ùúûü]/g,'u');
+    const p = (page || '').toLowerCase()
+        .replace(/[àáâãä]/g, 'a').replace(/[èéêë]/g, 'e')
+        .replace(/[ìíîï]/g, 'i').replace(/[òóôõö]/g, 'o')
+        .replace(/[ùúûü]/g, 'u');
     if (p === 'inicio' || p === 'in') return '#3b82f6';
     if (p.startsWith('im')) return '#22c55e';
     if (p.startsWith('co')) return '#f59e0b';
@@ -917,14 +1009,14 @@ function pageColor(page) {
 
 function pageBadge(page) {
     const hex = pageColor(page);
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     return `<span style="background:rgba(${r},${g},${b},.2);color:${hex};padding:.2rem .65rem;border-radius:99px;font-size:.72rem;font-weight:700;display:inline-block;">${page}</span>`;
 }
 
 function formatTimestamp(ts) {
     if (!ts) return '—';
-    const d = ts.toDate ? ts.toDate() : new Date(ts.seconds ? ts.seconds*1000 : ts);
-    return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const d = ts.toDate ? ts.toDate() : new Date(ts.seconds ? ts.seconds * 1000 : ts);
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function renderVisitasReport(data) {
@@ -947,9 +1039,9 @@ function renderVisitasReport(data) {
     const days = parseInt(visitasFilter.period) || 14;
 
     // KPIs
-    const uniqueFiltered  = new Set(filtered.map(v => v.deviceId)).size;
-    const visitasHoje     = data.filter(v => v.date === hoje).length;
-    const visitasOntem    = data.filter(v => v.date === ontemStr).length;
+    const uniqueFiltered = new Set(filtered.map(v => v.deviceId)).size;
+    const visitasHoje = data.filter(v => v.date === hoje).length;
+    const visitasOntem = data.filter(v => v.date === ontemStr).length;
     const porDia = {};
     for (let i = days - 1; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - i);
@@ -964,10 +1056,15 @@ function renderVisitasReport(data) {
     const browsers = {}, oss = {}, devices = { mobile: 0, tablet: 0, desktop: 0 };
     const seenDev = new Set();
     const porPagina = {};
+    const families = {};
     filtered.forEach(v => {
         const p = parseUA(v.userAgent);
-        devices[p.device]++;
-        oss[p.os] = (oss[p.os] || 0) + 1;
+        const cat = deviceCategoryFromVisit(v, p);
+        devices[cat]++;
+        const osKey = v.os || p.os;
+        oss[osKey] = (oss[osKey] || 0) + 1;
+        const fam = v.deviceFamily || inferDeviceFamily(v.userAgent);
+        families[fam] = (families[fam] || 0) + 1;
         porPagina[v.page] = (porPagina[v.page] || 0) + 1;
         if (!seenDev.has(v.deviceId)) {
             seenDev.add(v.deviceId);
@@ -982,7 +1079,7 @@ function renderVisitasReport(data) {
             const ts = v.timestamp;
             const d = ts?.toDate ? ts.toDate() : (ts?.seconds ? new Date(ts.seconds * 1000) : null);
             if (d) porHora[d.getHours()]++;
-        } catch (_) {}
+        } catch (_) { }
     });
     const maxHora = Math.max(...porHora, 1);
 
@@ -1006,7 +1103,7 @@ function renderVisitasReport(data) {
             ${allPages.map(p => `<option value="${p}" ${visitasFilter.page === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
         <select class="vf-select" onchange="visitasFilter.period=this.value;renderVisitasReport(visitasData)">
-            <option value="7"  ${visitasFilter.period === '7'  ? 'selected' : ''}>7 dias</option>
+            <option value="7"  ${visitasFilter.period === '7' ? 'selected' : ''}>7 dias</option>
             <option value="14" ${visitasFilter.period === '14' ? 'selected' : ''}>14 dias</option>
             <option value="30" ${visitasFilter.period === '30' ? 'selected' : ''}>30 dias</option>
         </select>
@@ -1054,18 +1151,18 @@ function renderVisitasReport(data) {
         </div>
         <div class="visits-timeline">
             ${Object.entries(porDia).map(([date, count]) => {
-                const d = new Date(date + 'T12:00:00');
-                const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                const isToday = date === hoje;
-                const pct = Math.max((count / maxDia) * 100, count > 0 ? 4 : 1);
-                return `<div class="vt-col">
+        const d = new Date(date + 'T12:00:00');
+        const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const isToday = date === hoje;
+        const pct = Math.max((count / maxDia) * 100, count > 0 ? 4 : 1);
+        return `<div class="vt-col">
                     <div class="vt-bar-wrap">
                         <div class="vt-bar" style="height:${pct}%;${isToday ? 'background:linear-gradient(180deg,var(--accent) 0%,rgba(59,130,246,.4) 100%);box-shadow:0 0 10px var(--accent-glow);' : ''}" title="${count} em ${label}"></div>
                     </div>
                     <div class="vt-count" style="${isToday ? 'color:var(--accent);' : ''}">${count > 0 ? count : ''}</div>
                     <div class="vt-label" style="${isToday ? 'color:var(--accent);font-weight:700;' : ''}">${label}</div>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
     </div>
 
@@ -1074,14 +1171,14 @@ function renderVisitasReport(data) {
         <div class="hh-label"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>
         <div class="hour-heatmap">
             ${porHora.map((count, h) => {
-                const pct = count / maxHora;
-                const alpha = count === 0 ? '.06' : (0.15 + pct * 0.85).toFixed(2);
-                return `<div class="hh-cell" style="background:rgba(59,130,246,${alpha});" title="${h}h — ${count} visitas"></div>`;
-            }).join('')}
+        const pct = count / maxHora;
+        const alpha = count === 0 ? '.06' : (0.15 + pct * 0.85).toFixed(2);
+        return `<div class="hh-cell" style="background:rgba(59,130,246,${alpha});" title="${h}h — ${count} visitas"></div>`;
+    }).join('')}
         </div>
         <div style="display:flex;align-items:center;gap:.5rem;margin-top:.55rem;">
             <span style="font-size:.62rem;color:var(--text-muted);">Menos</span>
-            ${['.07','.2','.4','.65','.9'].map(a => `<div style="width:16px;height:10px;border-radius:3px;background:rgba(59,130,246,${a});"></div>`).join('')}
+            ${['.07', '.2', '.4', '.65', '.9'].map(a => `<div style="width:16px;height:10px;border-radius:3px;background:rgba(59,130,246,${a});"></div>`).join('')}
             <span style="font-size:.62rem;color:var(--text-muted);">Mais</span>
         </div>
     </div>
@@ -1090,20 +1187,20 @@ function renderVisitasReport(data) {
         <div class="dist-card">
             <div class="dist-card-title"><i class="fas fa-file-alt"></i> Por Página</div>
             ${Object.entries(porPagina).sort((a, b) => b[1] - a[1]).map(([pg, n]) => {
-                const c = pageColor(pg);
-                return `<div class="dist-row">
+        const c = pageColor(pg);
+        return `<div class="dist-row">
                     <div class="dist-label">${pageBadge(pg)}</div>
-                    <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((n/totalVisits)*100) : 0}%;background:${c};"></div></div>
+                    <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((n / totalVisits) * 100) : 0}%;background:${c};"></div></div>
                     <div class="dist-val">${n}</div>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
         <div class="dist-card">
             <div class="dist-card-title"><i class="fas fa-mobile-alt"></i> Dispositivos</div>
-            ${[['desktop','Desktop','var(--green)'],['mobile','Mobile','var(--accent)'],['tablet','Tablet','var(--purple)']].map(([k,label,color]) => `
+            ${[['desktop', 'Desktop', 'var(--green)'], ['mobile', 'Mobile', 'var(--accent)'], ['tablet', 'Tablet', 'var(--purple)']].map(([k, label, color]) => `
             <div class="dist-row">
                 <div class="dist-label" style="color:${color};">${deviceIconHTML(k)} ${label}</div>
-                <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((devices[k]/totalVisits)*100) : 0}%;background:${color};opacity:.75;"></div></div>
+                <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((devices[k] / totalVisits) * 100) : 0}%;background:${color};opacity:.75;"></div></div>
                 <div class="dist-val">${devices[k]}</div>
             </div>`).join('')}
         </div>
@@ -1112,16 +1209,25 @@ function renderVisitasReport(data) {
             ${Object.entries(browsers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([br, n]) => `
             <div class="dist-row">
                 <div class="dist-label">${br}</div>
-                <div class="dist-track"><div class="dist-fill" style="width:${seenDev.size ? Math.round((n/seenDev.size)*100) : 0}%;background:var(--accent);opacity:.65;"></div></div>
+                <div class="dist-track"><div class="dist-fill" style="width:${seenDev.size ? Math.round((n / seenDev.size) * 100) : 0}%;background:var(--accent);opacity:.65;"></div></div>
                 <div class="dist-val">${n}</div>
             </div>`).join('')}
         </div>
         <div class="dist-card">
-            <div class="dist-card-title"><i class="fas fa-laptop"></i> Sistemas</div>
+            <div class="dist-card-title"><i class="fas fa-laptop"></i> Sistemas (detalhe)</div>
             ${Object.entries(oss).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([os, n]) => `
             <div class="dist-row">
                 <div class="dist-label">${os}</div>
-                <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((n/totalVisits)*100) : 0}%;background:var(--purple);opacity:.7;"></div></div>
+                <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((n / totalVisits) * 100) : 0}%;background:var(--purple);opacity:.7;"></div></div>
+                <div class="dist-val">${n}</div>
+            </div>`).join('')}
+        </div>
+        <div class="dist-card">
+            <div class="dist-card-title"><i class="fas fa-microchip"></i> Família do aparelho</div>
+            ${Object.entries(families).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([fam, n]) => `
+            <div class="dist-row">
+                <div class="dist-label">${fam}</div>
+                <div class="dist-track"><div class="dist-fill" style="width:${totalVisits ? Math.round((n / totalVisits) * 100) : 0}%;background:var(--amber);opacity:.75;"></div></div>
                 <div class="dist-val">${n}</div>
             </div>`).join('')}
         </div>
@@ -1135,21 +1241,26 @@ function renderVisitasReport(data) {
         <div style="overflow-x:auto;">
         <table class="vt-table">
             <thead><tr>
-                <th>#</th><th>Data / Hora</th><th>Página</th><th>Dispositivo</th><th>Navegador · OS</th><th>Device ID</th>
+                <th>#</th><th>Data / Hora</th><th>Página</th><th>Tipo</th><th>Família / SO</th><th>Navegador</th><th>Device ID</th>
             </tr></thead>
             <tbody>
                 ${filtered.slice(0, 100).map((v, i) => {
-                    const p = parseUA(v.userAgent);
-                    return `<tr>
+        const p = parseUA(v.userAgent);
+        const cat = deviceCategoryFromVisit(v, p);
+        const dtype = v.deviceType || (cat === 'mobile' ? 'Smartphone' : cat === 'tablet' ? 'Tablet' : 'Desktop');
+        const fam = v.deviceFamily || inferDeviceFamily(v.userAgent);
+        const osShow = v.os || p.os;
+        return `<tr>
                         <td style="color:var(--text-muted);">${i + 1}</td>
                         <td style="white-space:nowrap;">${formatTimestamp(v.timestamp)}</td>
                         <td>${pageBadge(v.page || '—')}</td>
-                        <td>${deviceIconHTML(p.device)} <span style="color:var(--text-secondary);margin-left:.3rem;">${p.device}</span></td>
-                        <td style="color:var(--text-muted);">${p.browser} · ${p.os}</td>
-                        <td style="font-family:monospace;font-size:.7rem;color:var(--text-muted);" title="${v.deviceId||''}">${(v.deviceId||'—').slice(0,20)}…</td>
+                        <td>${deviceIconHTML(cat)} <span style="color:var(--text-secondary);margin-left:.3rem;">${dtype}</span></td>
+                        <td style="color:var(--text-muted);"><strong style="color:var(--text-primary);">${fam}</strong> · ${osShow}</td>
+                        <td style="color:var(--text-muted);">${p.browser}</td>
+                        <td style="font-family:monospace;font-size:.7rem;color:var(--text-muted);" title="${v.deviceId || ''}">${(v.deviceId || '—').slice(0, 20)}…</td>
                     </tr>`;
-                }).join('')}
-                ${filtered.length > 100 ? `<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.78rem;">… e mais ${filtered.length - 100} registros</td></tr>` : ''}
+    }).join('')}
+                ${filtered.length > 100 ? `<tr><td colspan="7" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:.78rem;">… e mais ${filtered.length - 100} registros</td></tr>` : ''}
             </tbody>
         </table>
         </div>
@@ -1167,40 +1278,46 @@ async function limparVisitas() {
         const snap = await db.collection('visitas').get();
         const batch = db.batch(); snap.docs.forEach(d => batch.delete(d.ref)); await batch.commit();
         showToast('Dados apagados.'); loadVisitas();
-    } catch (e) { showToast('Erro ao limpar','error'); }
+    } catch (e) { showToast('Erro ao limpar', 'error'); }
 }
 
 function exportarVisitas() {
-    if (!visitasData.length) { showToast('Nenhum dado para exportar','error'); return; }
-    const header = 'Data,Página,Dispositivo ID,User Agent\n';
-    const rows = visitasData.map(v => `"${v.date||''}","${v.page||''}","${v.deviceId||''}","${(v.userAgent||'').replace(/"/g,'""')}"`).join('\n');
-    const blob = new Blob([header+rows],{type:'text/csv;charset=utf-8;'});
-    const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`visitas-${new Date().toISOString().slice(0,10)}.csv`});
+    if (!visitasData.length) { showToast('Nenhum dado para exportar', 'error'); return; }
+    const header = 'Data,Página,Família,Tipo,SO,Navegador,Dispositivo ID,User Agent\n';
+    const rows = visitasData.map(v => {
+        const p = parseUA(v.userAgent);
+        const fam = v.deviceFamily || inferDeviceFamily(v.userAgent);
+        const dtype = v.deviceType || (deviceCategoryFromVisit(v, p) === 'mobile' ? 'Smartphone' : deviceCategoryFromVisit(v, p) === 'tablet' ? 'Tablet' : 'Desktop');
+        const os = v.os || p.os;
+        return `"${v.date || ''}","${v.page || ''}","${fam}","${dtype}","${os}","${p.browser}","${v.deviceId || ''}","${(v.userAgent || '').replace(/"/g, '""')}"`;
+    }).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `visitas-${new Date().toISOString().slice(0, 10)}.csv` });
     a.click(); showToast('CSV exportado!');
 }
 
 // ========== ANALYTICS ==========
 async function loadAnalytics() {
     if (!db) return;
-    if (!imoveisData.length) { try { const snap = await db.collection('imoveis').get(); imoveisData = snap.docs.map(d=>({id:d.id,...d.data()})); } catch(e){return;} }
+    if (!imoveisData.length) { try { const snap = await db.collection('imoveis').get(); imoveisData = snap.docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { return; } }
     const total = imoveisData.length; if (!total) return;
-    const precos = imoveisData.map(i=>parseFloat(i.preco)||0).filter(Boolean);
-    const areas  = imoveisData.map(i=>parseFloat(i.area)||0).filter(Boolean);
-    setEl('analytics-total',total); setEl('analytics-maior-preco',precos.length?'R$ '+Math.max(...precos).toLocaleString('pt-BR'):'—');
-    setEl('analytics-menor-preco',precos.length?'R$ '+Math.min(...precos).toLocaleString('pt-BR'):'—');
-    setEl('analytics-media-area',areas.length?Math.round(areas.reduce((s,a)=>s+a,0)/areas.length)+' m²':'—');
+    const precos = imoveisData.map(i => parseFloat(i.preco) || 0).filter(Boolean);
+    const areas = imoveisData.map(i => parseFloat(i.area) || 0).filter(Boolean);
+    setEl('analytics-total', total); setEl('analytics-maior-preco', precos.length ? 'R$ ' + Math.max(...precos).toLocaleString('pt-BR') : '—');
+    setEl('analytics-menor-preco', precos.length ? 'R$ ' + Math.min(...precos).toLocaleString('pt-BR') : '—');
+    setEl('analytics-media-area', areas.length ? Math.round(areas.reduce((s, a) => s + a, 0) / areas.length) + ' m²' : '—');
     renderBairrosChart('analytics-bairros-chart');
-    const pq = {}; imoveisData.forEach(i => { const q=i.quartos||'?'; if(!pq[q])pq[q]=[]; pq[q].push(parseFloat(i.preco)||0); });
+    const pq = {}; imoveisData.forEach(i => { const q = i.quartos || '?'; if (!pq[q]) pq[q] = []; pq[q].push(parseFloat(i.preco) || 0); });
     const qEl = document.getElementById('analytics-quartos-list');
-    if (qEl) qEl.innerHTML = Object.entries(pq).sort((a,b)=>Number(a[0])-Number(b[0])).map(([q,ps])=>{const m=Math.round(ps.reduce((s,p)=>s+p,0)/ps.length);return `<div class="quartos-item"><span class="quartos-label"><i class="fas fa-bed" style="margin-right:.4rem;color:var(--text-muted)"></i>${q} quarto${q>1?'s':''}</span><span class="quartos-value">R$ ${m.toLocaleString('pt-BR')}</span></div>`;}).join('');
-    const topCaros = [...imoveisData].sort((a,b)=>(parseFloat(b.preco)||0)-(parseFloat(a.preco)||0)).slice(0,3);
-    const topArea  = [...imoveisData].sort((a,b)=>(parseFloat(b.area)||0)-(parseFloat(a.area)||0)).slice(0,3);
-    renderTopList('analytics-top-caros',topCaros,'preco'); renderTopList('analytics-top-area',topArea,'area');
+    if (qEl) qEl.innerHTML = Object.entries(pq).sort((a, b) => Number(a[0]) - Number(b[0])).map(([q, ps]) => { const m = Math.round(ps.reduce((s, p) => s + p, 0) / ps.length); return `<div class="quartos-item"><span class="quartos-label"><i class="fas fa-bed" style="margin-right:.4rem;color:var(--text-muted)"></i>${q} quarto${q > 1 ? 's' : ''}</span><span class="quartos-value">R$ ${m.toLocaleString('pt-BR')}</span></div>`; }).join('');
+    const topCaros = [...imoveisData].sort((a, b) => (parseFloat(b.preco) || 0) - (parseFloat(a.preco) || 0)).slice(0, 3);
+    const topArea = [...imoveisData].sort((a, b) => (parseFloat(b.area) || 0) - (parseFloat(a.area) || 0)).slice(0, 3);
+    renderTopList('analytics-top-caros', topCaros, 'preco'); renderTopList('analytics-top-area', topArea, 'area');
 }
 
-function renderTopList(id,list,tipo) {
+function renderTopList(id, list, tipo) {
     const el = document.getElementById(id); if (!el) return;
-    el.innerHTML = list.map(i=>`<div class="recent-item"><img src="${i.imagem}" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"><div class="recent-info"><strong>${i.titulo}</strong><span>${i.bairro}</span></div><span class="recent-price">${tipo==='preco'?'R$ '+Number(i.preco).toLocaleString('pt-BR'):i.area+' m²'}</span></div>`).join('');
+    el.innerHTML = list.map(i => `<div class="recent-item"><img src="${i.imagem}" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"><div class="recent-info"><strong>${i.titulo}</strong><span>${i.bairro}</span></div><span class="recent-price">${tipo === 'preco' ? 'R$ ' + Number(i.preco).toLocaleString('pt-BR') : i.area + ' m²'}</span></div>`).join('');
 }
 
 // ========== SEGURANÇA & HISTÓRICO DE LOGINS ==========
@@ -1230,7 +1347,7 @@ function startSessaoCountdown() {
         const h = Math.floor(remaining / 3600000);
         const m = Math.floor((remaining % 3600000) / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
-        el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        el.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         el.style.color = h < 1 ? 'var(--amber)' : 'var(--green)';
         if (barEl) {
             barEl.style.width = pct + '%';
@@ -1271,7 +1388,7 @@ async function loadSeguranca() {
 
         // Inicia o countdown ao vivo após renderizar
         startSessaoCountdown();
-    } catch(e) {
+    } catch (e) {
         if (loading) loading.style.display = 'none';
         if (content) { content.style.display = 'block'; content.innerHTML = '<div class="empty-state"><i class="fas fa-shield-alt"></i><h3>Erro ao carregar</h3><p>' + e.message + '</p></div>'; }
         console.error('loadSeguranca:', e);
@@ -1286,7 +1403,7 @@ async function marcarSessoesExpiradas() {
         const batch = db.batch();
         snap.docs.forEach(d => batch.update(d.ref, { status: 'expirado' }));
         if (snap.size > 0) await batch.commit();
-    } catch(_) {}
+    } catch (_) { }
 }
 
 function riskBadge(score) {
@@ -1297,11 +1414,11 @@ function riskBadge(score) {
 
 function statusLoginBadge(status) {
     const map = {
-        ativo:     { bg:'rgba(34,197,94,.15)',   color:'#22c55e', label:'🟢 Ativo' },
-        encerrado: { bg:'rgba(148,163,184,.15)', color:'#94a3b8', label:'⚪ Encerrado' },
-        expirado:  { bg:'rgba(245,158,11,.15)',  color:'#f59e0b', label:'🟡 Expirado' },
-        suspeito:  { bg:'rgba(239,68,68,.15)',   color:'#ef4444', label:'🔴 Suspeito' },
-        removido:  { bg:'rgba(239,68,68,.2)',    color:'#ef4444', label:'🚫 Removido' },
+        ativo: { bg: 'rgba(34,197,94,.15)', color: '#22c55e', label: '🟢 Ativo' },
+        encerrado: { bg: 'rgba(148,163,184,.15)', color: '#94a3b8', label: '⚪ Encerrado' },
+        expirado: { bg: 'rgba(245,158,11,.15)', color: '#f59e0b', label: '🟡 Expirado' },
+        suspeito: { bg: 'rgba(239,68,68,.15)', color: '#ef4444', label: '🔴 Suspeito' },
+        removido: { bg: 'rgba(239,68,68,.2)', color: '#ef4444', label: '🚫 Removido' },
     };
     const s = map[status] || map.encerrado;
     return `<span style="background:${s.bg};color:${s.color};padding:.2rem .65rem;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap;">${s.label}</span>`;
@@ -1326,7 +1443,8 @@ function renderSeguranca(logins) {
     const suspeitos = logins.filter(l => l.status === 'suspeito').length;
 
     content.innerHTML = `
-    <div class="stats-grid" style="margin-bottom:1.5rem;">
+    <div class="seguranca-dashboard">
+    <div class="stats-grid seguranca-stats">
         <div class="stat-card">
             <div class="stat-icon blue"><i class="fas fa-history"></i></div>
             <div class="stat-info"><span class="stat-value">${total}</span><span class="stat-label">Logins registrados</span></div>
@@ -1337,7 +1455,7 @@ function renderSeguranca(logins) {
         </div>
         <div class="stat-card">
             <div class="stat-icon" style="background:var(--red-soft);color:var(--red);"><i class="fas fa-exclamation-triangle"></i></div>
-            <div class="stat-info"><span class="stat-value" style="color:${suspeitos>0?'var(--red)':'inherit'}">${suspeitos}</span><span class="stat-label">Suspeitos marcados</span></div>
+            <div class="stat-info"><span class="stat-value" style="color:${suspeitos > 0 ? 'var(--red)' : 'inherit'}">${suspeitos}</span><span class="stat-label">Suspeitos marcados</span></div>
         </div>
         <div class="stat-card">
             <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
@@ -1368,28 +1486,26 @@ function renderSeguranca(logins) {
         ${renderSessaoAtualCompleto()}
     </div>
 
-    <!-- Ações rápidas -->
-    <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-bottom:1.5rem;align-items:center;">
-        <button onclick="encerrarTodasSessoes()" class="btn-danger" style="gap:.5rem;">
+    <div class="seguranca-toolbar">
+        <button type="button" onclick="encerrarTodasSessoes()" class="btn-danger seguranca-toolbar-btn">
             <i class="fas fa-ban"></i> Encerrar outras sessões
         </button>
-        <button onclick="limparHistoricoAntigo()" class="btn-secondary" style="gap:.5rem;">
-            <i class="fas fa-broom"></i> Limpar histórico antigo
+        <button type="button" onclick="limparHistoricoAntigo()" class="btn-secondary seguranca-toolbar-btn" title="Apaga todos os registros de login, exceto a sessão aberta agora">
+            <i class="fas fa-broom"></i> Limpar histórico (mantém sessão atual)
         </button>
-        <button onclick="loadSeguranca()" class="btn-secondary" style="gap:.5rem;">
+        <button type="button" onclick="loadSeguranca()" class="btn-secondary seguranca-toolbar-btn">
             <i class="fas fa-sync-alt"></i> Atualizar
         </button>
     </div>
 
-    <!-- Legenda -->
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;padding:.7rem 1rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);">
-        <span style="font-size:.75rem;color:var(--text-muted);font-weight:600;">STATUS:</span>
+    <div class="seguranca-legend">
+        <span class="seguranca-legend-title">Status</span>
         ${statusLoginBadge('ativo')} ${statusLoginBadge('expirado')} ${statusLoginBadge('encerrado')} ${statusLoginBadge('suspeito')} ${statusLoginBadge('removido')}
     </div>
 
-    <!-- Histórico -->
-    <div style="display:flex;flex-direction:column;gap:.8rem;">
+    <div class="seguranca-historico">
         ${logins.map(l => renderLoginCard(l, currentLoginId)).join('')}
+    </div>
     </div>`;
 }
 
@@ -1476,7 +1592,7 @@ async function carregarIPSessaoAtual() {
                     return;
                 }
             }
-        } catch(_) {}
+        } catch (_) { }
     }
     // Fallback: busca ao vivo
     try {
@@ -1484,7 +1600,7 @@ async function carregarIPSessaoAtual() {
         const d = await r.json();
         const ip = d.ip || '—';
         box.querySelector('.seguranca-info-val').innerHTML = `<strong>${ip}</strong> <a href="https://ipinfo.io/${ip}" target="_blank" style="font-size:.68rem;color:var(--accent);"><i class="fas fa-external-link-alt"></i></a>`;
-    } catch(_) {
+    } catch (_) {
         const val = box.querySelector('.seguranca-info-val');
         if (val) val.textContent = '—';
     }
@@ -1545,7 +1661,7 @@ function renderLoginCard(l, currentLoginId) {
             <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-server"></i> ASN / Org</span><span class="seguranca-info-val" style="font-size:.74rem;">${l.asn || l.org || '—'}</span></div>
             <div class="seguranca-info-item">
                 <span class="seguranca-info-label"><i class="fas fa-user-secret"></i> VPN / Proxy</span>
-                <span class="seguranca-info-val">${l.isProxy || l.isVPN || '—'}</span>
+                <span class="seguranca-info-val">${l.vpnSummary || l.isVPN || l.isProxy || '—'}</span>
             </div>
             <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-building"></i> Data center</span><span class="seguranca-info-val">${l.isHosting || '—'}</span></div>
             <div class="seguranca-info-item"><span class="seguranca-info-label"><i class="fas fa-signal"></i> Conexão</span><span class="seguranca-info-val">${l.connectionType || '—'} ${l.connectionSpeed && l.connectionSpeed !== '—' ? '· ' + l.connectionSpeed : ''}</span></div>
@@ -1575,17 +1691,309 @@ function renderLoginCard(l, currentLoginId) {
     </div>`;
 }
 
+async function appendCeoVpnMonitorSection() {
+    const wrapId = 'ceo-vpn-monitor-wrap';
+    const host = document.getElementById('seguranca-content');
+    if (!host || !isCeoUser()) return;
+    document.getElementById(wrapId)?.remove();
+
+    try {
+        // Carrega visitor_network e visitor_alerts em paralelo
+        const [netSnap, alertsSnap, blockedSnap] = await Promise.all([
+            db.collection('visitor_network').orderBy('timestamp', 'desc').limit(80).get(),
+            db.collection('visitor_alerts').orderBy('timestamp', 'desc').limit(20).get().catch(() => ({ docs: [] })),
+            db.collection('blocked_ips').limit(100).get().catch(() => ({ docs: [] })),
+        ]);
+
+        const rows = netSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        const alerts = alertsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        const blockedIps = new Set(blockedSnap.docs.map(d => String(d.data().ip || d.id.replace(/_/g, '.'))));
+
+        // Estatísticas
+        const total = rows.length;
+        const highRisk = rows.filter(r => (Number(r.vpnScore) || 0) >= 60).length;
+        const medRisk = rows.filter(r => { const s = Number(r.vpnScore) || 0; return s >= 30 && s < 60; }).length;
+        const proxyCount = rows.filter(r => r.proxy).length;
+        const hostCount = rows.filter(r => r.hosting).length;
+        const uniqueIps = new Set(rows.map(r => r.ip)).size;
+
+        // Top países
+        const countryCounts = {};
+        rows.forEach(r => { if (r.country) countryCounts[r.country] = (countryCounts[r.country] || 0) + 1; });
+        const topCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+        // ISPs suspeitos mais comuns
+        const ispCounts = {};
+        rows.filter(r => (Number(r.vpnScore) || 0) >= 30).forEach(r => {
+            const isp = String(r.isp || r.org || '').slice(0, 40);
+            if (isp) ispCounts[isp] = (ispCounts[isp] || 0) + 1;
+        });
+        const topSuspectIsps = Object.entries(ispCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+        function _fmtDt(ts) {
+            try { return ts?.toDate ? ts.toDate().toLocaleString('pt-BR') : (ts || '—'); } catch { return '—'; }
+        }
+
+        function _riskBadge(score) {
+            if (score >= 60) return `<span style="background:rgba(239,68,68,.2);color:#ef4444;padding:.15rem .5rem;border-radius:99px;font-size:.65rem;font-weight:700;">🔴 ALTO ${score}</span>`;
+            if (score >= 30) return `<span style="background:rgba(245,158,11,.2);color:#f59e0b;padding:.15rem .5rem;border-radius:99px;font-size:.65rem;font-weight:700;">🟡 MÉD ${score}</span>`;
+            return `<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:.15rem .5rem;border-radius:99px;font-size:.65rem;font-weight:700;">🟢 ${score}</span>`;
+        }
+
+        function _flagBadges(flags) {
+            const map = {
+                proxy_detected: { label: 'Proxy', color: '#ef4444' },
+                datacenter_hosting: { label: 'Datacenter', color: '#f59e0b' },
+                datacenter_asn: { label: 'ASN DC', color: '#f59e0b' },
+                datacenter_isp: { label: 'ISP DC', color: '#f59e0b' },
+                vpn_isp: { label: 'ISP VPN', color: '#a855f7' },
+                vpn_asn: { label: 'ASN VPN', color: '#a855f7' },
+                mobile_isp: { label: 'Móvel', color: '#60a5fa' },
+                high_risk_country: { label: 'País risco', color: '#ef4444' },
+                timezone_mismatch: { label: 'TZ mismatch', color: '#f59e0b' },
+                proxy: { label: 'Proxy', color: '#ef4444' },
+                hosting: { label: 'Hosting', color: '#f59e0b' },
+                mobile_isp: { label: 'Móvel', color: '#60a5fa' },
+            };
+            return (flags || []).map(f => {
+                const m = map[f] || { label: f, color: '#94a3b8' };
+                return `<span style="background:${m.color}22;color:${m.color};border:1px solid ${m.color}44;padding:.1rem .4rem;border-radius:6px;font-size:.62rem;font-weight:600;white-space:nowrap;">${escHtml(m.label)}</span>`;
+            }).join(' ');
+        }
+
+        async function _blockIpFromNetwork(ip) {
+            if (!ip || ip === '—') return;
+            const key = ip.replace(/\./g, '_').replace(/:/g, '_');
+            await db.collection('blocked_ips').doc(key).set({
+                ip, reason: 'bloqueio_manual_rede', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdAtStr: new Date().toLocaleString('pt-BR'),
+            }, { merge: true });
+            showToast(`🚫 IP ${ip} bloqueado!`);
+            appendCeoVpnMonitorSection();
+        }
+        window._vpnBlockIp = _blockIpFromNetwork;
+
+        async function _unblockIp(ip) {
+            if (!ip) return;
+            const key = ip.replace(/\./g, '_').replace(/:/g, '_');
+            await db.collection('blocked_ips').doc(key).delete();
+            showToast(`✅ IP ${ip} desbloqueado.`);
+            appendCeoVpnMonitorSection();
+        }
+        window._vpnUnblockIp = _unblockIp;
+
+        async function _clearOldNetwork() {
+            if (!confirm('Limpar registros de tráfego de rede? Os bloqueios de IP permanecem.')) return;
+            const snap = await db.collection('visitor_network').limit(500).get();
+            const batch = db.batch();
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            showToast('Registros de rede limpos.');
+            appendCeoVpnMonitorSection();
+        }
+        window._vpnClearOld = _clearOldNetwork;
+
+        const html = `
+        <div id="${wrapId}" class="dashboard-card" style="margin-top:1.5rem;">
+            <!-- Cabeçalho -->
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:.8rem;margin-bottom:1rem;">
+                <div>
+                    <h3 style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem;">
+                        <i class="fas fa-shield-virus" style="color:var(--purple);"></i>
+                        Tráfego público · Detecção de Rede
+                        <span style="font-size:.68rem;background:rgba(168,85,247,.12);color:var(--purple);padding:.15rem .55rem;border-radius:99px;font-weight:600;">Visitantes do site público</span>
+                    </h3>
+                    <p style="font-size:.76rem;color:var(--text-muted);line-height:1.5;max-width:680px;">
+                        Cada visitante do site é analisado por IP via <strong>ip-api + ipapi.co</strong> com detecção de proxy, datacenter, ASN e ISP de VPN.
+                        IPs bloqueados ficam em <code style="background:var(--bg-elevated);padding:.1rem .35rem;border-radius:4px;border:1px solid var(--border);">blocked_ips</code> e são barrados em tempo real no próximo acesso.
+                    </p>
+                </div>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <button onclick="appendCeoVpnMonitorSection()" class="btn-secondary" style="font-size:.75rem;padding:.4rem .8rem;">
+                        <i class="fas fa-sync-alt"></i> Atualizar
+                    </button>
+                    <button onclick="_vpnClearOld()" class="btn-secondary" style="font-size:.75rem;padding:.4rem .8rem;color:var(--red);border-color:rgba(239,68,68,.25);">
+                        <i class="fas fa-broom"></i> Limpar registros
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.7rem;margin-bottom:1.2rem;">
+                ${[
+                { label: 'Amostras', val: total, icon: 'fa-eye', color: 'var(--accent)' },
+                { label: 'IPs únicos', val: uniqueIps, icon: 'fa-fingerprint', color: 'var(--purple)' },
+                { label: 'Risco alto', val: highRisk, icon: 'fa-exclamation-triangle', color: 'var(--red)' },
+                { label: 'Risco médio', val: medRisk, icon: 'fa-shield-alt', color: 'var(--amber)' },
+                { label: 'Proxy/VPN', val: proxyCount, icon: 'fa-user-secret', color: '#a855f7' },
+                { label: 'Datacenter', val: hostCount, icon: 'fa-server', color: 'var(--amber)' },
+                { label: 'Bloqueados', val: blockedIps.size, icon: 'fa-ban', color: 'var(--red)' },
+            ].map(k => `
+                    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem .9rem;">
+                        <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.25rem;display:flex;align-items:center;gap:.3rem;">
+                            <i class="fas ${k.icon}" style="color:${k.color};font-size:.6rem;"></i>${k.label}
+                        </div>
+                        <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:${k.val > 0 && k.color !== 'var(--accent)' && k.color !== 'var(--purple)' ? k.color : 'var(--text-primary)'};">${k.val}</div>
+                    </div>`).join('')}
+            </div>
+
+            <!-- Alertas de alto risco -->
+            ${alerts.length > 0 ? `
+            <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);padding:.9rem 1rem;margin-bottom:1rem;">
+                <div style="font-size:.72rem;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;">
+                    <i class="fas fa-bell"></i> ${alerts.length} alerta${alerts.length > 1 ? 's' : ''} de risco alto
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.5rem;">
+                    ${alerts.slice(0, 5).map(a => {
+                const isBlocked = blockedIps.has(String(a.ip));
+                return `<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.76rem;">
+                            <span style="font-family:monospace;color:var(--text-primary);font-weight:700;">${escHtml(String(a.ip || '—'))}</span>
+                            ${_riskBadge(Number(a.vpnScore) || 0)}
+                            <span style="color:var(--text-muted);">${escHtml(String(a.vpnSummary || '').slice(0, 60))}</span>
+                            <span style="margin-left:auto;display:flex;gap:.35rem;">
+                                ${isBlocked
+                        ? `<button onclick="_vpnUnblockIp('${escHtml(String(a.ip))}')" style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22c55e;font-size:.68rem;padding:.2rem .6rem;border-radius:6px;cursor:pointer;font-family:var(--font-ui);">✅ Desbloquear</button>`
+                        : `<button onclick="_vpnBlockIp('${escHtml(String(a.ip))}')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);font-size:.68rem;padding:.2rem .6rem;border-radius:6px;cursor:pointer;font-family:var(--font-ui);">🚫 Bloquear IP</button>`
+                    }
+                            </span>
+                        </div>`;
+            }).join('')}
+                </div>
+            </div>` : ''}
+
+            <!-- Top países e ISPs suspeitos -->
+            ${(topCountries.length > 0 || topSuspectIsps.length > 0) ? `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:1rem;">
+                ${topCountries.length > 0 ? `
+                <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;">
+                    <div style="font-size:.65rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;">🌍 Top países</div>
+                    ${topCountries.map(([c, n]) => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;font-size:.76rem;">
+                        <span style="color:var(--text-secondary);">${escHtml(c)}</span>
+                        <span style="font-weight:700;color:var(--text-primary);">${n}</span>
+                    </div>`).join('')}
+                </div>` : '<div></div>'}
+                ${topSuspectIsps.length > 0 ? `
+                <div style="background:var(--bg-elevated);border:1px solid rgba(239,68,68,.15);border-radius:var(--radius);padding:.85rem 1rem;">
+                    <div style="font-size:.65rem;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;">⚠️ ISPs suspeitos frequentes</div>
+                    ${topSuspectIsps.map(([isp, n]) => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;font-size:.74rem;">
+                        <span style="color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${escHtml(isp)}</span>
+                        <span style="font-weight:700;color:var(--amber);">${n}</span>
+                    </div>`).join('')}
+                </div>` : '<div></div>'}
+            </div>` : ''}
+
+            <!-- Tabela principal -->
+            ${rows.length === 0
+                ? `<div style="color:var(--text-muted);font-size:.82rem;padding:1.5rem;text-align:center;">
+                    <i class="fas fa-info-circle" style="margin-right:.4rem;"></i>
+                    Nenhum registro ainda — visite o site público para gerar amostras.
+                  </div>`
+                : `<div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:.74rem;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border);background:var(--bg-elevated);">
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);white-space:nowrap;">Quando</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">IP</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">Risco</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">Sinais detectados</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">Localização / ISP</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">Dispositivo</th>
+                            <th style="padding:.5rem .6rem;text-align:left;color:var(--text-muted);">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(r => {
+                    const score = Number(r.vpnScore) || 0;
+                    const isBlocked = blockedIps.has(String(r.ip));
+                    const rowBg = score >= 60
+                        ? 'rgba(239,68,68,.06)'
+                        : score >= 30
+                            ? 'rgba(245,158,11,.04)'
+                            : 'transparent';
+                    const loc = [r.city, r.country].filter(Boolean).join(', ') || '—';
+                    const isp = String(r.isp || r.org || '—').slice(0, 35);
+                    const device = r.deviceIcon || (r.deviceType || '💻');
+                    return `<tr style="border-bottom:1px solid rgba(255,255,255,.03);background:${rowBg};">
+                                <td style="padding:.45rem .6rem;white-space:nowrap;color:var(--text-muted);">${_fmtDt(r.timestamp)}</td>
+                                <td style="padding:.45rem .6rem;">
+                                    <span style="font-family:monospace;color:var(--text-primary);font-weight:600;">${escHtml(String(r.ip || '—'))}</span>
+                                    ${isBlocked ? '<span style="background:rgba(239,68,68,.15);color:var(--red);font-size:.6rem;padding:.1rem .35rem;border-radius:4px;margin-left:.3rem;font-weight:700;">BLOQ</span>' : ''}
+                                    ${r.lat && r.lon && r.lat !== 0 ? `<br><a href="https://www.google.com/maps?q=${r.lat},${r.lon}" target="_blank" style="font-size:.6rem;color:var(--accent);">📍 Ver no mapa</a>` : ''}
+                                </td>
+                                <td style="padding:.45rem .6rem;">${_riskBadge(score)}</td>
+                                <td style="padding:.45rem .6rem;">${_flagBadges(r.flags) || '<span style="color:var(--text-muted);font-size:.7rem;">—</span>'}</td>
+                                <td style="padding:.45rem .6rem;font-size:.72rem;">
+                                    <div style="color:var(--text-secondary);">${escHtml(loc)}</div>
+                                    <div style="color:var(--text-muted);font-size:.68rem;">${escHtml(isp)}</div>
+                                    ${r.timezone ? `<div style="color:var(--text-muted);font-size:.63rem;">⏰ ${escHtml(r.timezone)}</div>` : ''}
+                                </td>
+                                <td style="padding:.45rem .6rem;font-size:.7rem;color:var(--text-muted);">
+                                    ${escHtml(device)}
+                                    ${r.browser ? `<br>${escHtml(r.browser)}` : ''}
+                                </td>
+                                <td style="padding:.45rem .6rem;">
+                                    ${isBlocked
+                            ? `<button onclick="_vpnUnblockIp('${escHtml(String(r.ip))}')"
+                                            style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#22c55e;font-size:.65rem;padding:.2rem .55rem;border-radius:6px;cursor:pointer;white-space:nowrap;font-family:var(--font-ui);">
+                                            ✅ Desbloquear
+                                           </button>`
+                            : `<button onclick="_vpnBlockIp('${escHtml(String(r.ip))}')"
+                                            style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--red);font-size:.65rem;padding:.2rem .55rem;border-radius:6px;cursor:pointer;white-space:nowrap;font-family:var(--font-ui);">
+                                            🚫 Bloquear
+                                           </button>`
+                        }
+                                </td>
+                            </tr>`;
+                }).join('')}
+                    </tbody>
+                </table>
+                </div>`
+            }
+        </div>`;
+
+        host.insertAdjacentHTML('beforeend', html);
+    } catch (e) {
+        console.warn('appendCeoVpnMonitorSection', e);
+        const host2 = document.getElementById('seguranca-content');
+        if (host2) host2.insertAdjacentHTML('beforeend', `<div class="dashboard-card" style="margin-top:1rem;color:var(--text-muted);font-size:.82rem;"><i class="fas fa-exclamation-triangle" style="color:var(--amber);margin-right:.4rem;"></i>Erro ao carregar detecção de rede: ${e.message}</div>`);
+    }
+}
+
 async function marcarSuspeito(docId, statusAtual) {
     if (!db) return;
     try {
         const novoStatus = statusAtual === 'suspeito' ? 'encerrado' : 'suspeito';
-        await db.collection('login_historico').doc(docId).update({
+        const ref = db.collection('login_historico').doc(docId);
+        const prev = await ref.get();
+        const pdata = prev.exists ? prev.data() : {};
+        const ip = pdata.ip;
+
+        await ref.update({
             status: novoStatus,
             suspeitoNote: novoStatus === 'suspeito' ? 'Marcado manualmente pelo admin em ' + new Date().toLocaleString('pt-BR') : null,
         });
-        showToast(novoStatus === 'suspeito' ? '⚠️ Login marcado como suspeito' : '✅ Marcação removida');
+
+        if (novoStatus === 'suspeito') {
+            if (ip && ip !== '—') {
+                const key = String(ip).replace(/\./g, '_').replace(/:/g, '_');
+                await db.collection('blocked_ips').doc(key).set({
+                    ip: ip,
+                    reason: 'marcado_suspeito',
+                    loginHistoricoId: docId,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdAtStr: new Date().toLocaleString('pt-BR'),
+                }, { merge: true });
+                showToast('⚠️ Suspeito — IP ' + ip + ' bloqueado no site público.', 'warning');
+            } else {
+                showToast('⚠️ Marcado como suspeito (IP não registrado — não foi possível bloquear por IP).', 'warning');
+            }
+        } else {
+            showToast('✅ Marcação removida (bloqueio por IP permanece — remova manualmente em Firestore se precisar).');
+        }
         loadSeguranca();
-    } catch(e) { showToast('Erro ao atualizar','error'); }
+    } catch (e) { showToast('Erro ao atualizar', 'error'); }
 }
 
 async function revogarAcesso(docId) {
@@ -1615,7 +2023,7 @@ async function confirmarRevogacao(docId) {
         }, { merge: true });
         showToast('🚫 Acesso revogado!');
         loadSeguranca();
-    } catch(e) { showToast('Erro ao revogar','error'); }
+    } catch (e) { showToast('Erro ao revogar', 'error'); }
 }
 
 async function encerrarTodasSessoes() {
@@ -1635,46 +2043,55 @@ async function encerrarTodasSessoes() {
         if (count > 0) { await batch.commit(); showToast('✅ ' + count + ' sessão(ões) encerrada(s)!'); }
         else showToast('Nenhuma outra sessão ativa.');
         loadSeguranca();
-    } catch(e) { showToast('Erro ao encerrar sessões','error'); }
+    } catch (e) { showToast('Erro ao encerrar sessões', 'error'); }
 }
 
 async function limparHistoricoAntigo() {
     if (!db) return;
-    const limite = new Date();
-    limite.setDate(limite.getDate() - 30);
-    const ts = firebase.firestore.Timestamp.fromDate(limite);
+    if (!confirm('Remove todo o histórico de logins no Firestore, exceto a sessão atual neste navegador. Continuar?')) return;
     try {
-        const snap = await db.collection('login_historico')
-            .where('loginAt', '<', ts)
-            .where('status', 'in', ['encerrado', 'expirado'])
-            .get();
-        const batch = db.batch();
-        snap.docs.forEach(d => batch.delete(d.ref));
-        if (snap.size > 0) { await batch.commit(); showToast('🗑️ ' + snap.size + ' registro(s) antigo(s) removido(s).'); }
-        else showToast('Nenhum histórico antigo para limpar.');
+        const snap = await db.collection('login_historico').get();
+        const sessionStart = localStorage.getItem(SESSION_KEY);
+        const currentLoginId = currentUser && sessionStart ? currentUser.uid + '_' + sessionStart : null;
+        const toDelete = snap.docs.filter(d => d.id !== currentLoginId);
+        if (!toDelete.length) {
+            showToast('Nenhum registro para remover além da sessão atual.');
+            loadSeguranca();
+            return;
+        }
+        const CHUNK = 400;
+        for (let i = 0; i < toDelete.length; i += CHUNK) {
+            const batch = db.batch();
+            toDelete.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
+            await batch.commit();
+        }
+        showToast('🗑️ ' + toDelete.length + ' registro(s) removido(s).');
         loadSeguranca();
-    } catch(e) { showToast('Erro ao limpar histórico','error'); }
+    } catch (e) {
+        console.error('limparHistoricoAntigo', e);
+        showToast('Erro ao limpar histórico', 'error');
+    }
 }
 
 
 // ========== CONFIGURAÇÕES ==========
 function loadConfiguracoes() {
     if (currentUser) {
-        setEl('settings-email',currentUser.email||'—');
-        setEl('settings-uid',currentUser.uid||'—');
+        setEl('settings-email', currentUser.email || '—');
+        setEl('settings-uid', currentUser.uid || '—');
         const sessionStart = localStorage.getItem(SESSION_KEY);
         const loginDisplay = sessionStart ? new Date(parseInt(sessionStart)).toLocaleString('pt-BR') : '—';
         const expDisplay = sessionStart ? new Date(parseInt(sessionStart) + SESSION_DURATION_MS).toLocaleString('pt-BR') : '—';
         setEl('settings-login-time', loginDisplay);
         setEl('settings-session-expires', expDisplay);
     }
-    setEl('settings-date',new Date().toLocaleDateString('pt-BR',{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
+    setEl('settings-date', new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
 }
 
 function exportarDados() {
-    if (!imoveisData.length) { showToast('Nenhum dado','error'); return; }
-    const blob = new Blob([JSON.stringify(imoveisData,null,2)],{type:'application/json'});
-    const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`leandro-imoveis-${new Date().toISOString().slice(0,10)}.json`});
+    if (!imoveisData.length) { showToast('Nenhum dado', 'error'); return; }
+    const blob = new Blob([JSON.stringify(imoveisData, null, 2)], { type: 'application/json' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `leandro-imoveis-${new Date().toISOString().slice(0, 10)}.json` });
     a.click(); showToast('Exportado!');
 }
 
@@ -1683,10 +2100,10 @@ function exportarDados() {
 function _syncTipoUI(tipo) {
     const isTerreno = tipo === 'Terreno';
     const terrenoFields = document.getElementById('terreno-fields');
-    const quartosGroup  = document.getElementById('imovel-quartos')?.closest('.form-group');
-    const vagasGroup    = document.getElementById('imovel-vagas')?.closest('.form-group');
-    const condGroup     = document.getElementById('imovel-condominio')?.closest('.form-group');
-    const iptuGroup     = document.getElementById('imovel-iptu')?.closest('.form-group');
+    const quartosGroup = document.getElementById('imovel-quartos')?.closest('.form-group');
+    const vagasGroup = document.getElementById('imovel-vagas')?.closest('.form-group');
+    const condGroup = document.getElementById('imovel-condominio')?.closest('.form-group');
+    const iptuGroup = document.getElementById('imovel-iptu')?.closest('.form-group');
     if (terrenoFields) terrenoFields.style.display = isTerreno ? '' : 'none';
     [quartosGroup, vagasGroup, condGroup, iptuGroup].forEach(g => {
         if (g) {
@@ -1705,7 +2122,7 @@ function _updateAnuncioPreview() {
         preview.textContent = 'Sem prazo definido — permanente';
     } else {
         const expira = new Date(Date.now() + dias * 86400000);
-        preview.textContent = `Expira em: ${expira.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'})}`;
+        preview.textContent = `Expira em: ${expira.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
     }
 }
 
@@ -1713,9 +2130,9 @@ function setupFormListeners() {
     document.getElementById('search-imoveis')?.addEventListener('input', e => {
         const t = e.target.value.toLowerCase();
         renderImoveisTable(imoveisData.filter(i =>
-            (i.titulo||'').toLowerCase().includes(t) ||
-            (i.bairro||'').toLowerCase().includes(t) ||
-            (i.descricao||'').toLowerCase().includes(t)
+            (i.titulo || '').toLowerCase().includes(t) ||
+            (i.bairro || '').toLowerCase().includes(t) ||
+            (i.descricao || '').toLowerCase().includes(t)
         ));
     });
     document.getElementById('filter-bairro')?.addEventListener('change', e => {
@@ -1723,15 +2140,15 @@ function setupFormListeners() {
         renderImoveisTable(b ? imoveisData.filter(i => i.bairro === b) : imoveisData);
     });
     document.getElementById('imovel-preco')?.addEventListener('input', e => {
-        let v = e.target.value.replace(/[^0-9]/g,'');
+        let v = e.target.value.replace(/[^0-9]/g, '');
         if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
     });
     document.getElementById('imovel-lanc-apartir')?.addEventListener('input', e => {
-        let v = e.target.value.replace(/[^0-9]/g,'');
+        let v = e.target.value.replace(/[^0-9]/g, '');
         if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
     });
     document.getElementById('imovel-lanc-entrada')?.addEventListener('input', e => {
-        let v = e.target.value.replace(/[^0-9]/g,'');
+        let v = e.target.value.replace(/[^0-9]/g, '');
         if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
     });
 
@@ -1764,48 +2181,48 @@ function setupFormListeners() {
 
     document.getElementById('imovel-form')?.addEventListener('submit', async e => {
         e.preventDefault();
-        const id      = document.getElementById('imovel-id').value;
-        const fotos   = Array.from(document.querySelectorAll('.foto-input')).map(i => i.value.trim()).filter(Boolean);
-        const videos  = Array.from(document.querySelectorAll('.video-input')).map(i => i.value.trim()).filter(Boolean);
-        const getVal  = id => (document.getElementById(id)?.value || '').trim();
-        const getNum  = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
-        const tipo    = getVal('imovel-tipo') || 'Apartamento';
+        const id = document.getElementById('imovel-id').value;
+        const fotos = Array.from(document.querySelectorAll('.foto-input')).map(i => i.value.trim()).filter(Boolean);
+        const videos = Array.from(document.querySelectorAll('.video-input')).map(i => i.value.trim()).filter(Boolean);
+        const getVal = id => (document.getElementById(id)?.value || '').trim();
+        const getNum = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+        const tipo = getVal('imovel-tipo') || 'Apartamento';
         const isTerreno = tipo === 'Terreno';
-        const anuncioAtivo   = getVal('imovel-anuncio-ativo') === 'true';
+        const anuncioAtivo = getVal('imovel-anuncio-ativo') === 'true';
         const anuncioDuracao = parseInt(getVal('imovel-anuncio-duracao')) || 0;
         const precoModo = getVal('imovel-preco-modo') || 'normal';
 
         const data = {
-            titulo:    getVal('imovel-titulo'),
-            bairro:    getVal('imovel-bairro'),
-            area:      parseInt(getVal('imovel-area')) || 0,
-            preco:     precoModo === 'lancamento'
+            titulo: getVal('imovel-titulo'),
+            bairro: getVal('imovel-bairro'),
+            area: parseInt(getVal('imovel-area')) || 0,
+            preco: precoModo === 'lancamento'
                 ? 0
-                : (parseFloat(getVal('imovel-preco').replace(/[^0-9]/g,'')) || 0),
+                : (parseFloat(getVal('imovel-preco').replace(/[^0-9]/g, '')) || 0),
             descricao: getVal('imovel-descricao'),
-            imagem:    getVal('imovel-imagem'),
-            fotos:     fotos.length ? fotos : [getVal('imovel-imagem')],
+            imagem: getVal('imovel-imagem'),
+            fotos: fotos.length ? fotos : [getVal('imovel-imagem')],
             videos,
-            video:     videos[0] || null,
+            video: videos[0] || null,
             tipo,
-            status:    getVal('imovel-status') || 'disponivel',
+            status: getVal('imovel-status') || 'disponivel',
             precoModo,
             lancamento: precoModo === 'lancamento' ? {
-                aPartirDe: parseFloat(getVal('imovel-lanc-apartir').replace(/[^0-9]/g,'')) || null,
-                entrada:   parseFloat(getVal('imovel-lanc-entrada').replace(/[^0-9]/g,'')) || null,
-                parcelas:  (getVal('imovel-lanc-parcelas') || null),
+                aPartirDe: parseFloat(getVal('imovel-lanc-apartir').replace(/[^0-9]/g, '')) || null,
+                entrada: parseFloat(getVal('imovel-lanc-entrada').replace(/[^0-9]/g, '')) || null,
+                parcelas: (getVal('imovel-lanc-parcelas') || null),
             } : null,
             // Campos de imóvel normal (0 para terreno)
-            quartos:    isTerreno ? 0 : (parseInt(getVal('imovel-quartos')) || 0),
-            vagas:      isTerreno ? 0 : getNum('imovel-vagas'),
+            quartos: isTerreno ? 0 : (parseInt(getVal('imovel-quartos')) || 0),
+            vagas: isTerreno ? 0 : getNum('imovel-vagas'),
             condominio: isTerreno ? 0 : getNum('imovel-condominio'),
-            iptu:       isTerreno ? getNum('imovel-iptu-terreno') : getNum('imovel-iptu'),
+            iptu: isTerreno ? getNum('imovel-iptu-terreno') : getNum('imovel-iptu'),
             // Campos exclusivos de terreno (null para imóveis normais)
-            frente:      isTerreno ? (parseFloat(getVal('imovel-frente')) || null) : null,
-            zoneamento:  isTerreno ? (getVal('imovel-zoneamento') || null) : null,
-            topografia:  isTerreno ? (getVal('imovel-topografia') || null) : null,
-            localidade:  isTerreno ? (getVal('imovel-localidade') || null) : null,
-            precoTipo:   isTerreno ? (getVal('imovel-preco-tipo') || 'total') : 'total',
+            frente: isTerreno ? (parseFloat(getVal('imovel-frente')) || null) : null,
+            zoneamento: isTerreno ? (getVal('imovel-zoneamento') || null) : null,
+            topografia: isTerreno ? (getVal('imovel-topografia') || null) : null,
+            localidade: isTerreno ? (getVal('imovel-localidade') || null) : null,
+            precoTipo: isTerreno ? (getVal('imovel-preco-tipo') || 'total') : 'total',
             suites: parseInt(getVal('imovel-suites')) || 0,
             banheiros: parseInt(getVal('imovel-banheiros')) || 0,
             andar: getVal('imovel-andar') ? parseInt(getVal('imovel-andar')) : null,
@@ -1821,7 +2238,7 @@ function setupFormListeners() {
                 ? new Date(Date.now() + anuncioDuracao * 86400000).toISOString()
                 : (anuncioAtivo ? null : null), // null = sem prazo quando permanente
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        };  
+        };
 
         const btn = document.querySelector('#imovel-form .btn-primary');
         btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true;
@@ -1835,17 +2252,17 @@ function setupFormListeners() {
                 showToast('✅ Imóvel adicionado!');
             }
             resetForm(); showSection('imoveis');
-        } catch(err) { showToast('Erro ao salvar — ' + err.message, 'error'); }
+        } catch (err) { showToast('Erro ao salvar — ' + err.message, 'error'); }
         finally {
             btn.innerHTML = '<i class="fas fa-save"></i><span id="btn-submit-text">Salvar Imóvel</span>';
             btn.disabled = false;
         }
-        ['imovel-suites','imovel-banheiros','imovel-andar',
-            'imovel-sol','imovel-posicao','imovel-mobiliado',
-            'imovel-area-privativa','imovel-total-andares'].forEach(id => {
-               const el = document.getElementById(id);
-               if (el) el.value = el.type === 'number' ? '0' : '';
-           });
+        ['imovel-suites', 'imovel-banheiros', 'imovel-andar',
+            'imovel-sol', 'imovel-posicao', 'imovel-mobiliado',
+            'imovel-area-privativa', 'imovel-total-andares'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = el.type === 'number' ? '0' : '';
+            });
     });
 }
 
@@ -1941,194 +2358,6 @@ function removeVideoInput() {
         container.querySelectorAll('.video-input').length > 1 ? '' : 'none';
 }
 
-/** Coloca URL no campo principal (se vazio) ou na primeira galeria vazia / nova linha */
-function appendOptimizedUrlToFotos(url) {
-    if (!url) return;
-    const main = document.getElementById('imovel-imagem');
-    if (main && !String(main.value || '').trim()) {
-        main.value = url;
-        return;
-    }
-    const container = document.getElementById('fotos-inputs-container');
-    if (!container) return;
-    const inputs = container.querySelectorAll('.foto-input');
-    for (let i = 0; i < inputs.length; i++) {
-        if (!String(inputs[i].value || '').trim()) {
-            inputs[i].value = url;
-            return;
-        }
-    }
-    addFotoInput();
-    const last = container.querySelector('.foto-input:last-of-type');
-    if (last) last.value = url;
-}
-
-function appendOptimizedUrlToVideos(url) {
-    if (!url) return;
-    const container = document.getElementById('videos-inputs-container');
-    if (!container) return;
-    const inputs = container.querySelectorAll('.video-input');
-    for (let i = 0; i < inputs.length; i++) {
-        if (!String(inputs[i].value || '').trim()) {
-            inputs[i].value = url;
-            return;
-        }
-    }
-    addVideoInput();
-    const last = container.querySelector('.video-input:last-of-type');
-    if (last) last.value = url;
-}
-
-function setupMediaUploader() {
-    const btnF = document.getElementById('lb-btn-pick-fotos');
-    const inpF = document.getElementById('lb-upload-fotos');
-    const btnV = document.getElementById('lb-btn-pick-videos');
-    const inpV = document.getElementById('lb-upload-videos');
-    const statusEl = document.getElementById('lb-upload-status');
-    if (!btnF || !inpF) return;
-    btnF.addEventListener('click', () => inpF.click());
-    if (btnV && inpV) btnV.addEventListener('click', () => inpV.click());
-
-    // ── Helper: atualiza status com barra de progresso embutida ──
-    function setStatus(msg, pct, type) {
-        if (!statusEl) return;
-        const colors = { ok: 'var(--green)', error: 'var(--red)', loading: 'var(--accent)' };
-        const color = colors[type] || colors.loading;
-        if (pct !== undefined && pct >= 0 && pct < 100) {
-            statusEl.innerHTML = `
-                <div style="display:flex;align-items:center;gap:.6rem;">
-                    <span style="color:${color};font-size:.78rem;flex:1;">${msg}</span>
-                    <span style="font-size:.72rem;font-weight:700;color:${color};min-width:36px;text-align:right;">${pct}%</span>
-                </div>
-                <div style="height:3px;background:rgba(255,255,255,.06);border-radius:99px;margin-top:.3rem;overflow:hidden;">
-                    <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width .2s ease;"></div>
-                </div>`;
-        } else if (pct === 100) {
-            statusEl.innerHTML = `<span style="color:var(--green);font-size:.78rem;">✅ ${msg}</span>`;
-            setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
-        } else if (type === 'error') {
-            statusEl.innerHTML = `<span style="color:var(--red);font-size:.78rem;">❌ ${msg}</span>`;
-            setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 5000);
-        } else {
-            statusEl.innerHTML = `<span style="color:${color};font-size:.78rem;">${msg}</span>`;
-        }
-    }
-
-    // ── FOTOS ──
-    inpF.addEventListener('change', async () => {
-        const MO = window.LBMediaOptimizer;
-        if (!MO) {
-            setStatus('Módulo de mídia não carregado. Recarregue a página.', undefined, 'error');
-            showToast('Módulo de mídia não carregado.', 'error');
-            inpF.value = ''; return;
-        }
-        if (!auth || !auth.currentUser) {
-            setStatus('Faça login para enviar arquivos.', undefined, 'error');
-            showToast('Entre no painel para enviar arquivos.', 'error');
-            inpF.value = ''; return;
-        }
-        const files = Array.from(inpF.files || []);
-        inpF.value = '';
-        if (!files.length) return;
-
-        // Desabilita botões durante upload
-        btnF.disabled = true;
-        if (btnV) btnV.disabled = true;
-
-        let ok = 0, erros = [];
-        for (let i = 0; i < files.length; i++) {
-            const f = files[i];
-            const label = `Foto ${i + 1}${files.length > 1 ? '/' + files.length : ''}: ${f.name.slice(0, 20)}`;
-            setStatus(`${label} — otimizando...`, 5, 'loading');
-            try {
-                const url = await MO.uploadOptimizedImage(f, pct => {
-                    const fase = pct < 35 ? 'otimizando...' : pct < 100 ? `enviando...` : 'concluído';
-                    setStatus(`${label} — ${fase}`, pct, 'loading');
-                });
-                appendOptimizedUrlToFotos(url);
-                ok++;
-                if (files.length === 1) {
-                    setStatus(`Foto enviada com sucesso!`, 100, 'ok');
-                } else {
-                    setStatus(`${i + 1}/${files.length} fotos enviadas...`, Math.round(((i + 1) / files.length) * 100), 'loading');
-                }
-            } catch (e) {
-                erros.push(f.name);
-                setStatus(`Erro: ${e.message || 'Falha no upload'}`, undefined, 'error');
-                showToast(e.message || 'Erro ao enviar foto', 'error');
-                console.error('Upload foto error:', e);
-            }
-        }
-
-        btnF.disabled = false;
-        if (btnV) btnV.disabled = false;
-
-        if (ok > 0 && erros.length === 0) {
-            setStatus(`${ok} foto${ok > 1 ? 's' : ''} enviada${ok > 1 ? 's' : ''} com sucesso! ✅`, 100, 'ok');
-            showToast(ok === 1 ? '📸 Foto otimizada e linkada!' : `📸 ${ok} fotos otimizadas!`, 'success');
-        } else if (ok > 0 && erros.length > 0) {
-            showToast(`${ok} ok, ${erros.length} com erro`, 'warning');
-        }
-    });
-
-    // ── VÍDEOS ──
-    if (inpV) {
-        inpV.addEventListener('change', async () => {
-            const MO = window.LBMediaOptimizer;
-            if (!MO) {
-                setStatus('Módulo de mídia não carregado. Recarregue a página.', undefined, 'error');
-                showToast('Módulo de mídia não carregado.', 'error');
-                inpV.value = ''; return;
-            }
-            if (!auth || !auth.currentUser) {
-                setStatus('Faça login para enviar arquivos.', undefined, 'error');
-                showToast('Entre no painel para enviar arquivos.', 'error');
-                inpV.value = ''; return;
-            }
-            const files = Array.from(inpV.files || []);
-            inpV.value = '';
-            if (!files.length) return;
-
-            btnF.disabled = true;
-            if (btnV) btnV.disabled = true;
-
-            let ok = 0, erros = [];
-            for (let i = 0; i < files.length; i++) {
-                const f = files[i];
-                const sizeMB = (f.size / 1024 / 1024).toFixed(0);
-                const label = `Vídeo ${i + 1}${files.length > 1 ? '/' + files.length : ''} (${sizeMB} MB)`;
-                setStatus(`${label} — verificando...`, 3, 'loading');
-                try {
-                    const url = await MO.uploadOptimizedVideo(f, pct => {
-                        const fase = pct < 8 ? 'verificando...' : pct < 100 ? `enviando...` : 'concluído';
-                        setStatus(`${label} — ${fase}`, pct, 'loading');
-                    });
-                    appendOptimizedUrlToVideos(url);
-                    ok++;
-                    if (files.length === 1) {
-                        setStatus(`Vídeo enviado com sucesso!`, 100, 'ok');
-                    }
-                } catch (e) {
-                    erros.push(f.name);
-                    setStatus(`Erro: ${e.message || 'Falha no upload'}`, undefined, 'error');
-                    showToast(e.message || 'Erro ao enviar vídeo', 'error');
-                    console.error('Upload vídeo error:', e);
-                }
-            }
-
-            btnF.disabled = false;
-            if (btnV) btnV.disabled = false;
-
-            if (ok > 0 && erros.length === 0) {
-                setStatus(`${ok} vídeo${ok > 1 ? 's' : ''} enviado${ok > 1 ? 's' : ''} com sucesso! ✅`, 100, 'ok');
-                showToast(ok === 1 ? '🎬 Vídeo enviado!' : `🎬 ${ok} vídeos enviados!`, 'success');
-            } else if (ok > 0 && erros.length > 0) {
-                showToast(`${ok} ok, ${erros.length} com erro`, 'warning');
-            }
-        });
-    }
-}
-
 async function editImovel(id) {
     try {
         const doc = await db.collection('imoveis').doc(id).get();
@@ -2155,13 +2384,13 @@ async function editImovel(id) {
         setF('imovel-vagas', d.vagas || 0);
         setF('imovel-condominio', d.condominio || 0);
         setF('imovel-iptu', d.tipo === 'Terreno' ? 0 : (d.iptu || 0));
-        setF('imovel-suites',        d.suites || 0);
-        setF('imovel-banheiros',     d.banheiros || 0);
-        setF('imovel-andar',         d.andar ?? '');
-        setF('imovel-sol',           d.sol ?? '');
-        setF('imovel-posicao',       d.posicao ?? '');
-        setF('imovel-mobiliado',     d.mobiliado ?? '');
-        setF('imovel-area-privativa',d.areaPrivativa ?? '');
+        setF('imovel-suites', d.suites || 0);
+        setF('imovel-banheiros', d.banheiros || 0);
+        setF('imovel-andar', d.andar ?? '');
+        setF('imovel-sol', d.sol ?? '');
+        setF('imovel-posicao', d.posicao ?? '');
+        setF('imovel-mobiliado', d.mobiliado ?? '');
+        setF('imovel-area-privativa', d.areaPrivativa ?? '');
         setF('imovel-total-andares', d.totalAndares ?? '');
 
         // ── Campos de Terreno ──
@@ -2176,7 +2405,7 @@ async function editImovel(id) {
             if (precoNormalWrap) precoNormalWrap.style.display = mode === 'lancamento' ? 'none' : '';
             if (lancWrap) lancWrap.style.display = mode === 'lancamento' ? '' : 'none';
             if (precoInput) precoInput.required = mode !== 'lancamento';
-        } catch {}
+        } catch { }
         if (isTerreno) {
             setF('imovel-frente', d.frente ?? '');
             setF('imovel-zoneamento', d.zoneamento ?? '');
@@ -2201,7 +2430,7 @@ async function editImovel(id) {
                     preview.textContent = '⚠️ Anúncio expirado em ' + expDate.toLocaleDateString('pt-BR');
                     preview.style.color = 'var(--red)';
                 } else {
-                    preview.textContent = 'Expira em: ' + expDate.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric'});
+                    preview.textContent = 'Expira em: ' + expDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     preview.style.color = 'var(--amber)';
                 }
             } else if (d.anuncioAtivo) {
@@ -2217,7 +2446,7 @@ async function editImovel(id) {
         if (container) {
             const fList = (d.fotos && d.fotos.length > 1) ? d.fotos : [(d.fotos?.[0] || ''), ''];
             container.innerHTML = fList.map((f, i) =>
-                `<input type="url" class="foto-input" placeholder="Foto ${i+1} — URL" value="${f || ''}">`
+                `<input type="url" class="foto-input" placeholder="Foto ${i + 1} — URL" value="${f || ''}">`
             ).join('');
             const btnRemove = document.getElementById('btn-remove-foto');
             if (btnRemove) btnRemove.style.display = fList.length > 2 ? '' : 'none';
@@ -2230,7 +2459,7 @@ async function editImovel(id) {
             const vContainer = document.getElementById('videos-inputs-container');
             if (vContainer) {
                 vContainer.innerHTML = videoList.map((v, i) =>
-                    `<input type="url" class="video-input" placeholder="Vídeo ${i+1} — URL do YouTube" value="${v || ''}">`
+                    `<input type="url" class="video-input" placeholder="Vídeo ${i + 1} — URL do YouTube" value="${v || ''}">`
                 ).join('');
                 const btnRemoveV = document.getElementById('btn-remove-video');
                 if (btnRemoveV) btnRemoveV.style.display = videoList.length > 1 ? '' : 'none';
@@ -2240,7 +2469,7 @@ async function editImovel(id) {
         const submitTxt = document.getElementById('btn-submit-text');
         if (submitTxt) submitTxt.textContent = 'Atualizar Imóvel';
         showSection('adicionar');
-    } catch(e) { showToast('Erro ao carregar', 'error'); console.error(e); }
+    } catch (e) { showToast('Erro ao carregar', 'error'); console.error(e); }
 }
 
 // ========== MOBILE NAVIGATION ==========
@@ -2277,46 +2506,48 @@ function syncMobileBadges() {
 }
 
 // ========== UTILS ==========
-function setEl(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
-function showToast(message,type='success'){
-    const toast=document.getElementById('toast'),msg=document.getElementById('toast-message'),icon=toast.querySelector('i');
-    msg.textContent=message;
-    if(type==='error'){toast.style.borderColor='rgba(239,68,68,0.3)';icon.className='fas fa-exclamation-circle';icon.style.color='var(--red)';}
-    else if(type==='warning'){toast.style.borderColor='rgba(245,158,11,0.3)';icon.className='fas fa-exclamation-triangle';icon.style.color='var(--amber)';}
-    else{toast.style.borderColor='rgba(34,197,94,0.3)';icon.className='fas fa-check-circle';icon.style.color='var(--green)';}
-    toast.classList.add('active'); setTimeout(()=>toast.classList.remove('active'),3200);
+function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast'), msg = document.getElementById('toast-message'), icon = toast.querySelector('i');
+    msg.textContent = message;
+    if (type === 'error') { toast.style.borderColor = 'rgba(239,68,68,0.3)'; icon.className = 'fas fa-exclamation-circle'; icon.style.color = 'var(--red)'; }
+    else if (type === 'warning') { toast.style.borderColor = 'rgba(245,158,11,0.3)'; icon.className = 'fas fa-exclamation-triangle'; icon.style.color = 'var(--amber)'; }
+    else { toast.style.borderColor = 'rgba(34,197,94,0.3)'; icon.className = 'fas fa-check-circle'; icon.style.color = 'var(--green)'; }
+    toast.classList.add('active'); setTimeout(() => toast.classList.remove('active'), 3200);
 }
 
 // ========== INIT ==========
 document.addEventListener('DOMContentLoaded', () => {
     if (!initFirebase()) return;
     setupAuthListener(); setupLoginForm(); setupNavigation(); setupFormListeners();
-    setupMediaUploader();
     auth.onAuthStateChanged(u => { if (u) startRealtimeListeners(); else stopRealtimeListeners(); });
-    document.getElementById('delete-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeDeleteModal();});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDeleteModal();});
+    document.getElementById('delete-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDeleteModal(); });
     updateLastRefreshIndicator();
-    
+
 });
 
 // ========== INDICADOR DE ÚLTIMA ATUALIZAÇÃO ==========
 function updateLastRefreshIndicator() {
     const el = document.getElementById('last-refresh');
-    if (el) el.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    if (el) {
+        el.textContent = '⟳ ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        el.style.display = 'inline-flex';
+    }
 }
 
 // ========== LISTENERS TEMPO REAL (onSnapshot completo) ==========
-let _imoveisListener   = null;
-let _lixeiraListener   = null;
-let _visitasListener   = null;
-let _linksListener     = null;
+let _imoveisListener = null;
+let _lixeiraListener = null;
+let _visitasListener = null;
+let _linksListener = null;
 let _imoveisInitialized = false;
 let _lixeiraInitialized = false;
 
 function startRealtimeListeners() {
     // ---- IMÓVEIS ----
     if (!_imoveisListener) {
-        _imoveisListener = db.collection('imoveis').orderBy('createdAt','desc').onSnapshot(snap => {
+        _imoveisListener = db.collection('imoveis').orderBy('createdAt', 'desc').onSnapshot(snap => {
             const newData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             const wasInit = _imoveisInitialized;
             _imoveisInitialized = true;
@@ -2324,9 +2555,9 @@ function startRealtimeListeners() {
             if (wasInit) {
                 // Detectar mudanças e notificar
                 snap.docChanges().forEach(change => {
-                    if (change.type === 'added')    showNotification('🏠 Novo imóvel adicionado', change.doc.data().titulo || '', 'green');
+                    if (change.type === 'added') showNotification('🏠 Novo imóvel adicionado', change.doc.data().titulo || '', 'green');
                     if (change.type === 'modified') showNotification('✏️ Imóvel atualizado', change.doc.data().titulo || '', 'amber');
-                    if (change.type === 'removed')  showNotification('🗑️ Imóvel removido', change.doc.data().titulo || '', 'red');
+                    if (change.type === 'removed') showNotification('🗑️ Imóvel removido', change.doc.data().titulo || '', 'red');
                 });
             }
 
@@ -2338,10 +2569,10 @@ function startRealtimeListeners() {
             if (activeSection === 'section-dashboard') {
                 const total = imoveisData.length;
                 const bairros = [...new Set(imoveisData.map(i => i.bairro))];
-                const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s,i)=>s+(parseInt(i.quartos)||0),0)/total) : 0;
-                const precoMedio = total > 0 ? Math.round(imoveisData.reduce((s,i)=>s+(parseFloat(i.preco)||0),0)/total) : 0;
+                const mediaQ = total > 0 ? Math.round(imoveisData.reduce((s, i) => s + (parseInt(i.quartos) || 0), 0) / total) : 0;
+                const precoMedio = total > 0 ? Math.round(imoveisData.reduce((s, i) => s + (parseFloat(i.preco) || 0), 0) / total) : 0;
                 setEl('total-imoveis', total); setEl('total-bairros', bairros.length);
-                setEl('media-quartos', mediaQ); setEl('preco-medio','R$ '+precoMedio.toLocaleString('pt-BR'));
+                setEl('media-quartos', mediaQ); setEl('preco-medio', 'R$ ' + precoMedio.toLocaleString('pt-BR'));
                 setEl('badge-imoveis', total);
                 syncMobileBadges();
                 renderBairrosChart('bairros-chart');
@@ -2376,13 +2607,13 @@ function startRealtimeListeners() {
     // ---- VISITAS (notificação de novo visitante + refresh do relatório) ----
     if (!_visitasListener) {
         let _visitasInit = false;
-        _visitasListener = db.collection('visitas').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+        _visitasListener = db.collection('visitas').orderBy('timestamp', 'desc').limit(1).onSnapshot(snap => {
             if (!_visitasInit) { _visitasInit = true; return; }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
                     const ua = parseUA(v.userAgent || '');
-                    showNotification('👀 Novo visitante', `${v.page||'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`, 'blue');
+                    showNotification('👀 Novo visitante', `${v.page || 'Site'} — ${ua.browser} · ${ua.os} · ${ua.device}`, 'blue');
                     updateLastRefreshIndicator();
                     // Atualiza só o dashboard se estiver visível — NÃO recarrega o relatório de visitas
                     const activeSection = document.querySelector('.admin-section.active')?.id;
@@ -2395,14 +2626,14 @@ function startRealtimeListeners() {
     // ---- LINKS COPIADOS ----
     if (!_linksListener) {
         let _linksInit = false;
-        _linksListener = db.collection('links_copiados').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+        _linksListener = db.collection('links_copiados').orderBy('timestamp', 'desc').limit(1).onSnapshot(snap => {
             if (!_linksInit) { _linksInit = true; return; }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const v = change.doc.data();
-                    showNotification('🔗 Link copiado!', `"${v.titulo||'Imóvel'}" — ${v.deviceId?v.deviceId.slice(0,14)+'…':''}`, 'green');
+                    showNotification('🔗 Link copiado!', `"${v.titulo || 'Imóvel'}" — ${v.deviceId ? v.deviceId.slice(0, 14) + '…' : ''}`, 'green');
                     // Push notification do OS
-                    sendPushNotification('🔗 Link Copiado — LB Imóveis', `"${v.titulo||'Imóvel'}" foi compartilhado!`);
+                    sendPushNotification('🔗 Link Copiado — LB Imóveis', `"${v.titulo || 'Imóvel'}" foi compartilhado!`);
                     const activeSection = document.querySelector('.admin-section.active')?.id;
                     if (activeSection === 'section-dashboard') loadDashboardVisitas();
                 }
@@ -2417,12 +2648,12 @@ function startRealtimeListeners() {
 }
 
 function stopRealtimeListeners() {
-    if (_imoveisListener)  { _imoveisListener();  _imoveisListener  = null; _imoveisInitialized = false; }
-    if (_lixeiraListener)  { _lixeiraListener();  _lixeiraListener  = null; _lixeiraInitialized = false; }
-    if (_visitasListener)  { _visitasListener();  _visitasListener  = null; }
-    if (_linksListener)    { _linksListener();     _linksListener    = null; }
-    if (_presencaListener) { _presencaListener();  _presencaListener = null; }
-    if (_presencaTick)     { clearInterval(_presencaTick); _presencaTick = null; }
+    if (_imoveisListener) { _imoveisListener(); _imoveisListener = null; _imoveisInitialized = false; }
+    if (_lixeiraListener) { _lixeiraListener(); _lixeiraListener = null; _lixeiraInitialized = false; }
+    if (_visitasListener) { _visitasListener(); _visitasListener = null; }
+    if (_linksListener) { _linksListener(); _linksListener = null; }
+    if (_presencaListener) { _presencaListener(); _presencaListener = null; }
+    if (_presencaTick) { clearInterval(_presencaTick); _presencaTick = null; }
     _presencaCacheDocs = [];
     stopVisitasRT();
     if (_leadsListener) { _leadsListener(); _leadsListener = null; }
@@ -2444,7 +2675,7 @@ function _processNextNotif() {
     if (!_notifQueue.length) { _notifActive = false; return; }
     _notifActive = true;
     const { title, body, color } = _notifQueue.shift();
-    const colors = { blue:'var(--accent)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)', purple:'var(--purple)' };
+    const colors = { blue: 'var(--accent)', green: 'var(--green)', amber: 'var(--amber)', red: 'var(--red)', purple: 'var(--purple)' };
     const c = colors[color] || colors.blue;
 
     let el = document.getElementById('_realtime-notif');
@@ -2505,10 +2736,10 @@ function _dismissNotif() {
 async function loadLinksCopiados() {
     if (!db) return;
     try {
-        const snap = await db.collection('links_copiados').orderBy('timestamp','desc').limit(100).get();
+        const snap = await db.collection('links_copiados').orderBy('timestamp', 'desc').limit(100).get();
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         return data;
-    } catch(e) { return []; }
+    } catch (e) { return []; }
 }
 
 // ========== PERFIL DE VISITANTE ==========
@@ -2518,85 +2749,118 @@ async function loadPerfilVisitante() {
     if (loading) loading.style.display = 'flex';
     if (content) content.style.display = 'none';
     try {
-        const [visitasSnap, imoveisSnap, imoveisListSnap, linksSnap] = await Promise.all([
-            db.collection('visitas').orderBy('timestamp','desc').get(),
-            db.collection('visitas_imoveis').orderBy('timestamp','desc').get(),
+        const [visitasSnap, imoveisSnap, imoveisListSnap, linksSnap, tempoPermSnap, tempoImovelSnap, nicksSnap] = await Promise.all([
+            db.collection('visitas').orderBy('timestamp', 'desc').get(),
+            db.collection('visitas_imoveis').orderBy('timestamp', 'desc').get(),
             db.collection('imoveis').get(),
-            db.collection('links_copiados').orderBy('timestamp','desc').get()
+            db.collection('links_copiados').orderBy('timestamp', 'desc').get(),
+            db.collection('tempo_permanencia').get(),
+            db.collection('tempo_imovel').get().catch(() => ({ docs: [] })),
+            db.collection('visitantes_nicks').get().catch(() => ({ docs: [] }))
         ]);
-        const visitas = visitasSnap.docs.map(d => ({id:d.id,...d.data()}));
-        const imoveisViews = imoveisSnap.docs.map(d => ({id:d.id,...d.data()}));
-        const linksCopiados = linksSnap.docs.map(d => ({id:d.id,...d.data()}));
+        const visitas = visitasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const imoveisViews = imoveisSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const linksCopiados = linksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const tempoPerm = tempoPermSnap?.docs ? tempoPermSnap.docs.map(d => d.data()) : [];
+        const tempoImovel = tempoImovelSnap?.docs ? tempoImovelSnap.docs.map(d => d.data()) : [];
         const imoveis = {};
         imoveisListSnap.docs.forEach(d => { imoveis[d.id] = d.data(); });
+        const nickByDevice = {};
+        (nicksSnap.docs || []).forEach(d => {
+            const n = String((d.data().nick || '')).trim();
+            if (n) nickByDevice[d.id] = n;
+        });
         if (loading) loading.style.display = 'none';
         if (content) content.style.display = 'block';
-        renderPerfilVisitante(visitas, imoveisViews, imoveis, linksCopiados);
+        renderPerfilVisitante(visitas, imoveisViews, imoveis, linksCopiados, tempoPerm, tempoImovel, nickByDevice);
         // Carrega gráfico de performance logo após renderizar
         setTimeout(loadPerformanceImovel, 200);
-    } catch(e) {
-        console.error(e);
-        showToast('Erro ao carregar perfil','error');
+    } catch (e) {
+        console.error('Erro ao carregar perfil:', e);
+        showToast('Erro ao carregar perfil', 'error');
         if (loading) loading.style.display = 'none';
     }
 }
 
-function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopiados) {
+function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopiados, tempoPerm, tempoImovel, nickByDevice = {}) {
     linksCopiados = linksCopiados || [];
+    tempoPerm = tempoPerm || [];
+    tempoImovel = tempoImovel || [];
     const content = document.getElementById('perfil-content');
+
+    const formatTimeSpent = (seconds) => {
+        if (!seconds) return '—';
+        if (seconds < 60) return `${Math.floor(seconds)}s`;
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}m ${s}s`;
+    };
 
     // Agrupa visitas por deviceId
     const devMap = {};
     visitas.forEach(v => {
-        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:v.userAgent };
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: v.userAgent, totalTime: 0 };
         devMap[v.deviceId].pages.push(v.page);
         if (v.date < devMap[v.deviceId].firstSeen) devMap[v.deviceId].firstSeen = v.date;
         if (v.date > devMap[v.deviceId].lastSeen) devMap[v.deviceId].lastSeen = v.date;
     });
 
+    // Calcula tempos totais por deviceId
+    tempoPerm.forEach(t => {
+        if (!devMap[t.deviceId]) devMap[t.deviceId] = { deviceId: t.deviceId, pages: [], firstSeen: t.date, lastSeen: t.date, ua: '', totalTime: 0 };
+        devMap[t.deviceId].totalTime += (Number(t.timeSpent) || 0);
+    });
+
     // Imóveis vistos por device
     imoveisViews.forEach(v => {
-        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:'' };
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: '', totalTime: 0 };
         if (!devMap[v.deviceId].imoveisVistos) devMap[v.deviceId].imoveisVistos = [];
-        devMap[v.deviceId].imoveisVistos.push({ id:v.imovelId, titulo:v.titulo, bairro:v.bairro, date:v.date });
+
+        let imovelTime = 0;
+        tempoImovel.forEach(t => {
+            if (t.deviceId === v.deviceId && t.imovelId === v.imovelId) {
+                imovelTime += (Number(t.timeSpent) || 0);
+            }
+        });
+
+        devMap[v.deviceId].imoveisVistos.push({ id: v.imovelId, titulo: v.titulo, bairro: v.bairro, date: v.date, timeSpent: imovelTime });
     });
 
     // Links copiados por device
     const linksByDevice = {};
     linksCopiados.forEach(v => {
         if (!linksByDevice[v.deviceId]) linksByDevice[v.deviceId] = [];
-        linksByDevice[v.deviceId].push({ titulo:v.titulo, imovelId:v.imovelId, date:v.date });
-        // também garante o device no mapa
-        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId:v.deviceId, pages:[], firstSeen:v.date, lastSeen:v.date, ua:'' };
+        linksByDevice[v.deviceId].push({ titulo: v.titulo, imovelId: v.imovelId, date: v.date });
+        if (!devMap[v.deviceId]) devMap[v.deviceId] = { deviceId: v.deviceId, pages: [], firstSeen: v.date, lastSeen: v.date, ua: '', totalTime: 0 };
     });
 
     // Top imóveis mais vistos
     const imovelCount = {};
     imoveisViews.forEach(v => {
-        if (!imovelCount[v.imovelId]) imovelCount[v.imovelId] = { id:v.imovelId, titulo:v.titulo, bairro:v.bairro, count:0, devices:new Set() };
+        if (!imovelCount[v.imovelId]) imovelCount[v.imovelId] = { id: v.imovelId, titulo: v.titulo, bairro: v.bairro, count: 0, devices: new Set() };
         imovelCount[v.imovelId].count++;
         imovelCount[v.imovelId].devices.add(v.deviceId);
     });
-    const topImoveis = Object.values(imovelCount).sort((a,b)=>b.count-a.count).slice(0,10);
+    const topImoveis = Object.values(imovelCount).sort((a, b) => b.count - a.count).slice(0, 10);
 
     // Top links copiados
     const linkCount = {};
     linksCopiados.forEach(v => {
         const k = v.imovelId || v.titulo;
-        if (!linkCount[k]) linkCount[k] = { titulo:v.titulo||k, count:0, devices:new Set() };
+        if (!linkCount[k]) linkCount[k] = { titulo: v.titulo || k, count: 0, devices: new Set() };
         linkCount[k].count++;
         linkCount[k].devices.add(v.deviceId);
     });
-    const topLinks = Object.values(linkCount).sort((a,b)=>b.count-a.count).slice(0,5);
+    const topLinks = Object.values(linkCount).sort((a, b) => b.count - a.count).slice(0, 5);
 
-    const devices = Object.values(devMap).sort((a,b)=>(b.lastSeen||'')>(a.lastSeen||'')?1:-1);
+    const devices = Object.values(devMap).sort((a, b) => (b.lastSeen || '') > (a.lastSeen || '') ? 1 : -1);
 
     content.innerHTML = `
     <div class="stats-grid" style="margin-bottom:1.5rem;">
         <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-fingerprint"></i></div><div class="stat-info"><span class="stat-value">${devices.length}</span><span class="stat-label">Dispositivos Únicos</span></div></div>
         <div class="stat-card"><div class="stat-icon green"><i class="fas fa-building"></i></div><div class="stat-info"><span class="stat-value">${imoveisViews.length}</span><span class="stat-label">Views de Imóveis</span></div></div>
         <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-link"></i></div><div class="stat-info"><span class="stat-value">${linksCopiados.length}</span><span class="stat-label">Links Copiados</span></div></div>
-        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-fire"></i></div><div class="stat-info"><span class="stat-value">${topImoveis[0]?.titulo?.split(' ').slice(0,2).join(' ')||'—'}</span><span class="stat-label">Imóvel Mais Visto</span></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><i class="fas fa-fire"></i></div><div class="stat-info"><span class="stat-value">${topImoveis[0]?.titulo?.split(' ').slice(0, 2).join(' ') || '—'}</span><span class="stat-label">Imóvel Mais Visto</span></div></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
@@ -2610,9 +2874,9 @@ function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopia
                     <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Views</th>
                     <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Devs</th>
                 </tr></thead>
-                <tbody>${topImoveis.map((im,i)=>`<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
-                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i+1}</td>
-                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${im.titulo||im.id}</td>
+                <tbody>${topImoveis.map((im, i) => `<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i + 1}</td>
+                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${im.titulo || im.id}</td>
                     <td style="padding:.5rem .6rem;text-align:center;"><span style="background:var(--amber-soft);color:var(--amber);padding:.15rem .6rem;border-radius:99px;font-weight:700;">${im.count}</span></td>
                     <td style="padding:.5rem .6rem;text-align:center;color:var(--text-secondary);">${im.devices.size}</td>
                 </tr>`).join('')}</tbody>
@@ -2629,9 +2893,9 @@ function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopia
                     <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Cópias</th>
                     <th style="padding:.5rem .6rem;text-align:center;color:var(--text-muted);font-weight:500;">Devs</th>
                 </tr></thead>
-                <tbody>${topLinks.map((lk,i)=>`<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
-                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i+1}</td>
-                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${lk.titulo||'—'}</td>
+                <tbody>${topLinks.map((lk, i) => `<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background=''">
+                    <td style="padding:.5rem .6rem;color:var(--text-muted);">${i + 1}</td>
+                    <td style="padding:.5rem .6rem;color:var(--text-primary);font-weight:500;font-size:.8rem;">${lk.titulo || '—'}</td>
                     <td style="padding:.5rem .6rem;text-align:center;"><span style="background:var(--purple-soft);color:var(--purple);padding:.15rem .6rem;border-radius:99px;font-weight:700;">${lk.count}</span></td>
                     <td style="padding:.5rem .6rem;text-align:center;color:var(--text-secondary);">${lk.devices.size}</td>
                 </tr>`).join('')}</tbody>
@@ -2645,27 +2909,30 @@ function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopia
             <h3><i class="fas fa-users"></i> Perfil por Dispositivo</h3>
             <span style="font-size:.78rem;color:var(--text-muted);">${devices.length} visitante(s) — clique para expandir</span>
         </div>
-        ${devices.length===0 ? '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Nenhum visitante ainda</p>' :
-        devices.map((dev,idx) => {
-            const ua = parseUA(dev.ua||'');
-            const uniquePages = [...new Set(dev.pages)];
-            const imVisto = dev.imoveisVistos || [];
-            const linksDev = linksByDevice[dev.deviceId] || [];
-            return `
+        ${devices.length === 0 ? '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Nenhum visitante ainda</p>' :
+            devices.map((dev, idx) => {
+                const ua = parseUA(dev.ua || '');
+                const uniquePages = [...new Set(dev.pages)];
+                const imVisto = dev.imoveisVistos || [];
+                const linksDev = linksByDevice[dev.deviceId] || [];
+                const apelido = nickByDevice[dev.deviceId] || '';
+                return `
             <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.7rem;cursor:pointer;transition:border-color .2s,background .2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''" onclick="this.querySelector('.dev-detail').style.display=this.querySelector('.dev-detail').style.display==='none'?'block':'none'">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
                     <div style="display:flex;align-items:center;gap:.7rem;">
                         <span style="font-size:1.1rem;">${deviceIcon(ua.device)}</span>
                         <div>
-                            <div style="font-family:monospace;font-size:.72rem;color:var(--text-muted);">${(dev.deviceId||'').slice(0,26)}…</div>
+                            ${apelido ? `<div style="font-weight:700;color:var(--accent);font-size:.92rem;margin-bottom:.15rem;">👤 ${escHtml(apelido)}</div>` : ''}
+                            <div style="font-family:monospace;font-size:.72rem;color:var(--text-muted);">${(dev.deviceId || '').slice(0, 26)}…</div>
                             <div style="font-size:.78rem;color:var(--text-secondary);margin-top:.1rem;">${ua.browser} · ${ua.os}</div>
                         </div>
                     </div>
                     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
-                        ${uniquePages.map(p=>pageBadge(p)).join('')}
-                        ${imVisto.length?`<span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-building"></i> ${imVisto.length}</span>`:''}
-                        ${linksDev.length?`<span style="background:var(--purple-soft);color:var(--purple);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-link"></i> ${linksDev.length}</span>`:''}
-                        <span style="font-size:.72rem;color:var(--text-muted);">↩ ${dev.lastSeen||'—'}</span>
+                        ${dev.totalTime > 0 ? `<span style="background:var(--blue-soft);color:var(--blue);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;" title="Tempo total no site"><i class="fas fa-clock"></i> ${formatTimeSpent(dev.totalTime)}</span>` : ''}
+                        ${uniquePages.map(p => pageBadge(p)).join('')}
+                        ${imVisto.length ? `<span style="background:var(--amber-soft);color:var(--amber);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-building"></i> ${imVisto.length}</span>` : ''}
+                        ${linksDev.length ? `<span style="background:var(--purple-soft);color:var(--purple);padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600;"><i class="fas fa-link"></i> ${linksDev.length}</span>` : ''}
+                        <span style="font-size:.72rem;color:var(--text-muted);">↩ ${dev.lastSeen || '—'}</span>
                         <i class="fas fa-chevron-down" style="color:var(--text-muted);font-size:.65rem;"></i>
                     </div>
                 </div>
@@ -2673,21 +2940,21 @@ function renderPerfilVisitante(visitas, imoveisViews, imoveisCatalog, linksCopia
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
                         <div>
                             <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Páginas visitadas</div>
-                            ${uniquePages.map(p=>`<div style="padding:.25rem 0;color:var(--text-secondary);font-size:.8rem;"><i class="fas fa-check" style="color:var(--green);margin-right:.35rem;font-size:.65rem;"></i>${p}</div>`).join('')}
+                            ${uniquePages.map(p => `<div style="padding:.25rem 0;color:var(--text-secondary);font-size:.8rem;"><i class="fas fa-check" style="color:var(--green);margin-right:.35rem;font-size:.65rem;"></i>${p}</div>`).join('')}
                         </div>
                         <div>
                             <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Imóveis vistos</div>
-                            ${imVisto.length?imVisto.map(iv=>`<div style="padding:.25rem 0;font-size:.78rem;color:var(--text-secondary);">${iv.titulo||iv.id} <span style="color:var(--text-muted);font-size:.7rem;">· ${iv.date||''}</span></div>`).join(''):'<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
+                            ${imVisto.length ? imVisto.map(iv => `<div style="padding:.25rem 0;font-size:.78rem;color:var(--text-secondary);display:flex;justify-content:space-between;align-items:center;"><span>${iv.titulo || iv.id} <span style="color:var(--text-muted);font-size:.7rem;">· ${iv.date || ''}</span></span> ${iv.timeSpent > 0 ? `<span style="font-size:.7rem;color:var(--text-muted);background:var(--bg-surface);padding:.1rem .4rem;border-radius:4px;"><i class="far fa-clock"></i> ${formatTimeSpent(iv.timeSpent)}</span>` : ''}</div>`).join('') : '<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
                         </div>
                         <div>
                             <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em;">Links copiados</div>
-                            ${linksDev.length?linksDev.map(lk=>`<div style="padding:.25rem 0;font-size:.78rem;"><i class="fas fa-link" style="color:var(--purple);margin-right:.3rem;font-size:.65rem;"></i><span style="color:var(--text-secondary);">${lk.titulo||'Imóvel'}</span> <span style="color:var(--text-muted);font-size:.7rem;">· ${lk.date||''}</span></div>`).join(''):'<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
+                            ${linksDev.length ? linksDev.map(lk => `<div style="padding:.25rem 0;font-size:.78rem;"><i class="fas fa-link" style="color:var(--purple);margin-right:.3rem;font-size:.65rem;"></i><span style="color:var(--text-secondary);">${lk.titulo || 'Imóvel'}</span> <span style="color:var(--text-muted);font-size:.7rem;">· ${lk.date || ''}</span></div>`).join('') : '<span style="color:var(--text-muted);font-size:.78rem;">Nenhum</span>'}
                         </div>
                     </div>
-                    <div style="margin-top:.6rem;font-size:.68rem;color:var(--text-muted);">1º acesso: ${dev.firstSeen||'—'} · ${(dev.ua||'').slice(0,90)}</div>
+                    <div style="margin-top:.6rem;font-size:.68rem;color:var(--text-muted);">1º acesso: ${dev.firstSeen || '—'} · ${(dev.ua || '').slice(0, 90)}</div>
                 </div>
             </div>`;
-        }).join('')}
+            }).join('')}
     </div>`;
 }
 
@@ -2698,7 +2965,7 @@ async function loadSiteConfig() {
     if (loading) loading.style.display = 'flex';
     if (content) content.style.display = 'none';
     let cfg = {};
-    try { const doc = await db.collection('config').doc('site').get(); if (doc.exists) cfg = doc.data(); } catch(e) {}
+    try { const doc = await db.collection('config').doc('site').get(); if (doc.exists) cfg = doc.data(); } catch (e) { }
     if (loading) loading.style.display = 'none';
     if (content) content.style.display = 'block';
     content.innerHTML = `
@@ -2744,15 +3011,15 @@ async function loadSiteConfig() {
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
                     <div class="form-group" style="grid-column:1/-1;">
                         <label class="form-label">Texto</label>
-                        <input type="text" id="cfg-urg-texto" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.texto) ? String(cfg.urgencyBar.texto).replace(/"/g,'&quot;') : ''}" placeholder="Ex: Novos imóveis disponíveis hoje!">
+                        <input type="text" id="cfg-urg-texto" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.texto) ? String(cfg.urgencyBar.texto).replace(/"/g, '&quot;') : ''}" placeholder="Ex: Novos imóveis disponíveis hoje!">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Bairro (opcional)</label>
-                        <input type="text" id="cfg-urg-bairro" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.bairro) ? String(cfg.urgencyBar.bairro).replace(/"/g,'&quot;') : ''}" placeholder="Ex: Ipanema">
+                        <input type="text" id="cfg-urg-bairro" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.bairro) ? String(cfg.urgencyBar.bairro).replace(/"/g, '&quot;') : ''}" placeholder="Ex: Ipanema">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Link (opcional)</label>
-                        <input type="text" id="cfg-urg-link" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.link) ? String(cfg.urgencyBar.link).replace(/"/g,'&quot;') : ''}" placeholder="Ex: imoveis.html">
+                        <input type="text" id="cfg-urg-link" class="form-control" value="${(cfg.urgencyBar && cfg.urgencyBar.link) ? String(cfg.urgencyBar.link).replace(/"/g, '&quot;') : ''}" placeholder="Ex: imoveis.html">
                     </div>
                 </div>
             </div>
@@ -2761,41 +3028,41 @@ async function loadSiteConfig() {
         <div class="dashboard-card" style="margin-bottom:1.2rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-user"></i> Informações Pessoais</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                <div class="form-group"><label class="form-label">Nome do Corretor</label><input type="text" id="cfg-nome" class="form-control" value="${cfg.nome||'Leandro Bomfim'}"></div>
-                <div class="form-group"><label class="form-label">CRECI</label><input type="text" id="cfg-creci" class="form-control" value="${cfg.creci||''}"></div>
-                <div class="form-group"><label class="form-label">WhatsApp (com DDI)</label><input type="text" id="cfg-whatsapp" class="form-control" value="${cfg.whatsapp||'5521981424469'}"></div>
-                <div class="form-group"><label class="form-label">Email de Contato</label><input type="email" id="cfg-email" class="form-control" value="${cfg.emailContato||''}"></div>
-                <div class="form-group" style="grid-column:1/-1;"><label class="form-label">Foto de Perfil (URL)</label><input type="text" id="cfg-foto" class="form-control" value="${cfg.fotoPerfil||'https://files.catbox.moe/nqdyup.png'}"></div>
+                <div class="form-group"><label class="form-label">Nome do Corretor</label><input type="text" id="cfg-nome" class="form-control" value="${cfg.nome || 'Leandro Bomfim'}"></div>
+                <div class="form-group"><label class="form-label">CRECI</label><input type="text" id="cfg-creci" class="form-control" value="${cfg.creci || ''}"></div>
+                <div class="form-group"><label class="form-label">WhatsApp (com DDI)</label><input type="text" id="cfg-whatsapp" class="form-control" value="${cfg.whatsapp || '5521981424469'}"></div>
+                <div class="form-group"><label class="form-label">Email de Contato</label><input type="email" id="cfg-email" class="form-control" value="${cfg.emailContato || ''}"></div>
+                <div class="form-group" style="grid-column:1/-1;"><label class="form-label">Foto de Perfil (URL)</label><input type="text" id="cfg-foto" class="form-control" value="${cfg.fotoPerfil || 'https://files.catbox.moe/nqdyup.png'}"></div>
             </div>
         </div>
         <div class="dashboard-card" style="margin-bottom:1.2rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-star"></i> Números do Hero</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
-                <div class="form-group"><label class="form-label">Anos de Experiência</label><input type="number" id="cfg-anos" class="form-control" value="${cfg.anosExperiencia||6}"></div>
-                <div class="form-group"><label class="form-label">Imóveis Negociados</label><input type="number" id="cfg-imoveis-neg" class="form-control" value="${cfg.imoveisNegociados||60}"></div>
-                <div class="form-group"><label class="form-label">% Satisfação</label><input type="number" id="cfg-satisfacao" class="form-control" value="${cfg.satisfacao||100}"></div>
+                <div class="form-group"><label class="form-label">Anos de Experiência</label><input type="number" id="cfg-anos" class="form-control" value="${cfg.anosExperiencia || 6}"></div>
+                <div class="form-group"><label class="form-label">Imóveis Negociados</label><input type="number" id="cfg-imoveis-neg" class="form-control" value="${cfg.imoveisNegociados || 60}"></div>
+                <div class="form-group"><label class="form-label">% Satisfação</label><input type="number" id="cfg-satisfacao" class="form-control" value="${cfg.satisfacao || 100}"></div>
             </div>
         </div>
         <div class="dashboard-card" style="margin-bottom:1.2rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-pen"></i> Textos do Site</h3>
             <div style="display:flex;flex-direction:column;gap:1rem;">
-                <div class="form-group"><label class="form-label">Título do Hero</label><input type="text" id="cfg-hero-titulo" class="form-control" value="${cfg.heroTitulo||'Transformando Sonhos em Endereços'}"></div>
-                <div class="form-group"><label class="form-label">Descrição do Hero</label><textarea id="cfg-hero-desc" class="form-control" rows="3">${cfg.heroDesc||'Com mais de 6 anos de experiência no mercado imobiliário...'}</textarea></div>
-                <div class="form-group"><label class="form-label">Destaque velocidade (ex: 47%)</label><input type="text" id="cfg-velocidade" class="form-control" value="${cfg.velocidade||'47%'}"></div>
+                <div class="form-group"><label class="form-label">Título do Hero</label><input type="text" id="cfg-hero-titulo" class="form-control" value="${cfg.heroTitulo || 'Transformando Sonhos em Endereços'}"></div>
+                <div class="form-group"><label class="form-label">Descrição do Hero</label><textarea id="cfg-hero-desc" class="form-control" rows="3">${cfg.heroDesc || 'Com mais de 6 anos de experiência no mercado imobiliário...'}</textarea></div>
+                <div class="form-group"><label class="form-label">Destaque velocidade (ex: 47%)</label><input type="text" id="cfg-velocidade" class="form-control" value="${cfg.velocidade || '47%'}"></div>
             </div>
         </div>
         <div class="dashboard-card" style="margin-bottom:1.2rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-map-marker-alt"></i> Bairros (faixa rolante)</h3>
-            <div class="form-group"><label class="form-label">Separados por vírgula</label><input type="text" id="cfg-bairros" class="form-control" value="${cfg.bairros||'Ipanema, Leblon, Barra da Tijuca, Recreio dos Bandeirantes, Barra Olímpica, Copacabana'}"></div>
+            <div class="form-group"><label class="form-label">Separados por vírgula</label><input type="text" id="cfg-bairros" class="form-control" value="${cfg.bairros || 'Ipanema, Leblon, Barra da Tijuca, Recreio dos Bandeirantes, Barra Olímpica, Copacabana'}"></div>
         </div>
         <div class="dashboard-card" style="margin-bottom:1.5rem;">
             <h3 style="margin-bottom:1rem;"><i class="fas fa-quote-right"></i> Depoimentos</h3>
             <div id="depoimentos-list" style="display:flex;flex-direction:column;gap:.8rem;">
-                ${(cfg.depoimentos||[{texto:'O Leandro não apenas vendeu nosso apartamento, ele realizou nosso sonho do primeiro lar.',autor:'Carlos e Ana Lima',local:'Ipanema'},{texto:'Profissional incrível! Conseguiu vender minha cobertura em apenas 15 dias pelo valor que eu queria.',autor:'Roberto Fonseca',local:'Barra da Tijuca'}]).map((d,i)=>`
+                ${(cfg.depoimentos || [{ texto: 'O Leandro não apenas vendeu nosso apartamento, ele realizou nosso sonho do primeiro lar.', autor: 'Carlos e Ana Lima', local: 'Ipanema' }, { texto: 'Profissional incrível! Conseguiu vender minha cobertura em apenas 15 dias pelo valor que eu queria.', autor: 'Roberto Fonseca', local: 'Barra da Tijuca' }]).map((d, i) => `
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:center;padding:.7rem;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border);" id="dep-${i}">
-                    <input type="text" class="form-control dep-texto" placeholder="Depoimento" value="${d.texto||''}">
-                    <input type="text" class="form-control dep-autor" placeholder="Nome" value="${d.autor||''}">
-                    <input type="text" class="form-control dep-local" placeholder="Bairro" value="${d.local||''}">
+                    <input type="text" class="form-control dep-texto" placeholder="Depoimento" value="${d.texto || ''}">
+                    <input type="text" class="form-control dep-autor" placeholder="Nome" value="${d.autor || ''}">
+                    <input type="text" class="form-control dep-local" placeholder="Bairro" value="${d.local || ''}">
                     <button onclick="this.closest('[id^=dep-]').remove()" style="background:var(--red-soft);border:none;color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;"><i class="fas fa-times"></i></button>
                 </div>`).join('')}
             </div>
@@ -2819,24 +3086,24 @@ function addDepoimento() {
 }
 
 async function saveSiteConfig() {
-    const depoimentos = Array.from(document.querySelectorAll('[id^=dep-]')).map(el=>({
-        texto:el.querySelector('.dep-texto')?.value||'',
-        autor:el.querySelector('.dep-autor')?.value||'',
-        local:el.querySelector('.dep-local')?.value||'',
-    })).filter(d=>d.texto);
+    const depoimentos = Array.from(document.querySelectorAll('[id^=dep-]')).map(el => ({
+        texto: el.querySelector('.dep-texto')?.value || '',
+        autor: el.querySelector('.dep-autor')?.value || '',
+        local: el.querySelector('.dep-local')?.value || '',
+    })).filter(d => d.texto);
     const cfg = {
-        nome:document.getElementById('cfg-nome')?.value||'',
-        creci:document.getElementById('cfg-creci')?.value||'',
-        whatsapp:document.getElementById('cfg-whatsapp')?.value||'',
-        emailContato:document.getElementById('cfg-email')?.value||'',
-        fotoPerfil:document.getElementById('cfg-foto')?.value||'',
-        anosExperiencia:parseInt(document.getElementById('cfg-anos')?.value)||6,
-        imoveisNegociados:parseInt(document.getElementById('cfg-imoveis-neg')?.value)||60,
-        satisfacao:parseInt(document.getElementById('cfg-satisfacao')?.value)||100,
-        heroTitulo:document.getElementById('cfg-hero-titulo')?.value||'',
-        heroDesc:document.getElementById('cfg-hero-desc')?.value||'',
-        velocidade:document.getElementById('cfg-velocidade')?.value||'',
-        bairros:document.getElementById('cfg-bairros')?.value||'',
+        nome: document.getElementById('cfg-nome')?.value || '',
+        creci: document.getElementById('cfg-creci')?.value || '',
+        whatsapp: document.getElementById('cfg-whatsapp')?.value || '',
+        emailContato: document.getElementById('cfg-email')?.value || '',
+        fotoPerfil: document.getElementById('cfg-foto')?.value || '',
+        anosExperiencia: parseInt(document.getElementById('cfg-anos')?.value) || 6,
+        imoveisNegociados: parseInt(document.getElementById('cfg-imoveis-neg')?.value) || 60,
+        satisfacao: parseInt(document.getElementById('cfg-satisfacao')?.value) || 100,
+        heroTitulo: document.getElementById('cfg-hero-titulo')?.value || '',
+        heroDesc: document.getElementById('cfg-hero-desc')?.value || '',
+        velocidade: document.getElementById('cfg-velocidade')?.value || '',
+        bairros: document.getElementById('cfg-bairros')?.value || '',
         depoimentos,
         conteudoPublico: {
             fallbackExemplos: !!document.getElementById('cfg-public-fallback')?.checked,
@@ -2848,10 +3115,10 @@ async function saveSiteConfig() {
             bairro: (document.getElementById('cfg-urg-bairro')?.value || '').trim(),
             link: (document.getElementById('cfg-urg-link')?.value || '').trim(),
         },
-        updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     try { await db.collection('config').doc('site').set(cfg); showToast('✅ Configurações salvas!'); }
-    catch(e) { showToast('Erro ao salvar','error'); }
+    catch (e) { showToast('Erro ao salvar', 'error'); }
 }
 // ========== BANNER PROMOCIONAL ==========
 async function loadBannerConfig() {
@@ -2867,7 +3134,7 @@ async function loadBannerConfig() {
         if (el('banner-btn-link')) el('banner-btn-link').value = cfg.btnLink || '';
         if (el('banner-posicao')) el('banner-posicao').value = cfg.posicao || 'topo';
         updateBannerPreview();
-    } catch(e) { console.error('loadBannerConfig:', e); }
+    } catch (e) { console.error('loadBannerConfig:', e); }
 }
 
 async function saveBannerConfig() {
@@ -2884,48 +3151,20 @@ async function saveBannerConfig() {
         };
         await db.collection('config').doc('banner').set(cfg);
         showToast('✅ Banner salvo com sucesso!');
-    } catch(e) {
+    } catch (e) {
         showToast('Erro ao salvar banner', 'error');
         console.error('saveBannerConfig:', e);
     }
 }
 
-function handleBannerUpload(input) {
-    if (!input.files || !input.files[0]) return;
-    const file = input.files[0];
-    if (file.size > 5 * 1024 * 1024) { showToast('Arquivo muito grande (máx 5MB)', 'error'); return; }
-    const status = document.getElementById('banner-upload-status');
-    const area = document.getElementById('banner-upload-area');
-    if (!storage) { showToast('Firebase Storage não disponível', 'error'); return; }
-    const ext = file.name.split('.').pop().toLowerCase();
-    const fileName = 'banners/banner_' + Date.now() + '.' + ext;
-    const ref = storage.ref(fileName);
-    const task = ref.put(file, { contentType: file.type });
-    if (status) status.innerHTML = '<span class="loading"></span> Enviando...';
-    if (area) area.style.borderColor = 'var(--accent)';
-    task.on('state_changed',
-        (snap) => {
-            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-            if (status) status.textContent = `Enviando... ${pct}%`;
-        },
-        (err) => {
-            if (status) status.textContent = 'Erro no upload: ' + err.message;
-            if (area) area.style.borderColor = 'var(--red)';
-            showToast('Erro no upload', 'error');
-        },
-        async () => {
-            const url = await ref.getDownloadURL();
-            const urlInput = document.getElementById('banner-imagem-url');
-            if (urlInput) urlInput.value = url;
-            if (status) status.innerHTML = '✅ Imagem enviada com sucesso!';
-            if (area) {
-                area.style.borderColor = 'var(--green)';
-                area.innerHTML = `<img src="${url}" style="max-height:120px;border-radius:8px;object-fit:cover;"><span style="font-size:.78rem;color:var(--green);">Imagem carregada • Clique para trocar</span>`;
-            }
-            updateBannerPreview();
-            showToast('🖼️ Imagem do banner enviada!');
-        }
-    );
+/** Firebase Storage não está habilitado no projeto — banner usa apenas URL pública */
+function bannerUploadHint() {
+    showToast('Cole abaixo o link direto da imagem (jpg/png/webp) hospedada em um serviço público.', 'warning');
+    const inp = document.getElementById('banner-imagem-url');
+    if (inp) {
+        inp.focus();
+        inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 function updateBannerPreview() {
@@ -2975,11 +3214,11 @@ async function exportarBackupJSON() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `backup-imoveis-${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `backup-imoveis-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
         showToast(`✅ Backup exportado — ${imSnap.size} imóveis`);
-    } catch(e) {
+    } catch (e) {
         showToast('Erro ao exportar backup', 'error');
     }
 }
@@ -2989,27 +3228,35 @@ async function exportarCSVVisitas() {
     if (!db) return;
     try {
         showToast('Gerando CSV...', 'info');
-        const snap = await db.collection('visitas').orderBy('timestamp','desc').get();
-        const rows = [['Data', 'Página', 'Device ID', 'User Agent']];
+        const snap = await db.collection('visitas').orderBy('timestamp', 'desc').get();
+        const rows = [['Data', 'Página', 'Família', 'Tipo', 'SO', 'Navegador', 'Device ID', 'User Agent']];
         snap.docs.forEach(d => {
             const v = d.data();
+            const p = parseUA(v.userAgent || '');
+            const fam = v.deviceFamily || inferDeviceFamily(v.userAgent || '');
+            const cat = deviceCategoryFromVisit(v, p);
+            const dtype = v.deviceType || (cat === 'mobile' ? 'Smartphone' : cat === 'tablet' ? 'Tablet' : 'Desktop');
             rows.push([
                 v.date || '',
                 v.page || '',
+                fam,
+                dtype,
+                v.os || p.os || '',
+                p.browser || '',
                 v.deviceId || '',
-                (v.userAgent || '').slice(0, 80)
+                (v.userAgent || '').slice(0, 120)
             ]);
         });
-        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
         const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `visitas-${new Date().toISOString().slice(0,10)}.csv`;
+        a.download = `visitas-${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         URL.revokeObjectURL(url);
         showToast(`✅ CSV exportado — ${snap.size} visitas`);
-    } catch(e) {
+    } catch (e) {
         showToast('Erro ao exportar CSV', 'error');
     }
 }
@@ -3030,18 +3277,18 @@ window._dismissNotif = _dismissNotif;
 //  Listeners em tempo real para seções de visitas e perfil
 // ══════════════════════════════════════════════════════════
 
-let _visitasRTListener   = null;
-let _linksRTListener     = null;
-let _imoveisRTListener   = null;
-let _visitasRTData       = [];
-let _linksRTData         = [];
-let _imoveisViewsRTData  = [];
+let _visitasRTListener = null;
+let _linksRTListener = null;
+let _imoveisRTListener = null;
+let _visitasRTData = [];
+let _linksRTData = [];
+let _imoveisViewsRTData = [];
 
 function startVisitasRT() {
     if (_visitasRTListener) return;
     // Listener de visitas em tempo real
-    _visitasRTListener = db.collection('visitas').orderBy('timestamp','desc').onSnapshot(snap => {
-        _visitasRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+    _visitasRTListener = db.collection('visitas').orderBy('timestamp', 'desc').onSnapshot(snap => {
+        _visitasRTData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const activeSection = document.querySelector('.admin-section.active')?.id;
         if (activeSection === 'section-visitas') {
             renderVisitasReport(_visitasRTData);
@@ -3057,20 +3304,20 @@ function startVisitasRT() {
     }, err => console.warn('visitasRT:', err));
 
     // Listener de links copiados em tempo real
-    _linksRTListener = db.collection('links_copiados').orderBy('timestamp','desc').onSnapshot(snap => {
+    _linksRTListener = db.collection('links_copiados').orderBy('timestamp', 'desc').onSnapshot(snap => {
         const prev = _linksRTData.length;
-        _linksRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+        _linksRTData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Notifica novos links (só após primeira carga)
         if (prev > 0 && _linksRTData.length > prev) {
             const novo = _linksRTData[0];
             showNotification(
                 '🔗 Link copiado!',
-                `"${novo.titulo||'Imóvel'}" · ${novo.deviceId?.slice(0,12)||''}…`,
+                `"${novo.titulo || 'Imóvel'}" · ${novo.deviceId?.slice(0, 12) || ''}…`,
                 'purple'
             );
         }
         // Atualiza dash
-        const hoje = new Date().toISOString().slice(0,10);
+        const hoje = new Date().toISOString().slice(0, 10);
         const hojeCount = _linksRTData.filter(v => v.date === hoje).length;
         const elC = document.getElementById('dash-links-copiados');
         if (elC) elC.textContent = hojeCount;
@@ -3080,31 +3327,31 @@ function startVisitasRT() {
     }, err => console.warn('linksRT:', err));
 
     // Views de imóveis em tempo real
-    _imoveisRTListener = db.collection('visitas_imoveis').orderBy('timestamp','desc').onSnapshot(snap => {
-        _imoveisViewsRTData = snap.docs.map(d => ({id:d.id,...d.data()}));
+    _imoveisRTListener = db.collection('visitas_imoveis').orderBy('timestamp', 'desc').onSnapshot(snap => {
+        _imoveisViewsRTData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Imóvel mais visto hoje
-        const hoje = new Date().toISOString().slice(0,10);
+        const hoje = new Date().toISOString().slice(0, 10);
         const counts = {};
         _imoveisViewsRTData.forEach(v => {
             if (v.date === hoje) {
-                if (!counts[v.imovelId]) counts[v.imovelId] = {titulo:v.titulo,bairro:v.bairro,count:0};
+                if (!counts[v.imovelId]) counts[v.imovelId] = { titulo: v.titulo, bairro: v.bairro, count: 0 };
                 counts[v.imovelId].count++;
             }
         });
-        const top = Object.values(counts).sort((a,b)=>b.count-a.count)[0];
+        const top = Object.values(counts).sort((a, b) => b.count - a.count)[0];
         const elTop = document.getElementById('dash-imovel-top');
         if (elTop) {
             elTop.innerHTML = top
-                ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count>1?'s':''} hoje</span>`
+                ? `<strong>${top.titulo}</strong><span>${top.count} view${top.count > 1 ? 's' : ''} hoje</span>`
                 : `<strong style="color:var(--text-muted)">Nenhum ainda</strong><span>hoje</span>`;
         }
     }, err => console.warn('imoveisViewsRT:', err));
 }
 
 function stopVisitasRT() {
-    if (_visitasRTListener)  { _visitasRTListener();  _visitasRTListener  = null; }
-    if (_linksRTListener)    { _linksRTListener();    _linksRTListener    = null; }
-    if (_imoveisRTListener)  { _imoveisRTListener();  _imoveisRTListener  = null; }
+    if (_visitasRTListener) { _visitasRTListener(); _visitasRTListener = null; }
+    if (_linksRTListener) { _linksRTListener(); _linksRTListener = null; }
+    if (_imoveisRTListener) { _imoveisRTListener(); _imoveisRTListener = null; }
 }
 
 // Inicia listeners RT após login
@@ -3120,14 +3367,14 @@ let _leadsListener = null;
 function startLeadsListener() {
     if (_leadsListener) return;
     let _leadsInit = false;
-    _leadsListener = db.collection('leads').orderBy('timestamp','desc').limit(1).onSnapshot(snap => {
+    _leadsListener = db.collection('leads').orderBy('timestamp', 'desc').limit(1).onSnapshot(snap => {
         if (!_leadsInit) { _leadsInit = true; return; }
         snap.docChanges().forEach(change => {
             if (change.type === 'added') {
                 const v = change.doc.data();
                 showNotification(
                     '🔥 Novo lead!',
-                    `${v.tipo||'Contato'} — ${v.titulo||'Imóvel'} · ${v.deviceId?.slice(0,10)||''}`,
+                    `${v.tipo || 'Contato'} — ${v.titulo || 'Imóvel'} · ${v.deviceId?.slice(0, 10) || ''}`,
                     'green'
                 );
                 updateLastRefreshIndicator();
@@ -3141,8 +3388,8 @@ function startLeadsListener() {
 async function loadLeads() {
     if (!db) return;
     try {
-        const snap = await db.collection('leads').orderBy('timestamp','desc').limit(100).get();
-        return snap.docs.map(d => ({id:d.id,...d.data()}));
+        const snap = await db.collection('leads').orderBy('timestamp', 'desc').limit(100).get();
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch { return []; }
 }
 
@@ -3183,8 +3430,8 @@ function sendPushNotification(title, body) {
 
 // Expor
 window.requestPushPermission = requestPushPermission;
-window.startVisitasRT        = startVisitasRT;
-window.stopVisitasRT         = stopVisitasRT;
+window.startVisitasRT = startVisitasRT;
+window.stopVisitasRT = stopVisitasRT;
 
 // ══════════════════════════════════════════════════════════
 //  GRÁFICOS DE PERFORMANCE POR IMÓVEL
@@ -3209,25 +3456,25 @@ async function loadPerformanceImovel() {
         const perf = {};
         viewsSnap.docs.forEach(d => {
             const v = d.data();
-            const k = v.imovelId||v.titulo;
-            if (!perf[k]) perf[k] = { titulo:v.titulo||k, bairro:v.bairro||'', views:0, links:0 };
+            const k = v.imovelId || v.titulo;
+            if (!perf[k]) perf[k] = { titulo: v.titulo || k, bairro: v.bairro || '', views: 0, links: 0 };
             perf[k].views++;
         });
         linksSnap.docs.forEach(d => {
             const v = d.data();
-            const k = v.imovelId||v.titulo;
-            if (!perf[k]) perf[k] = { titulo:v.titulo||k, bairro:v.bairro||'', views:0, links:0 };
+            const k = v.imovelId || v.titulo;
+            if (!perf[k]) perf[k] = { titulo: v.titulo || k, bairro: v.bairro || '', views: 0, links: 0 };
             perf[k].links++;
         });
 
-        const sorted = Object.values(perf).sort((a,b) => b.views-a.views).slice(0,10);
+        const sorted = Object.values(perf).sort((a, b) => b.views - a.views).slice(0, 10);
         if (!sorted.length) return;
 
         // Injeta mini-gráfico de barras horizontais no topo do perfil
         const barHtml = sorted.map(im => {
-            const maxV = sorted[0].views||1;
-            const pct = Math.round((im.views/maxV)*100);
-            const convRate = im.views ? Math.round((im.links/im.views)*100) : 0;
+            const maxV = sorted[0].views || 1;
+            const pct = Math.round((im.views / maxV) * 100);
+            const convRate = im.views ? Math.round((im.links / im.views) * 100) : 0;
             return `
             <div style="margin-bottom:.6rem;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;gap:.5rem;">
@@ -3255,7 +3502,7 @@ async function loadPerformanceImovel() {
             </h3>
             ${barHtml}`;
         content.prepend(perfCard);
-    } catch(e) { console.error('loadPerformanceImovel:', e); }
+    } catch (e) { console.error('loadPerformanceImovel:', e); }
 }
 
 // Expor
@@ -3266,66 +3513,69 @@ window.loadPerformanceImovel = loadPerformanceImovel;
 // ══════════════════════════════════════════════════════════
 
 let _chatLogsListener = null;
- 
+
 async function loadChatLogs() {
     if (!db) return;
     const loading = document.getElementById('chat-logs-loading');
     const content = document.getElementById('chat-logs-content');
     if (loading) loading.style.display = 'flex';
     if (content) content.style.display = 'none';
- 
+
     try {
         const snap = await db.collection('chat_logs')
             .orderBy('timestamp', 'desc')
             .limit(300)
             .get();
         const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
- 
+
         if (loading) loading.style.display = 'none';
         if (content) { content.style.display = 'block'; renderChatLogs(logs); }
- 
-        // Badge — chats novos hoje
+
+        // Badge — sessões distintas que abriram o chat hoje (evita contar eventos duplicados)
         const badge = document.getElementById('badge-chat-logs');
-        const today = new Date().toISOString().slice(0,10);
-        const hojeAbertos = logs.filter(l => l.event === 'chat_aberto' && l.date === today).length;
+        const today = new Date().toISOString().slice(0, 10);
+        const sessoesHoje = new Set(logs.filter(l => l.event === 'chat_aberto' && l.date === today).map(l => l.sessionId).filter(Boolean));
+        const hojeAbertos = sessoesHoje.size;
         if (badge) { badge.textContent = hojeAbertos > 0 ? hojeAbertos : ''; badge.style.display = hojeAbertos > 0 ? '' : 'none'; }
-    } catch(e) {
+    } catch (e) {
         if (loading) loading.style.display = 'none';
         if (content) { content.style.display = 'block'; content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Sem dados</h3><p>Nenhuma conversa registrada ainda.</p></div>'; }
     }
 }
- 
+
 function renderChatLogs(logs) {
     const content = document.getElementById('chat-logs-content');
     if (!content) return;
- 
+
     if (!logs.length) {
         content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ainda</h3><p>Quando visitantes usarem o chat, os logs completos aparecerão aqui.</p></div>';
         return;
     }
- 
-    const today = new Date().toISOString().slice(0,10);
- 
+
+    const today = new Date().toISOString().slice(0, 10);
+
     // Agrupa por sessão
     const sessions = {};
     logs.forEach(l => {
         if (!sessions[l.sessionId]) sessions[l.sessionId] = {
-            sessionId:   l.sessionId,
-            deviceId:    l.deviceId,
-            date:        l.date,
-            ip:          l.ip || '—',
-            cidade:      l.cidade || '—',
-            regiao:      l.regiao || '—',
-            pais:        l.pais || '—',
-            isp:         l.isp || '—',
-            isProxy:     l.isProxy || false,
-            userAgent:   l.userAgent || '—',
-            events:      [],
-            hasWA:       false,
-            hasText:     false,
-            waMessages:  [],
-            typedTexts:  [],
-            botReplies:  [],
+            sessionId: l.sessionId,
+            deviceId: l.deviceId,
+            nickName: l.nickName || 'Visitante', // <-- Novo
+            displayLabel: l.displayLabel || '👤 Visitante', // <-- Novo
+            date: l.date,
+            ip: l.ip || '—',
+            cidade: l.cidade || '—',
+            regiao: l.regiao || '—',
+            pais: l.pais || '—',
+            isp: l.isp || '—',
+            isProxy: l.isProxy || false,
+            userAgent: l.userAgent || '—',
+            events: [],
+            hasWA: false,
+            hasText: false,
+            waMessages: [],
+            typedTexts: [],
+            botReplies: [],
         };
         sessions[l.sessionId].events.push(l);
         if (l.event === 'chat_whatsapp') {
@@ -3339,85 +3589,91 @@ function renderChatLogs(logs) {
         if ((l.botResponse || l.botMsg) && !sessions[l.sessionId].botReplies.includes(l.botResponse || l.botMsg)) {
             sessions[l.sessionId].botReplies.push((l.botResponse || l.botMsg).slice(0, 120));
         }
+        // Atualiza NickName se encontrar um evento com ele (mais estável)
+        if (l.nickName && l.nickName !== 'Visitante') {
+            sessions[l.sessionId].nickName = l.nickName;
+            sessions[l.sessionId].displayLabel = l.displayLabel;
+        }
+
         // Pega IP/geo do primeiro evento que tiver
         if (l.ip && l.ip !== '—' && sessions[l.sessionId].ip === '—') {
-            sessions[l.sessionId].ip      = l.ip;
-            sessions[l.sessionId].cidade  = l.cidade || '—';
-            sessions[l.sessionId].regiao  = l.regiao || '—';
-            sessions[l.sessionId].pais    = l.pais   || '—';
-            sessions[l.sessionId].isp     = l.isp    || '—';
+            sessions[l.sessionId].ip = l.ip;
+            sessions[l.sessionId].cidade = l.cidade || '—';
+            sessions[l.sessionId].regiao = l.regiao || '—';
+            sessions[l.sessionId].pais = l.pais || '—';
+            sessions[l.sessionId].isp = l.isp || '—';
             sessions[l.sessionId].isProxy = l.isProxy || false;
         }
     });
- 
-    const sessionList = Object.values(sessions).sort((a,b) => {
+
+    const sessionList = Object.values(sessions).sort((a, b) => {
         const aT = Math.max(...a.events.map(e => e.timestamp?.seconds || 0));
         const bT = Math.max(...b.events.map(e => e.timestamp?.seconds || 0));
         return bT - aT;
     });
- 
+
     // KPIs
     const totalSessions = sessionList.length;
-    const waSessions    = sessionList.filter(s => s.hasWA).length;
-    const textSessions  = sessionList.filter(s => s.hasText).length;
-    const hojeS         = sessionList.filter(s => s.date === today).length;
-    const convRate      = totalSessions > 0 ? Math.round((waSessions/totalSessions)*100) : 0;
+    const waSessions = sessionList.filter(s => s.hasWA).length;
+    const textSessions = sessionList.filter(s => s.hasText).length;
+    const hojeS = sessionList.filter(s => s.date === today).length;
+    const convRate = totalSessions > 0 ? Math.round((waSessions / totalSessions) * 100) : 0;
     const proxySessions = sessionList.filter(s => s.isProxy).length;
- 
+
     function escHtml(str) {
-        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
- 
+
     function fmtTs(ts) {
         if (!ts) return '—';
         try {
-            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds||0) * 1000);
-            return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds || 0) * 1000);
+            return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
         } catch { return '—'; }
     }
- 
+
     function fmtHora(ts) {
         if (!ts) return '';
         try {
-            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds||0) * 1000);
-            return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            const d = ts.toDate ? ts.toDate() : new Date((ts.seconds || 0) * 1000);
+            return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         } catch { return ''; }
     }
- 
+
     function intentBadge(intent) {
         if (!intent || intent === 'nenhuma') return '<span style="font-size:.65rem;color:var(--red);background:rgba(239,68,68,.1);padding:.1rem .45rem;border-radius:6px;">sem intenção</span>';
         if (intent.startsWith('flow:')) return `<span style="font-size:.65rem;color:var(--accent);background:var(--accent-soft);padding:.1rem .45rem;border-radius:6px;">${intent}</span>`;
         if (intent.includes('answerFn')) return `<span style="font-size:.65rem;color:var(--green);background:var(--green-soft);padding:.1rem .45rem;border-radius:6px;">resposta dinâmica</span>`;
         return `<span style="font-size:.65rem;color:var(--purple);background:var(--purple-soft);padding:.1rem .45rem;border-radius:6px;">${intent}</span>`;
     }
- 
+
     function renderSession(s) {
-        const evts = [...s.events].sort((a,b) => (a.timestamp?.seconds||0) - (b.timestamp?.seconds||0));
+        const evts = [...s.events].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
         const tsFirst = evts[0]?.timestamp;
-        const tsLast  = evts[evts.length-1]?.timestamp;
+        const tsLast = evts[evts.length - 1]?.timestamp;
         const duration = (tsFirst && tsLast)
-            ? (() => { const diff = (tsLast.seconds||0)-(tsFirst.seconds||0); return diff < 60 ? diff+'s' : Math.round(diff/60)+'min'; })()
+            ? (() => { const diff = (tsLast.seconds || 0) - (tsFirst.seconds || 0); return diff < 60 ? diff + 's' : Math.round(diff / 60) + 'min'; })()
             : null;
         const borderColor = s.hasWA ? 'var(--green)' : s.hasText ? 'var(--accent)' : 'var(--border)';
         const isToday = s.date === today;
- 
+
         const loc = [s.cidade, s.pais].filter(x => x && x !== '—').join(', ');
- 
+
         // Timeline de eventos
         const timelineItems = evts.map(e => {
             const hora = e.horaStr || fmtTs(e.timestamp);
             const horaShort = e.hora || fmtHora(e.timestamp);
- 
+
             if (e.event === 'chat_aberto') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
                     <span style="font-size:.75rem;">🟢</span>
-                    <div style="font-size:.75rem;color:var(--text-secondary);">Chat aberto na página <strong style="color:var(--text-primary);">${escHtml(e.page||'—')}</strong>
+                    <div style="font-size:.75rem;color:var(--text-secondary);">Chat aberto na página <strong style="color:var(--text-primary);">${escHtml(e.page || '—')}</strong>
                         ${e.ip && e.ip !== '—' ? `<span style="color:var(--text-muted);font-family:monospace;"> · ${escHtml(e.ip)}</span>` : ''}
                     </div>
                 </div>`;
             }
- 
+
             if (e.event === 'chat_texto') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
@@ -3427,57 +3683,64 @@ function renderChatLogs(logs) {
                             <span style="font-size:.68rem;color:#93c5fd;font-weight:600;">Usuário</span>
                             ${intentBadge(e.intentDetected)}
                         </div>
-                        <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);border-radius:10px;border-bottom-left-radius:3px;padding:.4rem .75rem;font-size:.82rem;color:#e2e8f0;max-width:90%;word-break:break-word;">${escHtml(e.text||'')}</div>
-                        ${(e.botResponse||e.botMsg) ? `<div style="margin-top:.3rem;display:flex;align-items:flex-start;gap:.35rem;">
+                        <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);border-radius:10px;border-bottom-left-radius:3px;padding:.4rem .75rem;font-size:.82rem;color:#e2e8f0;max-width:90%;word-break:break-word;">${escHtml(e.text || '')}</div>
+                        ${(e.botResponse || e.botMsg) ? `<div style="margin-top:.3rem;display:flex;align-items:flex-start;gap:.35rem;">
                             <span style="font-size:.68rem;color:#34d399;font-weight:600;flex-shrink:0;">🤖 Bot:</span>
-                            <span style="font-size:.72rem;color:rgba(226,232,240,.65);font-style:italic;word-break:break-word;">${escHtml((e.botResponse||e.botMsg||'').slice(0,180))}${((e.botResponse||e.botMsg||'').length>180?'…':'')}</span>
+                            <span style="font-size:.72rem;color:rgba(226,232,240,.65);font-style:italic;word-break:break-word;">${escHtml((e.botResponse || e.botMsg || '').slice(0, 180))}${((e.botResponse || e.botMsg || '').length > 180 ? '…' : '')}</span>
                         </div>` : ''}
                     </div>
                 </div>`;
             }
- 
+
             if (e.event === 'chat_click') {
                 return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;">${horaShort || '—'}</div>
                     <span style="font-size:.75rem;">👆</span>
-                    <span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">${escHtml(e.label||'—')}</span>
+                    <span style="background:rgba(99,102,241,.12);color:#818cf8;padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">${escHtml(e.label || '—')}</span>
                     ${e.next ? `<span style="font-size:.7rem;color:var(--text-muted);">→ <span style="color:var(--text-secondary);">${escHtml(e.next)}</span></span>` : ''}
-                    ${(e.botResponse) ? `<span style="font-size:.65rem;color:rgba(52,212,135,.6);">→ ${escHtml(e.botResponse.slice(0,60))}</span>` : ''}
+                    ${(e.botResponse) ? `<span style="font-size:.65rem;color:rgba(52,212,135,.6);">→ ${escHtml(e.botResponse.slice(0, 60))}</span>` : ''}
                 </div>`;
             }
- 
+
             if (e.event === 'chat_chip') {
                 return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;">${horaShort || '—'}</div>
                     <span style="font-size:.75rem;">⚡</span>
-                    <span style="background:rgba(245,158,11,.1);color:var(--amber);padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">Atalho: ${escHtml(e.label||'—')}</span>
+                    <span style="background:rgba(245,158,11,.1);color:var(--amber);padding:.15rem .55rem;border-radius:6px;font-size:.73rem;font-weight:600;">Atalho: ${escHtml(e.label || '—')}</span>
                 </div>`;
             }
- 
+
             if (e.event === 'chat_nav') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
                     <span style="font-size:.75rem;margin-top:.1rem;">🤖</span>
                     <div style="flex:1;min-width:0;">
-                        <div style="font-size:.68rem;color:#34d399;font-weight:600;margin-bottom:.2rem;">Bot respondeu · nó: <span style="font-family:monospace;color:var(--text-secondary);">${escHtml(e.node||'—')}</span></div>
-                        ${(e.botMsg||e.botResponse) ? `<div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.12);border-radius:10px;border-bottom-right-radius:3px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.7);max-width:90%;word-break:break-word;font-style:italic;">${escHtml((e.botMsg||e.botResponse||'').slice(0,200))}${((e.botMsg||e.botResponse||'').length>200?'…':'')}</div>` : ''}
+                        <div style="font-size:.68rem;color:#34d399;font-weight:600;margin-bottom:.2rem;">Bot respondeu · nó: <span style="font-family:monospace;color:var(--text-secondary);">${escHtml(e.node || '—')}</span></div>
+                        ${(e.botMsg || e.botResponse) ? `<div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.12);border-radius:10px;border-bottom-right-radius:3px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.7);max-width:90%;word-break:break-word;font-style:italic;">${escHtml((e.botMsg || e.botResponse || '').slice(0, 200))}${((e.botMsg || e.botResponse || '').length > 200 ? '…' : '')}</div>` : ''}
                     </div>
                 </div>`;
             }
- 
+
             if (e.event === 'chat_whatsapp') {
                 return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;padding-top:.1rem;">${horaShort || '—'}</div>
                     <span style="font-size:.75rem;margin-top:.1rem;">📱</span>
                     <div style="flex:1;min-width:0;">
                         <div style="font-size:.72rem;color:var(--green);font-weight:700;margin-bottom:.2rem;">✅ CONVERTEU — Abriu WhatsApp</div>
-                        ${(e.waText||e.msg) ? `<div style="background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.2);border-radius:10px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.8);max-width:90%;word-break:break-word;">${escHtml((e.waText||e.msg||'').slice(0,200))}</div>` : ''}
+                        ${(e.waText || e.msg) ? `<div style="background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.2);border-radius:10px;padding:.4rem .75rem;font-size:.78rem;color:rgba(226,232,240,.8);max-width:90%;word-break:break-word;">${escHtml((e.waText || e.msg || '').slice(0, 200))}</div>` : ''}
                     </div>
+                </div>`;
+            }
+            if (e.event === 'chat_identificacao') {
+                return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                    <div style="min-width:52px;font-size:.63rem;color:var(--text-muted);font-family:monospace;">${horaShort || '—'}</div>
+                    <span style="font-size:.75rem;">👤</span>
+                    <span style="color:#fcd34d;font-size:.75rem;font-weight:700;">Usuário se identificou como: <span style="background:rgba(252,211,77,.1);padding:.1rem .4rem;border-radius:4px;">${escHtml(e.nick || '—')}</span></span>
                 </div>`;
             }
             return '';
         }).filter(Boolean).join('');
- 
+
         return `
         <div style="border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);background:${s.isProxy ? 'rgba(239,68,68,.03)' : 'var(--bg-elevated)'};overflow:hidden;margin-bottom:.8rem;">
             <!-- Cabeçalho da sessão -->
@@ -3485,16 +3748,19 @@ function renderChatLogs(logs) {
                  onclick="const det=this.nextElementSibling;det.style.display=det.style.display==='none'?'block':'none';this.querySelector('.lb-chev').style.transform=det.style.display==='none'?'':'rotate(180deg)'">
                 <div style="display:flex;align-items:flex-start;gap:.65rem;flex-wrap:wrap;">
                     <div>
-                        <!-- IP + GEO -->
+                        <!-- IP + GEO + NICK -->
                         <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.2rem;">
-                            <span style="font-family:monospace;font-size:.72rem;font-weight:700;color:var(--text-primary);">${escHtml(s.ip)}</span>
+                            <span style="background:linear-gradient(135deg,rgba(59,130,246,.2),rgba(37,99,235,.1));border:1px solid rgba(59,130,246,.2);padding:.15rem .6rem;border-radius:99px;font-size:.75rem;font-weight:800;color:#93c5fd;display:flex;align-items:center;gap:.3rem;">
+                                ${s.displayLabel}
+                            </span>
+                            <span style="font-family:monospace;font-size:.72rem;font-weight:700;color:var(--text-muted);">${escHtml(s.ip)}</span>
                             ${loc ? `<span style="font-size:.7rem;color:var(--text-muted);">· ${escHtml(loc)}</span>` : ''}
                             ${s.isProxy ? '<span style="background:rgba(239,68,68,.2);color:var(--red);font-size:.62rem;padding:.1rem .45rem;border-radius:6px;font-weight:700;">⚠️ Proxy/VPN</span>' : ''}
                             ${isToday ? '<span style="background:rgba(52,212,135,.15);color:var(--green);font-size:.62rem;padding:.1rem .45rem;border-radius:6px;font-weight:700;">Hoje</span>' : ''}
                         </div>
                         <!-- Device + data -->
                         <div style="font-size:.7rem;color:var(--text-muted);display:flex;gap:.4rem;flex-wrap:wrap;">
-                            <span style="font-family:monospace;">${(s.deviceId||'').slice(0,22)}…</span>
+                            <span style="font-family:monospace;">${(s.deviceId || '').slice(0, 22)}…</span>
                             <span>·</span>
                             <span>${fmtTs(evts[0]?.timestamp)}</span>
                             ${duration ? `<span>· ⏱ ${duration}</span>` : ''}
@@ -3505,7 +3771,7 @@ function renderChatLogs(logs) {
                 <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;flex-shrink:0;">
                     ${s.hasWA ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:.67rem;padding:.15rem .55rem;border-radius:99px;font-weight:700;"><i class="fab fa-whatsapp"></i> Converteu</span>' : ''}
                     ${s.hasText ? `<span style="background:rgba(59,130,246,.12);color:#93c5fd;font-size:.67rem;padding:.15rem .55rem;border-radius:99px;font-weight:600;">💬 ${s.typedTexts.length} msg${s.typedTexts.length !== 1 ? 's' : ''}</span>` : ''}
-                    ${s.isp && s.isp !== '—' ? `<span style="font-size:.63rem;color:var(--text-muted);">${escHtml(s.isp.slice(0,30))}</span>` : ''}
+                    ${s.isp && s.isp !== '—' ? `<span style="font-size:.63rem;color:var(--text-muted);">${escHtml(s.isp.slice(0, 30))}</span>` : ''}
                     <i class="fas fa-chevron-down lb-chev" style="color:var(--text-muted);font-size:.65rem;transition:transform .2s;"></i>
                 </div>
             </div>
@@ -3554,14 +3820,14 @@ function renderChatLogs(logs) {
                 <!-- O que o usuário perguntou -->
                 <div style="padding:.55rem 1rem;background:rgba(59,130,246,.04);border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="font-size:.65rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;">💬 Perguntas do usuário</div>
-                    ${s.typedTexts.map(t => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">"${escHtml(t.slice(0,200))}"</div>`).join('')}
+                    ${s.typedTexts.map(t => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">"${escHtml(t.slice(0, 200))}"</div>`).join('')}
                 </div>` : ''}
  
                 ${s.waMessages.length ? `
                 <!-- Mensagens enviadas ao WA -->
                 <div style="padding:.55rem 1rem;background:rgba(37,211,102,.04);border-bottom:1px solid rgba(255,255,255,.04);">
                     <div style="font-size:.65rem;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem;">📱 Mensagens enviadas ao WhatsApp</div>
-                    ${s.waMessages.map(m => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">${escHtml(m.slice(0,300))}</div>`).join('')}
+                    ${s.waMessages.map(m => `<div style="font-size:.78rem;color:#e2e8f0;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.15);border-radius:8px;padding:.3rem .65rem;margin-bottom:.3rem;word-break:break-word;">${escHtml(m.slice(0, 300))}</div>`).join('')}
                 </div>` : ''}
  
                 <!-- Timeline completa com horários -->
@@ -3582,7 +3848,7 @@ function renderChatLogs(logs) {
             </div>
         </div>`;
     }
- 
+
     content.innerHTML = `
     <div class="stats-grid" style="margin-bottom:1.5rem;">
         <div class="stat-card"><div class="stat-icon purple"><i class="fas fa-comments"></i></div><div class="stat-info"><span class="stat-value">${totalSessions}</span><span class="stat-label">Conversas Totais</span></div></div>
@@ -3616,43 +3882,43 @@ function renderChatLogs(logs) {
         ${sessionList.length > 50 ? `<div style="text-align:center;padding:.8rem;color:var(--text-muted);font-size:.8rem;">… e mais ${sessionList.length - 50} conversas</div>` : ''}
     </div>`;
 }
- 
+
 // Exportar CSV dos chat logs
 async function _exportarChatLogs() {
     if (!db) return;
     try {
-        showToast('Gerando CSV...','info');
-        const snap = await db.collection('chat_logs').orderBy('timestamp','desc').limit(500).get();
-        const rows = [['Data','Hora','Sessão','DeviceID','IP','Cidade','País','ISP','Proxy','Evento','Texto/Label','Intenção','Bot Respondeu','Página']];
+        showToast('Gerando CSV...', 'info');
+        const snap = await db.collection('chat_logs').orderBy('timestamp', 'desc').limit(500).get();
+        const rows = [['Data', 'Hora', 'Sessão', 'DeviceID', 'IP', 'Cidade', 'País', 'ISP', 'Proxy', 'Evento', 'Texto/Label', 'Intenção', 'Bot Respondeu', 'Página']];
         snap.docs.forEach(d => {
             const v = d.data();
             rows.push([
-                v.date||'',
-                v.horaStr||v.hora||'',
-                (v.sessionId||'').slice(-12),
-                (v.deviceId||'').slice(0,20),
-                v.ip||'',
-                v.cidade||'',
-                v.pais||'',
-                v.isp||'',
+                v.date || '',
+                v.horaStr || v.hora || '',
+                (v.sessionId || '').slice(-12),
+                (v.deviceId || '').slice(0, 20),
+                v.ip || '',
+                v.cidade || '',
+                v.pais || '',
+                v.isp || '',
                 v.isProxy ? 'Sim' : 'Não',
-                v.event||'',
-                (v.text||v.label||v.waText||v.msg||'').slice(0,120),
-                v.intentDetected||'',
-                (v.botResponse||v.botMsg||'').slice(0,120),
-                v.page||'',
+                v.event || '',
+                (v.text || v.label || v.waText || v.msg || '').slice(0, 120),
+                v.intentDetected || '',
+                (v.botResponse || v.botMsg || '').slice(0, 120),
+                v.page || '',
             ]);
         });
-        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-        const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `chat-logs-${new Date().toISOString().slice(0,10)}.csv`;
+        a.download = `chat-logs-${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         showToast(`✅ CSV exportado — ${snap.size} eventos`);
-    } catch(e) { showToast('Erro ao exportar','error'); }
+    } catch (e) { showToast('Erro ao exportar', 'error'); }
 }
- 
+
 async function _limparChatLogs() {
     if (!confirm('Limpar TODOS os logs de chat? Esta ação não pode ser desfeita.')) return;
     try {
@@ -3662,32 +3928,33 @@ async function _limparChatLogs() {
         await batch.commit();
         showToast('Logs apagados.');
         loadChatLogs();
-    } catch(e) { showToast('Erro ao limpar','error'); }
+    } catch (e) { showToast('Erro ao limpar', 'error'); }
 }
- 
+
 window._exportarChatLogs = _exportarChatLogs;
-window._limparChatLogs   = _limparChatLogs;
-window.loadChatLogs      = loadChatLogs;
+window._limparChatLogs = _limparChatLogs;
+window.loadChatLogs = loadChatLogs;
 
 // ── Real-time badge para novos chats ──
 function startChatLogsListener() {
     if (!db) return;
     let _chatInit = false;
     db.collection('chat_logs')
-        .where('event','==','chat_aberto')
-        .orderBy('timestamp','desc')
-        .limit(1)
+        .orderBy('timestamp', 'desc')
+        .limit(3)
         .onSnapshot(snap => {
             if (!_chatInit) { _chatInit = true; return; }
             snap.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    showNotification('💬 Chat aberto!', 'Um visitante iniciou uma conversa', 'purple');
-                    const today = new Date().toISOString().slice(0,10);
-                    const badge = document.getElementById('badge-chat-logs');
-                    if (badge) {
-                        const cur = parseInt(badge.textContent || '0') + 1;
-                        badge.textContent = cur;
-                        badge.style.display = '';
+                    const data = change.doc.data();
+                    if (data.event === 'chat_aberto') {
+                        showNotification('💬 Chat aberto!', 'Um visitante iniciou uma conversa', 'purple');
+                        const badge = document.getElementById('badge-chat-logs');
+                        if (badge) {
+                            const cur = parseInt(badge.textContent || '0') + 1;
+                            badge.textContent = cur;
+                            badge.style.display = '';
+                        }
                     }
                 }
             });
@@ -3695,3 +3962,264 @@ function startChatLogsListener() {
 }
 
 window.loadChatLogs = loadChatLogs;
+
+// ===================== CRM / LEADS =====================
+let leadsListener = null;
+
+function carregarLeads() {
+    if (!db) return;
+
+    // Limpar listener anterior se existir
+    if (leadsListener) leadsListener();
+
+    leadsListener = db.collection('leads').orderBy('timestamp', 'desc')
+        .onSnapshot(snap => {
+            const leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Limpa as colunas
+            ['novo', 'atendimento', 'visita', 'ganho'].forEach(s => {
+                const el = document.getElementById('col-' + s);
+                if (el) el.innerHTML = '';
+            });
+
+            // Popula os leads
+            let totalNovos = 0;
+            leads.forEach(lead => {
+                const status = lead.status || 'novo';
+                const div = document.createElement('div');
+                div.className = 'kanban-card';
+                div.draggable = true;
+                div.dataset.id = lead.id;
+                div.dataset.phone = lead.whatsapp || '';
+
+                div.addEventListener('dragstart', function (e) {
+                    e.dataTransfer.setData('text/plain', lead.id);
+                    // pequeno destaque visual
+                    setTimeout(() => div.style.opacity = '0.5', 0);
+                });
+
+                div.addEventListener('dragend', function (e) {
+                    div.style.opacity = '1';
+                });
+
+                div.innerHTML = `
+                    <div class="kanban-card-title">${lead.nome || 'Sem Nome'}</div>
+                    <div class="kanban-card-info">
+                        <i class="fab fa-whatsapp"></i> ${lead.whatsapp || '---'}
+                    </div>
+                    ${lead.regiao_buscada ? `<div class="kanban-card-info"><i class="fas fa-map-marker-alt"></i> ${lead.regiao_buscada}</div>` : ''}
+                    ${lead.quartos_buscados ? `<div class="kanban-card-info"><i class="fas fa-bed"></i> ${lead.quartos_buscados} quartos</div>` : ''}
+                    ${lead.origem ? `<span class="kanban-card-tag">${lead.origem}</span>` : ''}
+                    <a href="https://wa.me/${(lead.whatsapp || '').replace(/\\D/g, '')}?text=Ol%C3%A1%20${encodeURIComponent(lead.nome || '')}" target="_blank" class="btn-whatsapp-lead">Chamar no Whats</a>
+                `;
+
+                const col = document.getElementById('col-' + status);
+                if (col) {
+                    col.appendChild(div);
+                }
+
+                if (status === 'novo') totalNovos++;
+            });
+
+            // Atualizar contadores
+            ['novo', 'atendimento', 'visita', 'ganho'].forEach(s => {
+                const col = document.getElementById('col-' + s);
+                const count = document.getElementById('count-' + s);
+                if (col && count) {
+                    count.textContent = col.children.length;
+                }
+            });
+
+            // Atualizar badge no menu
+            const badge = document.getElementById('badge-leads');
+            if (badge) {
+                badge.style.display = totalNovos > 0 ? 'inline-block' : 'none';
+                badge.textContent = totalNovos;
+            }
+
+        }, err => console.error('Erro ao buscar leads:', err));
+}
+
+function allowDrop(ev) {
+    ev.preventDefault();
+}
+
+function dropLead(ev) {
+    ev.preventDefault();
+    const id = ev.dataTransfer.getData('text/plain');
+    if (!id) return;
+
+    // Identificar a coluna que recebeu o elemento
+    // ev.target pode ser um filho, então subimos até .kanban-body
+    let col = ev.target;
+    while (col && !col.classList.contains('kanban-body')) {
+        col = col.parentElement;
+    }
+
+    if (!col) return;
+
+    // Qual é o status dessa coluna? O Parente é .kanban-column[data-status]
+    const statusCol = col.parentElement.dataset.status;
+    if (!statusCol) return;
+
+    // Atualizar no firestore
+    if (db) {
+        db.collection('leads').doc(id).update({
+            status: statusCol,
+            updatedAt: new Date().toISOString()
+        }).then(() => {
+            showToast('Lead movido para ' + statusCol);
+        }).catch(e => {
+            console.error(e);
+            showToast('Erro ao mover', 'error');
+        });
+    }
+}
+
+window.carregarLeads = carregarLeads;
+window.allowDrop = allowDrop;
+window.dropLead = dropLead;
+
+// ============================================================
+//  QUICK SEARCH — Busca rápida inteligente no painel admin
+// ============================================================
+(function initQuickSearch() {
+    const QS_SECTIONS = [
+        { section: 'dashboard', icon: 'fa-chart-pie', color: 'blue', title: 'Dashboard', desc: 'Visão geral, estatísticas e gráficos', keywords: ['dashboard', 'painel', 'inicio', 'home', 'resumo', 'visao geral', 'overview', 'estatisticas'] },
+        { section: 'imoveis', icon: 'fa-building', color: 'blue', title: 'Gerenciar Imóveis', desc: 'Listar, editar e buscar imóveis cadastrados', keywords: ['imoveis', 'imovel', 'apartamento', 'casa', 'cobertura', 'terreno', 'propriedade', 'catalogo', 'listagem', 'gerenciar'] },
+        { section: 'adicionar', icon: 'fa-plus-circle', color: 'green', title: 'Adicionar Imóvel', desc: 'Cadastrar novo imóvel no sistema', keywords: ['adicionar', 'novo', 'criar', 'cadastrar', 'novo imovel', 'incluir'] },
+        { section: 'lixeira', icon: 'fa-trash-alt', color: 'red', title: 'Lixeira', desc: 'Imóveis removidos — restaurar ou excluir', keywords: ['lixeira', 'excluidos', 'removidos', 'apagados', 'trash', 'restaurar', 'deletados'] },
+        { section: 'crm', icon: 'fa-bullseye', color: 'green', title: 'CRM / Leads', desc: 'Gestão de leads e funil de vendas (Kanban)', keywords: ['crm', 'leads', 'lead', 'contatos', 'funil', 'kanban', 'vendas', 'clientes', 'prospects', 'interessados', 'whatsapp'] },
+        { section: 'analytics', icon: 'fa-chart-bar', color: 'purple', title: 'Analytics', desc: 'Análises detalhadas de preços, áreas e bairros', keywords: ['analytics', 'analise', 'analises', 'graficos', 'dados', 'metricas', 'relatorio', 'relatorios', 'insights'] },
+        { section: 'visitas', icon: 'fa-eye', color: 'blue', title: 'Visitas ao Site', desc: 'Relatório de visitas, páginas e dispositivos', keywords: ['visitas', 'visitantes', 'trafego', 'acessos', 'pageviews', 'visualizacoes', 'site'] },
+        { section: 'perfil', icon: 'fa-users', color: 'green', title: 'Perfil de Visitante', desc: 'Comportamento e perfil dos visitantes', keywords: ['perfil', 'visitante', 'comportamento', 'demografia', 'usuario', 'usuarios', 'publico'] },
+        { section: 'chat-logs', icon: 'fa-comments', color: 'purple', title: 'Chat do Assistente', desc: 'Logs de conversas do assistente virtual', keywords: ['chat', 'assistente', 'conversas', 'logs', 'mensagens', 'bot', 'atendimento'] },
+        { section: 'seguranca', icon: 'fa-shield-alt', color: 'red', title: 'Segurança', desc: 'Histórico de logins e alertas de segurança', keywords: ['seguranca', 'logins', 'login', 'historico', 'acesso', 'alertas', 'vpn', 'proxy', 'ip', 'sessao', 'sessoes'] },
+        { section: 'site', icon: 'fa-sliders-h', color: 'blue', title: 'Config. do Site', desc: 'Configurações do site público', keywords: ['configuracoes', 'config', 'site', 'ajustes', 'preferencias', 'personalizar'] },
+        { section: 'banner', icon: 'fa-image', color: 'amber', title: 'Banner Promo', desc: 'Gerenciar banner promocional da home', keywords: ['banner', 'promo', 'promocional', 'propaganda', 'anuncio', 'anuncios', 'marketing', 'oferta'] },
+        { section: 'saude', icon: 'fa-heartbeat', color: 'red', title: 'Saúde do Sistema', desc: 'Status do Firestore, erros e diagnósticos', keywords: ['saude', 'sistema', 'firestore', 'status', 'erros', 'bugs', 'diagnostico', 'health', 'servidor'] },
+        { section: 'configuracoes', icon: 'fa-cog', color: 'blue', title: 'Configurações', desc: 'Preferências gerais do painel', keywords: ['configuracoes', 'preferencias', 'opcoes', 'settings', 'geral'] },
+    ];
+
+    function normalize(s) {
+        return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    }
+
+    function search(query) {
+        const q = normalize(query);
+        if (!q) return [];
+        const words = q.split(/\s+/).filter(w => w.length > 0);
+        const scored = QS_SECTIONS.map(s => {
+            let score = 0;
+            const allText = normalize([s.title, s.desc, ...s.keywords].join(' '));
+            words.forEach(w => {
+                // Exact keyword match
+                if (s.keywords.some(k => k === w)) score += 100;
+                // Keyword starts with
+                else if (s.keywords.some(k => k.startsWith(w))) score += 70;
+                // Keyword includes
+                else if (s.keywords.some(k => k.includes(w))) score += 50;
+                // Title/desc includes
+                else if (allText.includes(w)) score += 30;
+            });
+            return { ...s, score };
+        }).filter(s => s.score > 0).sort((a, b) => b.score - a.score);
+        return scored;
+    }
+
+    function renderResults(results) {
+        const container = document.getElementById('qs-results');
+        if (!container) return;
+        if (!results.length) {
+            container.innerHTML = '<div class="qs-no-results"><i class="fas fa-search" style="opacity:.4;margin-right:.4rem;"></i>Nenhuma seção encontrada</div>';
+            container.style.display = 'block';
+            return;
+        }
+        container.innerHTML = results.map((r, i) =>
+            `<div class="qs-result-item${i === 0 ? ' qs-active' : ''}" data-section="${r.section}" data-idx="${i}">
+                <div class="qs-result-icon ${r.color}"><i class="fas ${r.icon}"></i></div>
+                <div class="qs-result-text">
+                    <div class="qs-result-title">${r.title}</div>
+                    <div class="qs-result-desc">${r.desc}</div>
+                </div>
+                <span class="qs-result-kbd">Enter ↵</span>
+            </div>`
+        ).join('');
+        container.style.display = 'block';
+
+        container.querySelectorAll('.qs-result-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const sec = item.dataset.section;
+                if (sec === 'adicionar') { if (typeof novoImovel === 'function') novoImovel(); }
+                else if (typeof showSection === 'function') showSection(sec);
+                closeSearch();
+            });
+        });
+    }
+
+    function closeSearch() {
+        const container = document.getElementById('qs-results');
+        const input = document.getElementById('qs-input');
+        if (container) container.style.display = 'none';
+        if (input) { input.value = ''; input.blur(); }
+        _activeIdx = 0;
+    }
+
+    let _activeIdx = 0;
+
+    function moveActive(delta) {
+        const items = document.querySelectorAll('.qs-result-item');
+        if (!items.length) return;
+        items[_activeIdx]?.classList.remove('qs-active');
+        _activeIdx = Math.max(0, Math.min(items.length - 1, _activeIdx + delta));
+        items[_activeIdx]?.classList.add('qs-active');
+        items[_activeIdx]?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function selectActive() {
+        const items = document.querySelectorAll('.qs-result-item');
+        if (items[_activeIdx]) items[_activeIdx].click();
+    }
+
+    // Wait for DOM
+    function bind() {
+        const input = document.getElementById('qs-input');
+        if (!input) { setTimeout(bind, 500); return; }
+
+        input.addEventListener('input', () => {
+            _activeIdx = 0;
+            const q = input.value.trim();
+            if (!q) { document.getElementById('qs-results').style.display = 'none'; return; }
+            renderResults(search(q));
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const resultsVisible = document.getElementById('qs-results')?.style.display !== 'none';
+            if (e.key === 'ArrowDown' && resultsVisible) { e.preventDefault(); moveActive(1); }
+            else if (e.key === 'ArrowUp' && resultsVisible) { e.preventDefault(); moveActive(-1); }
+            else if (e.key === 'Enter' && resultsVisible) { e.preventDefault(); selectActive(); }
+            else if (e.key === 'Escape') { closeSearch(); }
+        });
+
+        // Ctrl+K shortcut
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                const panel = document.getElementById('admin-panel');
+                if (panel && panel.style.display !== 'none') {
+                    input.focus();
+                    input.select();
+                }
+            }
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            const qs = document.getElementById('admin-quick-search');
+            if (qs && !qs.contains(e.target)) closeSearch();
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+    else bind();
+})();
