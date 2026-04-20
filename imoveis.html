@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Imóveis à Venda no Rio de Janeiro</title>
+    <link rel="canonical" href="https://leandrobomfim.com.br/imoveis.html">
     <meta name="description" content="Veja todos os imóveis disponíveis em Ipanema, Leblon, Barra da Tijuca, Recreio e mais. Filtre por bairro, quartos e faixa de preço.">
     <meta name="keywords" content="imóveis à venda Rio de Janeiro, apartamento Ipanema, apartamento Leblon, corretor RJ">
     <meta name="author" content="Leandro Bomfim">
@@ -14,10 +15,10 @@
     <meta property="og:url" content="https://leandrobomfim.com.br/imoveis.html">
     <meta property="og:locale" content="pt_BR">
     <meta name="twitter:card" content="summary_large_image">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233498db'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text y='.9em' font-size='60' font-weight='900' font-family='Arial' fill='white' x='50%' text-anchor='middle' dominant-baseline='auto' dy='0.1em'>LB</text></svg>">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#3498db">
+    <meta name="theme-color" content="#3b82f6">
     <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -29,11 +30,6 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="tracker.js"></script>
     <style>
     /* ══ HERO ══ */
     .imoveis-hero {
@@ -319,6 +315,7 @@
     </style>
 </head>
 <body class="imoveis-page">
+    <a href="#conteudo-principal" class="skip-link">Ir para o conteúdo</a>
     <header>
         <nav>
             <div class="logo">
@@ -336,7 +333,7 @@
         </nav>
     </header>
 
-    <main>
+    <main id="conteudo-principal" tabindex="-1">
         <!-- HERO -->
         <div class="imoveis-hero fade-in">
             <h1>Encontre seu Imóvel</h1>
@@ -564,13 +561,23 @@
         </div>
     </footer>
 
-    <a href="https://wa.me/5521981424469?text=Olá%20Leandro!%20Tenho%20interesse%20em%20imóveis.%20Pode%20me%20ajudar%3F"
-       class="whatsapp-float" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
-        <div class="whatsapp-float-inner"><i class="fab fa-whatsapp"></i><span class="whatsapp-float-label">Falar com Leandro</span></div>
-        <span class="whatsapp-float-pulse"></span>
-    </a>
+    <!-- WhatsApp + assistente: chat-widget.js -->
 
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="tracker.js"></script>
     <script src="script.js"></script>
-    <script src="chat-widget.js"></script>
+    <script>
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const s = document.createElement('script');
+                s.src = 'chat-widget.js';
+                s.async = true;
+                document.body.appendChild(s);
+            }, 3000);
+        });
+    </script>
 </body>
 </html>
