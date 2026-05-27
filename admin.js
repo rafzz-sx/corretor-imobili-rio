@@ -3966,119 +3966,290 @@ window.loadChatLogs = loadChatLogs;
 // ===================== CRM / LEADS =====================
 let leadsListener = null;
 
+const LEAD_STATUS_LABELS = {
+    novo: '🔵 Novos Contatos',
+    atendimento: '🟡 Em Atendimento',
+    visita: '🟣 Visita Agendada',
+    ganho: '🟢 Venda Fechada',
+};
+const LEAD_ALL_STATUS = ['novo', 'atendimento', 'visita', 'ganho'];
+
+// Injeta estilos do Kanban uma vez
+(function injectKanbanStyles() {
+    if (document.getElementById('_lb-crm-styles')) return;
+    const s = document.createElement('style');
+    s.id = '_lb-crm-styles';
+    s.textContent = `
+    /* ── Select de status no card ── */
+    .kanban-status-select {
+        width: 100%;
+        margin-top: .6rem;
+        padding: .38rem .6rem;
+        background: var(--bg-elevated, #1c2029);
+        border: 1px solid var(--border, rgba(255,255,255,.08));
+        border-radius: 8px;
+        color: var(--text-primary, #f1f5f9);
+        font-size: .78rem;
+        font-family: var(--font-ui, 'DM Sans', sans-serif);
+        cursor: pointer;
+        transition: border-color .2s;
+        appearance: auto;
+    }
+    .kanban-status-select:focus {
+        outline: none;
+        border-color: var(--accent, #3b82f6);
+    }
+    .kanban-status-select option { background: #161921; }
+
+    /* ── Visual feedback ao arrastar ── */
+    .kanban-card.dragging {
+        opacity: .45;
+        transform: scale(.97);
+        box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    }
+    .kanban-body.drag-over {
+        background: rgba(59,130,246,.07);
+        border: 1.5px dashed rgba(59,130,246,.4);
+        border-radius: 10px;
+        transition: background .15s, border .15s;
+    }
+
+    /* ── Botão de excluir lead ── */
+    .btn-delete-lead {
+        margin-top: .5rem;
+        width: 100%;
+        background: rgba(239,68,68,.08);
+        border: 1px solid rgba(239,68,68,.2);
+        color: var(--red, #ef4444);
+        padding: .35rem;
+        border-radius: 6px;
+        font-size: .72rem;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background .2s;
+        display: flex; align-items: center; justify-content: center; gap: .3rem;
+    }
+    .btn-delete-lead:hover { background: rgba(239,68,68,.18); }
+
+    /* ── Campo de pesquisa de leads ── */
+    .crm-toolbar {
+        display: flex; gap: .7rem; flex-wrap: wrap; align-items: center;
+        margin-bottom: 1.1rem;
+    }
+    .crm-search {
+        flex: 1; min-width: 180px; max-width: 320px;
+        padding: .55rem .9rem .55rem 2.2rem;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: var(--radius-sm); color: var(--text-primary);
+        font-size: .85rem; font-family: var(--font-ui); outline: none;
+        transition: border-color .2s;
+        position: relative;
+    }
+    .crm-search:focus { border-color: var(--accent); }
+    .crm-search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 320px; }
+    .crm-search-wrap i { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: .8rem; pointer-events: none; }
+    `;
+    document.head.appendChild(s);
+})();
+
+function moverLead(leadId, novoStatus) {
+    if (!db || !leadId || !novoStatus) return;
+    db.collection('leads').doc(leadId).update({
+        status: novoStatus,
+        updatedAt: new Date().toISOString(),
+    }).then(() => {
+        showToast('✅ Lead movido para ' + (LEAD_STATUS_LABELS[novoStatus] || novoStatus));
+    }).catch(e => {
+        console.error('moverLead:', e);
+        showToast('Erro ao mover lead', 'error');
+    });
+}
+
+function excluirLead(leadId, nome) {
+    if (!db || !leadId) return;
+    if (!confirm(`Excluir o lead de "${nome || 'este contato'}"? Esta ação não pode ser desfeita.`)) return;
+    db.collection('leads').doc(leadId).delete()
+        .then(() => showToast('Lead excluído.'))
+        .catch(() => showToast('Erro ao excluir lead', 'error'));
+}
+
 function carregarLeads() {
     if (!db) return;
 
-    // Limpar listener anterior se existir
-    if (leadsListener) leadsListener();
+    // Injeta toolbar de busca acima do kanban (uma vez)
+    const crmSection = document.getElementById('section-crm');
+    if (crmSection && !crmSection.querySelector('.crm-toolbar')) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'crm-toolbar';
+        toolbar.innerHTML = `
+            <div class="crm-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="crm-search-input" class="crm-search" placeholder="Buscar por nome, WhatsApp…">
+            </div>
+            <button class="btn-secondary" onclick="carregarLeads()" style="font-size:.82rem;padding:.5rem .9rem;">
+                <i class="fas fa-sync-alt"></i> Atualizar
+            </button>
+        `;
+        const kanban = crmSection.querySelector('.kanban-board');
+        if (kanban) crmSection.insertBefore(toolbar, kanban);
 
-    leadsListener = db.collection('leads').orderBy('timestamp', 'desc')
+        // Filtro de busca: re-renderiza com filtro aplicado
+        document.getElementById('crm-search-input')?.addEventListener('input', () => {
+            const q = (document.getElementById('crm-search-input')?.value || '').toLowerCase().trim();
+            document.querySelectorAll('.kanban-card').forEach(card => {
+                const nome = (card.querySelector('.kanban-card-title')?.textContent || '').toLowerCase();
+                const info = (card.querySelector('.kanban-card-info')?.textContent || '').toLowerCase();
+                card.style.display = (!q || nome.includes(q) || info.includes(q)) ? '' : 'none';
+            });
+        });
+    }
+
+    // Cancela listener anterior
+    if (leadsListener) { leadsListener(); leadsListener = null; }
+
+    leadsListener = db.collection('leads')
+        .orderBy('timestamp', 'desc')
         .onSnapshot(snap => {
             const leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-            // Limpa as colunas
-            ['novo', 'atendimento', 'visita', 'ganho'].forEach(s => {
+            // Limpa colunas
+            LEAD_ALL_STATUS.forEach(s => {
                 const el = document.getElementById('col-' + s);
                 if (el) el.innerHTML = '';
             });
 
-            // Popula os leads
             let totalNovos = 0;
+
             leads.forEach(lead => {
                 const status = lead.status || 'novo';
-                const div = document.createElement('div');
-                div.className = 'kanban-card';
-                div.draggable = true;
-                div.dataset.id = lead.id;
-                div.dataset.phone = lead.whatsapp || '';
+                const col = document.getElementById('col-' + status);
+                if (!col) return; // status desconhecido, ignora
 
-                div.addEventListener('dragstart', function (e) {
-                    e.dataTransfer.setData('text/plain', lead.id);
-                    // pequeno destaque visual
-                    setTimeout(() => div.style.opacity = '0.5', 0);
-                });
+                const card = document.createElement('div');
+                card.className = 'kanban-card';
+                card.draggable = true;
+                card.dataset.id = lead.id;
 
-                div.addEventListener('dragend', function (e) {
-                    div.style.opacity = '1';
-                });
-
-                div.innerHTML = `
-                    <div class="kanban-card-title">${lead.nome || 'Sem Nome'}</div>
+                // ── HTML do card ──
+                card.innerHTML = `
+                    <div class="kanban-card-title">${escHtml(lead.nome || 'Sem Nome')}</div>
                     <div class="kanban-card-info">
-                        <i class="fab fa-whatsapp"></i> ${lead.whatsapp || '---'}
+                        <i class="fab fa-whatsapp" style="color:#25d366;"></i>
+                        ${escHtml(lead.whatsapp || '---')}
                     </div>
-                    ${lead.regiao_buscada ? `<div class="kanban-card-info"><i class="fas fa-map-marker-alt"></i> ${lead.regiao_buscada}</div>` : ''}
-                    ${lead.quartos_buscados ? `<div class="kanban-card-info"><i class="fas fa-bed"></i> ${lead.quartos_buscados} quartos</div>` : ''}
-                    ${lead.origem ? `<span class="kanban-card-tag">${lead.origem}</span>` : ''}
-                    <a href="https://wa.me/${(lead.whatsapp || '').replace(/\\D/g, '')}?text=Ol%C3%A1%20${encodeURIComponent(lead.nome || '')}" target="_blank" class="btn-whatsapp-lead">Chamar no Whats</a>
+                    ${lead.regiao_buscada ? `<div class="kanban-card-info"><i class="fas fa-map-marker-alt"></i> ${escHtml(lead.regiao_buscada)}</div>` : ''}
+                    ${lead.quartos_buscados ? `<div class="kanban-card-info"><i class="fas fa-bed"></i> ${escHtml(String(lead.quartos_buscados))} quartos</div>` : ''}
+                    ${lead.tipo_buscado ? `<div class="kanban-card-info" style="font-size:.73rem;color:var(--text-muted);"><i class="fas fa-home"></i> ${escHtml(lead.tipo_buscado)}</div>` : ''}
+                    ${lead.faixa_preco ? `<div class="kanban-card-info" style="font-size:.73rem;color:var(--text-muted);"><i class="fas fa-tag"></i> ${escHtml(lead.faixa_preco)}</div>` : ''}
+                    ${lead.origem ? `<span class="kanban-card-tag">${escHtml(lead.origem)}</span>` : ''}
+
+                    <select class="kanban-status-select" title="Mover lead para outra etapa" data-lead-id="${lead.id}">
+                        ${LEAD_ALL_STATUS.map(s =>
+                            `<option value="${s}"${s === status ? ' selected' : ''}>${LEAD_STATUS_LABELS[s]}</option>`
+                        ).join('')}
+                    </select>
+
+                    <a href="https://wa.me/${escHtml((lead.whatsapp || '').replace(/\D/g, ''))}?text=${encodeURIComponent('Olá ' + (lead.nome || '') + '! Vi seu interesse em imóveis. Posso ajudar?')}"
+                       target="_blank" rel="noopener" class="btn-whatsapp-lead">
+                        <i class="fab fa-whatsapp"></i> Chamar no WhatsApp
+                    </a>
+                    <button class="btn-delete-lead" data-lead-id="${lead.id}" data-lead-nome="${escHtml(lead.nome || '')}">
+                        <i class="fas fa-trash"></i> Excluir lead
+                    </button>
                 `;
 
-                const col = document.getElementById('col-' + status);
-                if (col) {
-                    col.appendChild(div);
-                }
+                // ── Listener do select (funciona em todos os dispositivos) ──
+                const sel = card.querySelector('.kanban-status-select');
+                sel.addEventListener('change', function (e) {
+                    e.stopPropagation();
+                    const novoStatus = this.value;
+                    if (novoStatus !== status) moverLead(lead.id, novoStatus);
+                });
 
+                // ── Listener do botão excluir ──
+                card.querySelector('.btn-delete-lead').addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    excluirLead(lead.id, lead.nome);
+                });
+
+                // ── Drag & Drop (desktop) ──
+                card.addEventListener('dragstart', e => {
+                    e.dataTransfer.setData('text/plain', lead.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    // Usa rAF para não bloquear o browser durante o start
+                    requestAnimationFrame(() => card.classList.add('dragging'));
+                });
+                card.addEventListener('dragend', () => {
+                    card.classList.remove('dragging');
+                    // Remove highlight de todas as colunas
+                    document.querySelectorAll('.kanban-body').forEach(b => b.classList.remove('drag-over'));
+                });
+                // Permite receber drop sobre o próprio card (propaga para a coluna)
+                card.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+
+                col.appendChild(card);
                 if (status === 'novo') totalNovos++;
             });
 
-            // Atualizar contadores
-            ['novo', 'atendimento', 'visita', 'ganho'].forEach(s => {
+            // Atualiza contadores
+            LEAD_ALL_STATUS.forEach(s => {
                 const col = document.getElementById('col-' + s);
                 const count = document.getElementById('count-' + s);
-                if (col && count) {
-                    count.textContent = col.children.length;
-                }
+                if (col && count) count.textContent = col.children.length;
             });
 
-            // Atualizar badge no menu
+            // Atualiza badge
             const badge = document.getElementById('badge-leads');
             if (badge) {
                 badge.style.display = totalNovos > 0 ? 'inline-block' : 'none';
                 badge.textContent = totalNovos;
             }
 
-        }, err => console.error('Erro ao buscar leads:', err));
+        }, err => {
+            console.error('Erro ao buscar leads:', err);
+            showToast('Erro ao carregar leads', 'error');
+        });
 }
 
 function allowDrop(ev) {
     ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'move';
+    // Destaca visualmente a coluna que está recebendo o drag
+    const body = ev.currentTarget;
+    if (body && body.classList.contains('kanban-body')) {
+        document.querySelectorAll('.kanban-body').forEach(b => b.classList.remove('drag-over'));
+        body.classList.add('drag-over');
+    }
 }
 
 function dropLead(ev) {
     ev.preventDefault();
+    ev.stopPropagation();
+
+    // Remove highlight de todas as colunas
+    document.querySelectorAll('.kanban-body').forEach(b => b.classList.remove('drag-over'));
+
     const id = ev.dataTransfer.getData('text/plain');
     if (!id) return;
 
-    // Identificar a coluna que recebeu o elemento
-    // ev.target pode ser um filho, então subimos até .kanban-body
-    let col = ev.target;
-    while (col && !col.classList.contains('kanban-body')) {
-        col = col.parentElement;
-    }
+    // Sobe pela árvore até encontrar .kanban-column que tem data-status
+    const kanbanColumn = ev.currentTarget.closest?.('.kanban-column')
+        || ev.currentTarget.parentElement;
 
-    if (!col) return;
-
-    // Qual é o status dessa coluna? O Parente é .kanban-column[data-status]
-    const statusCol = col.parentElement.dataset.status;
+    const statusCol = kanbanColumn?.dataset?.status;
     if (!statusCol) return;
 
-    // Atualizar no firestore
-    if (db) {
-        db.collection('leads').doc(id).update({
-            status: statusCol,
-            updatedAt: new Date().toISOString()
-        }).then(() => {
-            showToast('Lead movido para ' + statusCol);
-        }).catch(e => {
-            console.error(e);
-            showToast('Erro ao mover', 'error');
-        });
-    }
+    moverLead(id, statusCol);
 }
 
 window.carregarLeads = carregarLeads;
 window.allowDrop = allowDrop;
 window.dropLead = dropLead;
+window.moverLead = moverLead;
+window.excluirLead = excluirLead;
 
 // ============================================================
 //  QUICK SEARCH — Busca rápida inteligente no painel admin
