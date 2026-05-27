@@ -354,6 +354,47 @@ body.index-page .featured-logos {
     }
 }
 
+/* Mobile/touch robusto para menu em páginas internas */
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
+    .menu-toggle { display: flex; }
+    nav ul {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        background: rgba(0, 0, 0, 0.96);
+        border-radius: 10px;
+        padding: 0.75rem 0;
+        padding-left: 0;
+        margin-top: 0.5rem;
+        margin-left: 0;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        gap: 0;
+        order: 99;
+        flex-basis: 100%;
+    }
+    nav ul.active { display: flex; }
+}
+
+/* Otimização crítica contra lag em mobile */
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
+    body.index-page,
+    body.imoveis-page,
+    body.contato-page {
+        background-attachment: scroll !important;
+        background-size: cover, 220px 220px;
+    }
+
+    .gradient-sphere,
+    .particles {
+        display: none !important;
+    }
+
+    #gallery .imovel {
+        animation: none !important;
+    }
+}
+
 /* ========== FOOTER GLOBAL ========== */
 footer {
     background: linear-gradient(135deg, #1a2634, #2c3e50);
@@ -2647,6 +2688,8 @@ body.imoveis-page header {
         padding: 0.5rem 1rem;
         min-height: 60px;
         flex-wrap: wrap;
+        align-items: center;
+        row-gap: 0;
     }
 
     .logo-full {
@@ -2667,11 +2710,18 @@ body.imoveis-page header {
         display: none;
         width: 100%;
         flex-direction: column;
+        align-items: stretch;
         background: rgba(0, 0, 0, 0.95);
         border-radius: 10px;
-        padding: 1rem 0;
+        padding: 0.75rem 0;
+        /* CRÍTICO: reseta o padding-left: 4rem do desktop */
+        padding-left: 0;
         margin-top: 0.5rem;
+        margin-left: 0;
         border: 1px solid rgba(59, 130, 246, 0.3);
+        gap: 0;
+        order: 99;
+        flex-basis: 100%;
     }
 
     nav ul.active {
@@ -2685,8 +2735,14 @@ body.imoveis-page header {
 
     nav ul li a {
         display: block;
-        padding: 0.6rem;
+        padding: 0.75rem 1rem;
         font-size: 0.9rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    nav ul li a::before {
+        display: none;
     }
 
     /* Main */
@@ -5210,6 +5266,69 @@ body.quiz-modal-open {
 
 .quiz-content .quiz-textarea::placeholder {
     color: rgba(226, 232, 240, 0.45);
+}
+
+/* ── Quiz Livre: textarea tamanho fixo, fundo preto, sem redimensionar ── */
+.quiz-livre-wrap {
+    position: relative;
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+
+.quiz-livre-textarea {
+    width: 100%;
+    height: 110px;          /* altura fixa */
+    min-height: 110px;
+    max-height: 110px;
+    padding: 0.75rem 1rem;
+    padding-bottom: 1.6rem; /* espaço pro contador */
+    background: #000 !important;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: var(--radius-sm);
+    color: #e2e8f0;
+    font-size: 0.88rem;
+    font-family: var(--font-body);
+    line-height: 1.55;
+    resize: none;           /* sem redimensionamento */
+    overflow-y: auto;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+    display: block;
+}
+
+.quiz-livre-textarea:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    background: #000 !important;
+}
+
+.quiz-livre-textarea::placeholder {
+    color: rgba(226, 232, 240, 0.38);
+    font-size: 0.82rem;
+}
+
+.quiz-livre-counter {
+    position: absolute;
+    bottom: 0.45rem;
+    right: 0.75rem;
+    font-size: 0.68rem;
+    color: rgba(148, 163, 184, 0.5);
+    pointer-events: none;
+    font-family: var(--font-body);
+    line-height: 1;
+}
+
+/* Mobile: mesma altura, só ajusta padding */
+@media (max-width: 600px) {
+    .quiz-livre-textarea {
+        height: 100px;
+        min-height: 100px;
+        max-height: 100px;
+        font-size: 0.84rem;
+        padding: 0.65rem 0.85rem;
+        padding-bottom: 1.5rem;
+    }
 }
 
 .quiz-content .quiz-back-btn {
