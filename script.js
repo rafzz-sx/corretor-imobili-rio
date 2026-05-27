@@ -627,7 +627,8 @@ function renderGallery(lista, containerId = 'gallery') {
         return;
     }
 
-    gallery.innerHTML = lista.map(imo => {
+    // ── Gera HTML de um card (sem alterar DOM) ──
+    function buildCardHTML(imo) {
         const isTerreno = imo.tipo === 'Terreno';
         const isLancamento = imo.precoModo === 'lancamento';
         const precoNum = parseFloat(imo.preco).toLocaleString('pt-BR');
@@ -643,7 +644,6 @@ function renderGallery(lista, containerId = 'gallery') {
         else if (imo.status === 'alugado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--primary);color:var(--primary);"><i class="fas fa-key"></i> Alugado</div>';
         else if (imo.status === 'reservado') statusBadge = '<div class="imovel-vendido-badge" style="border-color:var(--warning);color:var(--warning);"><i class="fas fa-clock"></i> Reservado</div>';
 
-        // Tags adaptadas por tipo
         let detailTags = `<span class="detail-tag"><i class="fas fa-ruler-combined"></i> ${imo.area} m²</span>`;
         if (isTerreno) {
             if (imo.frente) detailTags += `<span class="detail-tag"><i class="fas fa-arrows-alt-h"></i> ${escapeHtml(imo.frente)}m frente</span>`;
@@ -690,17 +690,52 @@ function renderGallery(lista, containerId = 'gallery') {
                     </button>
                 </div>
             </div>`;
-    }).join('');
+    }
 
-    // Aplica blur-up + IntersectionObserver nas imagens dos cards
-    _setupCardImgObserver();
-    gallery.querySelectorAll('.imovel-img-wrap img').forEach(img => {
-        if (!img.complete || img.naturalWidth === 0) {
-            img.style.filter = 'blur(3px)';
-            img.style.willChange = 'filter';
-            _cardImgObserver && _cardImgObserver.observe(img);
+    // ── Renderização em lotes via DocumentFragment + rAF ──
+    // Evita bloquear a thread principal no mobile (zero jank)
+    const CHUNK_SIZE = 4; // renderiza 4 cards por frame
+    const frag = document.createDocumentFragment();
+    const temp = document.createElement('div');
+
+    // Limpa a galeria de uma vez (1 operação de DOM)
+    gallery.innerHTML = '';
+
+    let index = 0;
+
+    function renderChunk() {
+        const end = Math.min(index + CHUNK_SIZE, lista.length);
+        const chunkFrag = document.createDocumentFragment();
+
+        for (let i = index; i < end; i++) {
+            temp.innerHTML = buildCardHTML(lista[i]);
+            const node = temp.firstElementChild;
+            if (node) chunkFrag.appendChild(node);
         }
-    });
+
+        gallery.appendChild(chunkFrag);
+
+        // Aplica lazy-load + blur-up nos cards recém inseridos
+        _setupCardImgObserver();
+        const newImgs = gallery.querySelectorAll('.imovel-img-wrap img:not([data-observed])');
+        newImgs.forEach(img => {
+            img.setAttribute('data-observed', '1');
+            if (!img.complete || img.naturalWidth === 0) {
+                img.style.filter = 'blur(3px)';
+                img.style.willChange = 'filter';
+                _cardImgObserver && _cardImgObserver.observe(img);
+            }
+        });
+
+        index = end;
+
+        if (index < lista.length) {
+            requestAnimationFrame(renderChunk);
+        }
+    }
+
+    // Primeiro chunk imediato (sem atraso), resto em rAF
+    renderChunk();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1705,9 +1740,18 @@ function setupMobileMenu() {
     const toggle = document.querySelector('.menu-toggle');
     const ul = document.querySelector('nav ul');
     if (!toggle || !ul) return;
+    const isMobileViewport = () => window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
+    const closeMenu = () => {
+        toggle.classList.remove('active');
+        ul.classList.remove('active');
+        toggle.querySelectorAll('span').forEach(s => { s.style.transform = ''; s.style.opacity = ''; });
+        toggle.setAttribute('aria-expanded', 'false');
+    };
     const openClose = () => {
+        if (!isMobileViewport()) return;
         toggle.classList.toggle('active');
         ul.classList.toggle('active');
+        toggle.setAttribute('aria-expanded', toggle.classList.contains('active') ? 'true' : 'false');
         const spans = toggle.querySelectorAll('span');
         if (toggle.classList.contains('active')) {
             spans[0].style.transform = 'rotate(45deg) translate(8px,8px)';
@@ -1721,11 +1765,15 @@ function setupMobileMenu() {
     toggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openClose(); }
     });
-    ul.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
-        toggle.classList.remove('active');
-        ul.classList.remove('active');
-        toggle.querySelectorAll('span').forEach(s => { s.style.transform = ''; s.style.opacity = ''; });
-    }));
+    ul.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+    window.addEventListener('resize', () => { if (!isMobileViewport()) closeMenu(); }, { passive: true });
+    document.addEventListener('click', (e) => {
+        if (!isMobileViewport()) return;
+        if (!ul.classList.contains('active')) return;
+        if (toggle.contains(e.target) || ul.contains(e.target)) return;
+        closeMenu();
+    });
+    toggle.setAttribute('aria-expanded', 'false');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1757,6 +1805,8 @@ function setupCounters() {
 //  PARALLAX / PARTÍCULAS
 // ══════════════════════════════════════════════════════════
 function setupParallax() {
+    if (document.body.classList.contains('imoveis-page')) return;
+    if (window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
     document.addEventListener('mousemove', e => {
         const sphere = document.querySelector('.gradient-sphere');
         if (!sphere) return;
@@ -1836,6 +1886,7 @@ function loadPromoBanner() {
 //  INIT
 // ══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+    const isMobileLowPower = window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
     loadSiteConfig();
     loadPromoBanner();
     const hv = document.querySelector('.hero-video');
@@ -1845,23 +1896,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (document.querySelector('.testimonials-carousel')) window._carousel = new TestimonialsCarousel();
     setupMobileMenu();
-    setupParallax();
+    if (!isMobileLowPower) setupParallax();
     setupCounters();
     setupScrollToTop();
 
     // Fade-ins
-    document.querySelectorAll('.fade-in').forEach((el, i) => {
-        setTimeout(() => el.style.animationPlayState = 'running', i * 150);
-    });
+    const fadeNodes = document.querySelectorAll('.fade-in');
+    if (isMobileLowPower) {
+        fadeNodes.forEach((el) => { el.style.animation = 'none'; el.style.opacity = '1'; el.style.transform = 'none'; });
+    } else {
+        fadeNodes.forEach((el, i) => {
+            setTimeout(() => el.style.animationPlayState = 'running', i * 150);
+        });
+    }
 
     // Preconnects dinâmicos para domínios de imagem/vídeo
-    ['https://files.catbox.moe', 'https://remax.azureedge.net', 'https://imovio.com.br',
-        'https://images.unsplash.com', 'https://img.youtube.com'].forEach(domain => {
+    const preconnectDomains = ['https://files.catbox.moe', 'https://remax.azureedge.net', 'https://imovio.com.br',
+        'https://images.unsplash.com', 'https://img.youtube.com'];
+    const warmConnections = () => preconnectDomains.forEach(domain => {
             if (document.querySelector(`link[href="${domain}"]`)) return;
             const l = document.createElement('link');
             l.rel = 'preconnect'; l.href = domain; l.crossOrigin = 'anonymous';
             document.head.appendChild(l);
         });
+    if (isMobileLowPower) setTimeout(warmConnections, 1200);
+    else warmConnections();
 
     // Injeta estilos do player de vídeo inline e placeholder
     if (!document.getElementById('_lb-modal-video-styles')) {
