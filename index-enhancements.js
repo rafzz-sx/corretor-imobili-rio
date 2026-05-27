@@ -17,6 +17,19 @@
         ],
     };
 
+    // Sugestões de autocompletar para o campo de localização livre
+    const LOCATION_SUGGESTIONS = [
+        'Ipanema', 'Leblon', 'Copacabana', 'Botafogo', 'Flamengo',
+        'Barra da Tijuca', 'Barra Olímpica', 'Recreio dos Bandeirantes',
+        'Jacarepaguá', 'Vargem Grande', 'Vargem Pequena', 'Pedra de Guaratiba',
+        'Grumari', 'Camorim', 'Taquara', 'Curicica',
+        'Tijuca', 'Vila Isabel', 'Méier', 'Madureira', 'Campo Grande',
+        'Santa Teresa', 'Glória', 'Catete', 'Lapa', 'Centro',
+        'Humaitá', 'Laranjeiras', 'Cosme Velho', 'Urca',
+        'São Conrado', 'Joá', 'Itanhangá', 'Barra de Guaratiba',
+        'Zona Sul', 'Zona Norte', 'Zona Oeste',
+    ];
+
     function escapeHtml(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -358,7 +371,7 @@
             tipo: (window.quizData && window.quizData.tipo) || '',
             quartos: (window.quizData && window.quizData.quartos) || '',
             preco: precoEl ? precoEl.value : '',
-            livre: livre.slice(0, 500),
+            livre: livre.slice(0, 2000),
         };
     }
 
@@ -370,6 +383,7 @@
     }
 
     function wireQuizChips() {
+        // chips de tipo e quartos (apenas — região virou input livre)
         document.querySelectorAll('.quiz-chip-row').forEach(row => {
             row.querySelectorAll('.quiz-chip').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -382,10 +396,58 @@
                 });
             });
         });
+
+        // ── Autocomplete de localização ──
+        const locInput = document.getElementById('quiz-localizacao');
+        const suggestEl = document.getElementById('quiz-location-suggestions');
+        if (!locInput || !suggestEl) return;
+
+        function normLoc(s) {
+            return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        }
+
+        function renderSuggestions(val) {
+            const q = normLoc(val);
+            if (!q || q.length < 2) { suggestEl.innerHTML = ''; suggestEl.classList.remove('open'); return; }
+            const matches = LOCATION_SUGGESTIONS.filter(s => normLoc(s).includes(q)).slice(0, 6);
+            if (!matches.length) { suggestEl.innerHTML = ''; suggestEl.classList.remove('open'); return; }
+            suggestEl.innerHTML = matches.map(s =>
+                `<div class="quiz-loc-item" tabindex="0">${s}</div>`
+            ).join('');
+            suggestEl.classList.add('open');
+            suggestEl.querySelectorAll('.quiz-loc-item').forEach(item => {
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    locInput.value = item.textContent;
+                    suggestEl.innerHTML = '';
+                    suggestEl.classList.remove('open');
+                });
+                item.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        locInput.value = item.textContent;
+                        suggestEl.innerHTML = '';
+                        suggestEl.classList.remove('open');
+                        locInput.focus();
+                    }
+                });
+            });
+        }
+
+        locInput.addEventListener('input', (e) => renderSuggestions(e.target.value));
+        locInput.addEventListener('blur', () => setTimeout(() => { suggestEl.classList.remove('open'); }, 150));
+        locInput.addEventListener('focus', (e) => renderSuggestions(e.target.value));
+
+        // ── Contador de chars no textarea livre ──
+        const livre = document.getElementById('quiz-livre');
+        const counter = document.getElementById('quiz-livre-count');
+        if (livre && counter) {
+            livre.addEventListener('input', () => { counter.textContent = livre.value.length; });
+        }
     }
 
     function resetQuizUi() {
-        window.quizData = { region: '', tipo: '', quartos: '' };
+        window.quizData = { tipo: '', quartos: '' };
         document.querySelectorAll('.quiz-chip-row').forEach(row => {
             const field = row.querySelector('.quiz-chip') && row.querySelector('.quiz-chip').getAttribute('data-quiz-field');
             row.querySelectorAll('.quiz-chip').forEach(b => b.classList.remove('quiz-chip-active'));
@@ -396,6 +458,12 @@
         if (preco) preco.value = '';
         const livre = document.getElementById('quiz-livre');
         if (livre) livre.value = '';
+        const counter = document.getElementById('quiz-livre-count');
+        if (counter) counter.textContent = '0';
+        const loc = document.getElementById('quiz-localizacao');
+        if (loc) loc.value = '';
+        const sug = document.getElementById('quiz-location-suggestions');
+        if (sug) { sug.innerHTML = ''; sug.classList.remove('open'); }
         const nome = document.getElementById('quiz-nome');
         const zap = document.getElementById('quiz-whatsapp');
         if (nome) nome.value = '';
