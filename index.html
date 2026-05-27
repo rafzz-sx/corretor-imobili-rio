@@ -120,7 +120,7 @@
 
                     <div class="hero-cta-group hero-cta-group--triple">
                         <a href="imoveis.html" class="cta-primary">
-                            <span>Ver imóveis exclusivos</span>
+                            <span>Ver imóveis do catálogo</span>
                             <i class="fas fa-th-large"></i>
                         </a>
                         <button type="button" onclick="openQuizModal()" class="cta-secondary">
@@ -351,16 +351,6 @@
                     <li><a href="contato.html">Contato</a></li>
                 </ul>
             </div>
-            <div class="footer-links">
-                <h4>Regiões</h4>
-                <ul>
-                    <li><span>Ipanema</span></li>
-                    <li><span>Leblon</span></li>
-                    <li><span>Barra da Tijuca</span></li>
-                    <li><span>Recreio dos Bandeirantes</span></li>
-                    <li><span>Copacabana</span></li>
-                </ul>
-            </div>
             <div class="footer-contact">
                 <h4>Contato</h4>
                 <a href="https://wa.me/5521981424469" class="footer-contact-item" target="_blank" rel="noopener">
@@ -400,20 +390,26 @@
             <div class="quiz-body">
                 <div class="quiz-step active" id="quiz-step-1">
                     <h4>O que você busca?</h4>
-                    <p class="quiz-hint">Combine filtros rápidos com uma descrição livre — vista, reforma, permuta,
-                        prazo etc.</p>
-                    <div class="quiz-field-label">Região</div>
-                    <div class="quiz-chip-row" id="quiz-region-chips">
-                        <button type="button" class="quiz-chip" data-quiz-field="region" data-value="zona-sul">Zona
-                            Sul</button>
-                        <button type="button" class="quiz-chip" data-quiz-field="region"
-                            data-value="barra-recreio">Barra &amp; Oeste</button>
-                        <button type="button" class="quiz-chip" data-quiz-field="region"
-                            data-value="ambas">Ambas</button>
-                        <button type="button" class="quiz-chip quiz-chip-active" data-quiz-field="region"
-                            data-value="">Indiferente</button>
+                    <p class="quiz-hint">Conte onde quer morar e o que procura — pode ser qualquer bairro, mesmo que não esteja no catálogo.</p>
+
+                    <!-- LOCALIZAÇÃO LIVRE -->
+                    <label class="quiz-field-label" for="quiz-localizacao">
+                        <i class="fas fa-map-marker-alt" style="color:#3b82f6;margin-right:.3rem;font-size:.75rem;"></i>
+                        Onde você quer morar?
+                    </label>
+                    <div class="quiz-location-wrap">
+                        <input
+                            type="text"
+                            id="quiz-localizacao"
+                            class="quiz-input quiz-location-input"
+                            placeholder="Ex.: Ipanema, Recreio, qualquer bairro da Zona Sul…"
+                            autocomplete="off"
+                            maxlength="120"
+                        >
+                        <div class="quiz-location-suggestions" id="quiz-location-suggestions"></div>
                     </div>
-                    <div class="quiz-field-label">Tipo</div>
+
+                    <div class="quiz-field-label" style="margin-top:.75rem;">Tipo</div>
                     <div class="quiz-chip-row" id="quiz-tipo-chips">
                         <button type="button" class="quiz-chip quiz-chip-active" data-quiz-field="tipo"
                             data-value="">Qualquer</button>
@@ -441,11 +437,26 @@
                         <option value="600001-1000000">R$ 600 mil – 1 mi</option>
                         <option value="1000001+">Acima de R$ 1 mi</option>
                     </select>
-                    <label class="quiz-field-label" for="quiz-livre">Em suas palavras (opcional)</label>
-                    <textarea id="quiz-livre" class="quiz-textarea" maxlength="500" rows="3"
-                        placeholder="Ex.: Cobertura vista mar, pet friendly, permuta…" autocomplete="off"></textarea>
-                    <button type="button" class="cta-primary quiz-next-btn" id="quiz-to-step2"><span>Continuar</span><i
-                            class="fas fa-arrow-right"></i></button>
+
+                    <!-- TEXTO LIVRE REDESENHADO -->
+                    <label class="quiz-field-label quiz-livre-label" for="quiz-livre">
+                        <i class="fas fa-pen-nib" style="color:#3b82f6;margin-right:.3rem;font-size:.75rem;"></i>
+                        Descreva seu imóvel ideal <span style="color:rgba(148,163,184,.6);font-weight:400;">(opcional)</span>
+                    </label>
+                    <div class="quiz-livre-wrap">
+                        <textarea
+                            id="quiz-livre"
+                            class="quiz-livre-textarea"
+                            placeholder="Vista mar, pet friendly, perto do metrô, permuta, 2 vagas, reformado…"
+                            autocomplete="off"
+                        ></textarea>
+                        <div class="quiz-livre-counter"><span id="quiz-livre-count">0</span></div>
+                    </div>
+
+                    <button type="button" class="cta-primary quiz-next-btn" id="quiz-to-step2">
+                        <span>Continuar</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
                 </div>
                 <div class="quiz-step" id="quiz-step-2">
                     <h4>Seus dados</h4>
