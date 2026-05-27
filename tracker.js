@@ -442,6 +442,10 @@
         'choopa', 'as-choopa', 'peg tech', 'as62785', 'path network',
         'spinservers', 'reliablesite', 'sharktech', 'colocation',
         'voxility', 'combahton', 'contabo', 'netcup', 'strato',
+        // ProtonVPN usa IPs da Datacamp — CRÍTICO para detectar ProtonVPN
+        'datacamp', 'datacamp limited', 'as60068', 'as212238',
+        'm247', 'quadranet', 'hostpalace', 'lunanode',
+        'tzulo', 'hostkey', 'privatelayer', 'privacyfoundation',
     ];
 
     var VPN_ISP_PATTERNS = [
@@ -452,6 +456,9 @@
         'hide.me', 'goose vpn', 'avast vpn', 'norton vpn', 'kaspersky vpn',
         'vpn unlimited', 'urban vpn', 'hola vpn', 'opera vpn',
         'privatevpn', 'astrill', 'cactusvpn', 'trust zone',
+        // Adicionais para ProtonVPN e variantes
+        'proton ag', 'proton vpn', 'protonmail', 'm247 europe',
+        'datacamp', 'privacy found', 'privacy first',
     ];
 
     function _matchesPatterns(str, patterns) {
@@ -461,6 +468,61 @@
             if (low.indexOf(patterns[i]) !== -1) return true;
         }
         return false;
+    }
+
+    // ── iphub.info: fonte especializada em detectar VPNs
+    //    block=1 → VPN/datacenter confirmado, block=2 → residencial, block=0 → desconhecido
+    function _fetchIphub(ip) {
+        return fetch('https://v2.api.iphub.info/ip/' + encodeURIComponent(ip), {
+            headers: { 'X-Key': '0' }, // key '0' dá acesso básico gratuito
+            cache: 'no-store',
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            // block: 1 = VPN/Proxy recomendado bloquear, 0 = ok, 2 = incomum
+            return {
+                block: d.block || 0,
+                isp: d.isp || '',
+                countryCode: d.countryCode || '',
+                hostname: d.hostname || '',
+            };
+        })
+        .catch(function () { return { block: 0, isp: '', countryCode: '', hostname: '' }; });
+    }
+
+    // Sinais complementares de segurança para reduzir falso negativo em VPN comercial (ex.: ProtonVPN)
+    function _fetchIpWhoIsSecurity(ip) {
+        return fetch('https://ipwho.is/' + encodeURIComponent(ip), { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || d.success === false) return { vpn: false, proxy: false, tor: false, hosting: false, source: 'ipwho.is' };
+                var sec = d.security || {};
+                return {
+                    vpn: !!sec.vpn,
+                    proxy: !!sec.proxy,
+                    tor: !!sec.tor,
+                    hosting: !!sec.hosting,
+                    source: 'ipwho.is',
+                };
+            })
+            .catch(function () { return { vpn: false, proxy: false, tor: false, hosting: false, source: 'ipwho.is' }; });
+    }
+
+    function _fetchIpApiIsSecurity(ip) {
+        return fetch('https://api.ipapi.is/?q=' + encodeURIComponent(ip), { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                var company = d && d.company ? d.company : {};
+                var sec = d && d.security ? d.security : {};
+                return {
+                    vpn: !!sec.vpn,
+                    proxy: !!sec.proxy,
+                    tor: !!sec.tor,
+                    hosting: !!company.is_hosting,
+                    source: 'ipapi.is',
+                };
+            })
+            .catch(function () { return { vpn: false, proxy: false, tor: false, hosting: false, source: 'ipapi.is' }; });
     }
 
     // Detecta Tor: tenta uma requisição para um endpoint que identifica saídas Tor
@@ -477,39 +539,59 @@
     }
 
     // Calcula score de risco robusto (0–100)
-    function _calcRiskScore(geo, asnStr, ispStr) {
+    // Agora recebe também o resultado do iphub
+    function _calcRiskScore(geo, asnStr, ispStr, iphubResult, extraSignals) {
         var score = 0;
         var flags = [];
+        iphubResult = iphubResult || { block: 0, isp: '', hostname: '' };
+        extraSignals = extraSignals || { vpn: false, proxy: false, tor: false, hosting: false };
 
-        // Sinais primários da ip-api
+        // ── Sinal primário ip-api ──
         if (geo.proxy) { score += 45; flags.push('proxy_detected'); }
         if (geo.hosting) { score += 30; flags.push('datacenter_hosting'); }
 
-        // Sinais secundários: ASN e ISP
+        // ── iphub: bloco 1 = VPN/Datacenter identificado com alta confiança ──
+        if (iphubResult.block === 1) {
+            score += 50; // peso alto — iphub é especializado em VPN
+            flags.push('iphub_vpn_confirmed');
+        } else if (iphubResult.block === 2) {
+            score += 15;
+            flags.push('iphub_unusual');
+        }
+
+        // ── ASN e ISP ──
         if (_matchesPatterns(asnStr, DATACENTER_ASN_PATTERNS)) { score += 20; flags.push('datacenter_asn'); }
         if (_matchesPatterns(ispStr, DATACENTER_ASN_PATTERNS)) { score += 15; flags.push('datacenter_isp'); }
         if (_matchesPatterns(ispStr, VPN_ISP_PATTERNS)) { score += 35; flags.push('vpn_isp'); }
         if (_matchesPatterns(asnStr, VPN_ISP_PATTERNS)) { score += 35; flags.push('vpn_asn'); }
 
-        // Rede móvel (baixo risco, mas registrar)
+        // ── iphub ISP complementar ──
+        var iphubIsp = String(iphubResult.isp || '').toLowerCase();
+        if (_matchesPatterns(iphubIsp, DATACENTER_ASN_PATTERNS)) { score += 20; flags.push('iphub_datacenter_isp'); }
+        if (_matchesPatterns(iphubIsp, VPN_ISP_PATTERNS)) { score += 30; flags.push('iphub_vpn_isp'); }
+
+        // ── Sinais complementares de APIs independentes ──
+        if (extraSignals.vpn) { score += 42; flags.push('extra_vpn'); }
+        if (extraSignals.proxy) { score += 28; flags.push('extra_proxy'); }
+        if (extraSignals.tor) { score += 45; flags.push('extra_tor'); }
+        if (extraSignals.hosting) { score += 20; flags.push('extra_hosting'); }
+
+        // ── Rede móvel ──
         if (geo.mobile) { score += 3; flags.push('mobile_isp'); }
 
-        // País de alto risco para anonimização (registrar apenas, não bloquear)
+        // ── País de alto risco ──
         var highRiskCountries = ['RU', 'CN', 'KP', 'IR', 'BY'];
         if (geo.countryCode && highRiskCountries.indexOf(geo.countryCode) !== -1) {
             score += 10; flags.push('high_risk_country');
         }
 
-        // Timezone incompatível com país declarado (heurística simples)
+        // ── Timezone mismatch ──
         try {
             var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
             if (geo.countryCode === 'BR' && tz && tz.indexOf('America') === -1 && tz.indexOf('Brazil') === -1) {
                 score += 8; flags.push('timezone_mismatch');
             }
         } catch (e) { }
-
-        // WebRTC leak detection — se IP local não bate com geo (heurística)
-        // (simplificado: marca apenas se tiver outros sinais)
 
         // Cap em 100
         score = Math.min(score, 100);
@@ -595,27 +677,48 @@
                         showAccessBlockedOverlay('IP bloqueado pelo administrador');
                         return null; // interrompe a cadeia
                     }
-                    // IP não bloqueado: faz análise de rede
-                    return _fetchGeoData(clientIp);
+                    // IP não bloqueado: dispara fontes de rede em paralelo
+                    return Promise.all([
+                        _fetchGeoData(clientIp),
+                        _fetchIphub(clientIp),
+                        _fetchIpWhoIsSecurity(clientIp),
+                        _fetchIpApiIsSecurity(clientIp),
+                    ]);
                 })
-                .then(function (result) {
-                    if (!result) return null; // foi bloqueado acima
-                    var geo = result.geo;
-                    var geoSource = result.source;
+                .then(function (results) {
+                    if (!results) return null; // foi bloqueado acima
+                    var geoResult = results[0];
+                    var iphubResult = results[1] || { block: 0, isp: '', hostname: '' };
+                    var ipwhoisSec = results[2] || { vpn: false, proxy: false, tor: false, hosting: false };
+                    var ipapiisSec = results[3] || { vpn: false, proxy: false, tor: false, hosting: false };
+                    var extraSignals = {
+                        vpn: !!(ipwhoisSec.vpn || ipapiisSec.vpn),
+                        proxy: !!(ipwhoisSec.proxy || ipapiisSec.proxy),
+                        tor: !!(ipwhoisSec.tor || ipapiisSec.tor),
+                        hosting: !!(ipwhoisSec.hosting || ipapiisSec.hosting),
+                    };
+
+                    var geo = geoResult.geo;
+                    var geoSource = geoResult.source;
                     var asnStr = String(geo.as || geo.asname || '').toLowerCase();
                     var ispStr = String(geo.isp || geo.org || '').toLowerCase();
 
-                    var risk = _calcRiskScore(geo, asnStr, ispStr);
+                    // Score agora inclui iphub + sinais complementares
+                    var risk = _calcRiskScore(geo, asnStr, ispStr, iphubResult, extraSignals);
                     var score = risk.score;
                     var flags = risk.flags;
 
                     // Determina label de risco
                     var riskLabel = score >= 60 ? 'alto' : score >= 30 ? 'medio' : 'baixo';
 
-                    // Resumo VPN
+                    // Resumo VPN enriquecido
                     var vpnSummary = [];
                     if (geo.proxy) vpnSummary.push('Proxy/VPN (ip-api)');
-                    if (geo.hosting) vpnSummary.push('Datacenter/Hosting');
+                    if (geo.hosting) vpnSummary.push('Datacenter/Hosting (ip-api)');
+                    if (iphubResult.block === 1) vpnSummary.push('VPN detectada (iphub)');
+                    if (extraSignals.vpn) vpnSummary.push('VPN detectada (ipwho/ipapi.is)');
+                    if (extraSignals.proxy) vpnSummary.push('Proxy detectado (ipwho/ipapi.is)');
+                    if (extraSignals.tor) vpnSummary.push('Tor detectado (ipwho/ipapi.is)');
                     if (_matchesPatterns(ispStr, VPN_ISP_PATTERNS)) vpnSummary.push('ISP de VPN');
                     if (_matchesPatterns(asnStr, DATACENTER_ASN_PATTERNS)) vpnSummary.push('ASN de datacenter');
                     if (!vpnSummary.length) vpnSummary.push('Sem sinais detectados');
@@ -650,6 +753,13 @@
                         flags: flags.slice(0, 12),
                         vpnSummary: vpnSummary.join(' · ').slice(0, 200),
                         geoSource: geoSource,
+                        // iphub complementar
+                        iphubBlock: iphubResult.block,
+                        iphubIsp: String(iphubResult.isp || '').slice(0, 100),
+                        extraVpn: !!extraSignals.vpn,
+                        extraProxy: !!extraSignals.proxy,
+                        extraTor: !!extraSignals.tor,
+                        extraHosting: !!extraSignals.hosting,
                         // Dispositivo
                         os: di.os || '',
                         deviceType: di.deviceType || '',
@@ -666,7 +776,7 @@
 
                     getDb().collection('visitor_network').add(payload).catch(function () { });
 
-                    // Se score alto, registra também em visitor_alerts para destaque no painel
+                    // Se score alto, registra em visitor_alerts
                     if (score >= 60) {
                         getDb().collection('visitor_alerts').add({
                             deviceId: payload.deviceId,
@@ -677,6 +787,8 @@
                             vpnSummary: payload.vpnSummary,
                             country: payload.country,
                             isp: payload.isp,
+                            iphubBlock: iphubResult.block,
+                            iphubIsp: payload.iphubIsp,
                             date: getToday(),
                             timestamp: srvTs(),
                             page: payload.page,
