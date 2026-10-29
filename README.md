@@ -1,4 +1,4 @@
-# Leandro Bomfim | Corretor de Imóveis (CRECI-RJ 97315)
+# Leandro Bomfim | Corretor de Imóveis
 
 Site oficial e plataforma de catálogo para venda de imóveis de alto padrão na Zona Sul e Barra da Tijuca / Recreio dos Bandeirantes, Rio de Janeiro.
 
