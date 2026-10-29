@@ -6,7 +6,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuth() { return request.auth != null && request.auth.uid == 'IFOjzjZ77iSShCZTemhwCza1uc53'; }
+    function isAuth() { return request.auth != null; }
     function isString(x) { return x is string; }
     function isShortString(x, n) { return isString(x) && x.size() <= n; }
     function onlyKeys(allowed) { return request.resource.data.keys().hasOnly(allowed); }

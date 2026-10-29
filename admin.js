@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  ADMIN.JS v3.1 — Leandro Imóveis
 // ============================================================
 
@@ -17,13 +17,12 @@ function initFirebase() {
 let currentUser = null, imoveisData = [], lixeiraData = [], visitasData = [], deleteId = null;
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 horas
 const SESSION_KEY = '_lb_session_start';
-/** Mesmo UID autorizado nas regras Firebase (gestor / CEO) */
-const CEO_UID = 'IFOjzjZ77iSShCZTemhwCza1uc53';
+/** Administradores autenticados têm acesso de gestão */
 const CEO_SEC_SESSION_KEY = '_lb_ceo_security_unlock_v1';
 let sessionTimer = null;
 
 function isCeoUser() {
-    return !!(currentUser && currentUser.uid === CEO_UID);
+    return !!currentUser;
 }
 
 function escHtml(str) {
@@ -794,14 +793,29 @@ function renderImoveisTable(list) {
     if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Nenhum imóvel encontrado</td></tr>'; return; }
     tbody.innerHTML = list.map(i => {
         const isDestaque = i.destaque === true;
+        const statusMap = { disponivel: 'Disponível', vendido: 'Vendido', reservado: 'Reservado', alugado: 'Alugado' };
+        const statusLabel = statusMap[i.status || 'disponivel'] || 'Disponível';
+        const precoNum = Number(i.preco) || 0;
+        const precoFormatado = precoNum.toLocaleString('pt-BR');
         return `<tr style="${isDestaque ? 'background:rgba(245,158,11,0.04);border-left:2px solid var(--amber);' : ''}">
-            <td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td>
-            <td style="color:var(--text-primary);font-weight:500;">${i.titulo}${isDestaque ? ' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>' : ''}</td>
-            <td>${i.bairro}</td><td>${i.quartos} qts</td><td>${i.area} m²</td>
-            <td><span class="status-badge status-${i.status || 'disponivel'}">${({ disponivel: 'Disponível', vendido: 'Vendido', reservado: 'Reservado', alugado: 'Alugado' })[i.status || 'disponivel'] || 'Disponível'}</span></td>
-            <td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td>
-            <td>
+            <td data-label="Foto"><img src="${i.imagem || 'https://via.placeholder.com/52x38?text=Foto'}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td>
+            <td data-label="Título" style="color:var(--text-primary);font-weight:500;">${escHtml(i.titulo || '')}${isDestaque ? ' <span style="background:var(--amber-soft);color:var(--amber);font-size:.68rem;padding:.1rem .45rem;border-radius:99px;font-weight:700;vertical-align:middle;">★ DESTAQUE</span>' : ''}</td>
+            <td data-label="Bairro">${escHtml(i.bairro || '—')}</td>
+            <td data-label="Quartos">${i.quartos || 0} qts</td>
+            <td data-label="Área">${i.area || 0} m²</td>
+            <td data-label="Status"><span class="status-badge status-${i.status || 'disponivel'}">${statusLabel}</span></td>
+            <td data-label="Preço" style="color:var(--accent);font-weight:600;">R$ ${precoFormatado}</td>
+            <td data-label="Ações">
                 <div class="table-actions">
+                    <a href="imoveis.html?id=${encodeURIComponent(i.id)}" target="_blank" class="btn-edit" title="Ver no site público" style="color:var(--cyan);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                    <button onclick="shareImovelWhatsApp('${i.id}')" class="btn-edit" title="Compartilhar no WhatsApp" style="color:#25D366;">
+                        <i class="fab fa-whatsapp"></i>
+                    </button>
+                    <button onclick="copyImovelLink('${i.id}')" class="btn-edit" title="Copiar link direto" style="color:var(--blue-400);">
+                        <i class="fas fa-copy"></i>
+                    </button>
                     <button onclick="toggleDestaque('${i.id}',${isDestaque})" class="btn-edit" title="${isDestaque ? 'Remover destaque' : 'Marcar como destaque'}" style="${isDestaque ? 'color:var(--amber);border-color:var(--amber);' : ''}">
                         <i class="fas fa-star"></i>
                     </button>
@@ -811,6 +825,63 @@ function renderImoveisTable(list) {
             </td>
         </tr>`;
     }).join('');
+}
+
+function shareImovelWhatsApp(id) {
+    const imovel = imoveisData.find(i => i.id === id);
+    if (!imovel) return;
+    const url = `${window.location.origin}/imoveis.html?id=${encodeURIComponent(id)}`;
+    const preco = Number(imovel.preco || 0).toLocaleString('pt-BR');
+    const msg = `🏢 *${imovel.titulo}*\n📍 ${imovel.bairro || 'Rio de Janeiro'}\n💰 R$ ${preco}\n📐 ${imovel.area || 0}m² | 🛏️ ${imovel.quartos || 0} quartos\n\n👉 Veja fotos e todos os detalhes:\n${url}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+}
+
+function copyImovelLink(id) {
+    const url = `${window.location.origin}/imoveis.html?id=${encodeURIComponent(id)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('🔗 Link do imóvel copiado!', 'success');
+        }).catch(() => {
+            prompt('Copie o link:', url);
+        });
+    } else {
+        prompt('Copie o link:', url);
+    }
+}
+
+function exportarImoveisCSV() {
+    if (!imoveisData || !imoveisData.length) {
+        showToast('Nenhum imóvel disponível para exportar.', 'error');
+        return;
+    }
+    const headers = ['ID', 'Titulo', 'Bairro', 'Tipo', 'Quartos', 'Suites', 'Vagas', 'Area', 'Preco', 'Condominio', 'IPTU', 'Status', 'Destaque'];
+    const rows = imoveisData.map(i => [
+        `"${i.id || ''}"`,
+        `"${(i.titulo || '').replace(/"/g, '""')}"`,
+        `"${(i.bairro || '').replace(/"/g, '""')}"`,
+        `"${(i.tipo || '').replace(/"/g, '""')}"`,
+        i.quartos || 0,
+        i.suites || 0,
+        i.vagas || 0,
+        i.area || 0,
+        i.preco || 0,
+        i.condominio || 0,
+        i.iptu || 0,
+        `"${i.status || 'disponivel'}"`,
+        i.destaque ? 'Sim' : 'Nao'
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `imoveis_leandro_bomfim_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Planilha CSV gerada com sucesso!', 'success');
 }
 
 async function toggleDestaque(id, isDestaque) {
@@ -865,7 +936,7 @@ function renderLixeiraTable(list) {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-trash-alt"></i><h3>Lixeira vazia</h3><p>Os imóveis excluídos aparecem aqui.</p></div>';
         return;
     }
-    container.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Foto</th><th>Título</th><th>Bairro</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${list.map(i => `<tr><td><img src="${i.imagem}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td><td style="color:var(--text-primary);font-weight:500;">${i.titulo}</td><td>${i.bairro}</td><td style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco).toLocaleString('pt-BR')}</td><td><div class="table-actions"><button onclick="restaurarImovel('${i.id}')" class="btn-edit" title="Restaurar" style="color:var(--green);background:var(--green-soft);gap:.3rem;width:auto;padding:0 .7rem;font-size:.75rem;"><i class="fas fa-undo"></i> Restaurar</button><button onclick="deletePerma('${i.id}')" class="btn-delete" title="Excluir permanente"><i class="fas fa-times"></i></button></div></td></tr>`).join('')}</tbody></table></div><div style="margin-top:1rem;display:flex;justify-content:flex-end;"><button onclick="esvaziarLixeira()" class="btn-danger"><i class="fas fa-fire"></i> Esvaziar lixeira</button></div>`;
+    container.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Foto</th><th>Título</th><th>Bairro</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${list.map(i => `<tr><td data-label="Foto"><img src="${i.imagem || 'https://via.placeholder.com/52x38?text=Foto'}" class="table-img" onerror="this.src='https://via.placeholder.com/52x38?text=Foto'"></td><td data-label="Título" style="color:var(--text-primary);font-weight:500;">${escHtml(i.titulo || '')}</td><td data-label="Bairro">${escHtml(i.bairro || '—')}</td><td data-label="Preço" style="color:var(--accent);font-weight:600;">R$ ${Number(i.preco || 0).toLocaleString('pt-BR')}</td><td data-label="Ações"><div class="table-actions"><button onclick="restaurarImovel('${i.id}')" class="btn-edit" title="Restaurar" style="color:var(--green);background:var(--green-soft);gap:.3rem;width:auto;padding:0 .7rem;font-size:.75rem;"><i class="fas fa-undo"></i> Restaurar</button><button onclick="deletePerma('${i.id}')" class="btn-delete" title="Excluir permanente"><i class="fas fa-times"></i></button></div></td></tr>`).join('')}</tbody></table></div><div style="margin-top:1rem;display:flex;justify-content:flex-end;"><button onclick="esvaziarLixeira()" class="btn-danger"><i class="fas fa-fire"></i> Esvaziar lixeira</button></div>`;
 }
 
 async function restaurarImovel(id) {
@@ -2126,19 +2197,31 @@ function _updateAnuncioPreview() {
     }
 }
 
-function setupFormListeners() {
-    document.getElementById('search-imoveis')?.addEventListener('input', e => {
-        const t = e.target.value.toLowerCase();
-        renderImoveisTable(imoveisData.filter(i =>
+function applyImoveisFilter() {
+    const t = (document.getElementById('search-imoveis')?.value || '').toLowerCase().trim();
+    const b = document.getElementById('filter-bairro')?.value || '';
+    const s = document.getElementById('filter-status')?.value || '';
+    let filtered = imoveisData;
+    if (t) {
+        filtered = filtered.filter(i =>
             (i.titulo || '').toLowerCase().includes(t) ||
             (i.bairro || '').toLowerCase().includes(t) ||
             (i.descricao || '').toLowerCase().includes(t)
-        ));
-    });
-    document.getElementById('filter-bairro')?.addEventListener('change', e => {
-        const b = e.target.value;
-        renderImoveisTable(b ? imoveisData.filter(i => i.bairro === b) : imoveisData);
-    });
+        );
+    }
+    if (b) {
+        filtered = filtered.filter(i => i.bairro === b);
+    }
+    if (s) {
+        filtered = filtered.filter(i => (i.status || 'disponivel') === s);
+    }
+    renderImoveisTable(filtered);
+}
+
+function setupFormListeners() {
+    document.getElementById('search-imoveis')?.addEventListener('input', applyImoveisFilter);
+    document.getElementById('filter-bairro')?.addEventListener('change', applyImoveisFilter);
+    document.getElementById('filter-status')?.addEventListener('change', applyImoveisFilter);
     document.getElementById('imovel-preco')?.addEventListener('input', e => {
         let v = e.target.value.replace(/[^0-9]/g, '');
         if (v) e.target.value = parseInt(v).toLocaleString('pt-BR');
