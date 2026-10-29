@@ -665,10 +665,22 @@
             var clientIp = null;
             var ipKey = null;
 
+            // Cache de checagem na mesma sessão/dia (evita estourar limite das APIs de IP gratuitas)
+            var cachedToday = storageGet('_lb_net_today');
+            var cachedIp = storageGet('_lb_client_ip');
+            if (cachedToday === getToday() && cachedIp) {
+                getDb().collection('blocked_ips').doc(ipKeyFromIp(cachedIp)).get().then(function (doc) {
+                    if (doc && doc.exists) showAccessBlockedOverlay('IP bloqueado pelo administrador');
+                }).catch(function () { });
+                return;
+            }
+
             _fetchClientIp()
                 .then(function (ip) {
                     clientIp = ip;
                     ipKey = ipKeyFromIp(ip);
+                    storageSet('_lb_net_today', getToday());
+                    storageSet('_lb_client_ip', clientIp);
                     // Verifica bloqueio ANTES de qualquer outra coisa
                     return getDb().collection('blocked_ips').doc(ipKey).get();
                 })

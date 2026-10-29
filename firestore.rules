@@ -1,0 +1,151 @@
+rules_version = '2';
+// Regras de segurança Cloud Firestore — Leandro Bomfim Imóveis
+// Permite escrita validada de telemetria pública (tracker.js, leads do quiz, presença)
+// e restringe leitura/gerenciamento exclusivamente ao administrador autenticado.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() { return request.auth != null && request.auth.uid == 'IFOjzjZ77iSShCZTemhwCza1uc53'; }
+    function isString(x) { return x is string; }
+    function isShortString(x, n) { return isString(x) && x.size() <= n; }
+    function onlyKeys(allowed) { return request.resource.data.keys().hasOnly(allowed); }
+
+    // IPs bloqueados (site público lê para negar acesso a atacantes/bots)
+    match /blocked_ips/{ipKey} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    // Sinais de rede / VPN (visitantes gravam telemetria; só admin lê)
+    match /visitor_network/{id} {
+      allow read: if isAuth();
+      allow create: if true
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.date, 12);
+      allow update, delete: if isAuth();
+    }
+
+    // Alertas de risco / VPN com score alto (visitantes geram; só admin lê e gerencia)
+    match /visitor_alerts/{id} {
+      allow read: if isAuth();
+      allow create: if true
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.date, 12);
+      allow update, delete: if isAuth();
+    }
+
+    match /imoveis/{id} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
+    match /lixeira/{id} {
+      allow read, write: if isAuth();
+    }
+
+    match /config/{id} {
+      allow read: if id != "security" || isAuth();
+      allow write: if isAuth();
+    }
+
+    match /presenca/{deviceId} {
+      allow read: if isAuth();
+      allow create, update: if true
+        && request.resource.data.deviceId == deviceId
+        && onlyKeys(['deviceId','page','lastSeen','date','os','deviceType','browser','deviceIcon'])
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.page, 40)
+        && isShortString(request.resource.data.date, 12);
+      allow delete: if isAuth();
+    }
+
+    match /visitantes_nicks/{deviceId} {
+      allow read: if isAuth();
+      allow create, update: if true
+        && request.resource.data.keys().hasAll(['nick', 'updatedAt'])
+        && isShortString(request.resource.data.nick, 50);
+      allow delete: if isAuth();
+    }
+
+    // Visitas — tracker envia vários campos de dispositivo
+    match /visitas/{id} {
+      allow read: if isAuth();
+      allow create, update: if true
+        && onlyKeys([
+          'deviceId','page','date','timestamp','userAgent',
+          'os','osVersion','deviceFamily','deviceType','deviceBrand',
+          'browser','browserVer','screenW','screenH','viewport','language',
+          'connection','deviceIcon'
+        ])
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.page, 40)
+        && isShortString(request.resource.data.date, 12)
+        && (!('userAgent' in request.resource.data) || isShortString(request.resource.data.userAgent, 200));
+      allow delete: if isAuth();
+    }
+
+    match /visitas_imoveis/{id} {
+      allow read: if isAuth();
+      allow create, update: if true
+        && onlyKeys([
+          'deviceId','imovelId','titulo','bairro','date','timestamp',
+          'os','deviceType','browser','deviceIcon','deviceFamily'
+        ])
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.imovelId, 80)
+        && isShortString(request.resource.data.titulo, 120)
+        && isShortString(request.resource.data.bairro, 80)
+        && isShortString(request.resource.data.date, 12);
+      allow delete: if isAuth();
+    }
+
+    match /links_copiados/{id} {
+      allow read: if isAuth();
+      allow create: if true
+        && request.resource.data.keys().hasAll(['deviceId','imovelId','titulo','date','timestamp'])
+        && isShortString(request.resource.data.deviceId, 80)
+        && isShortString(request.resource.data.imovelId, 80)
+        && isShortString(request.resource.data.titulo, 120)
+        && isShortString(request.resource.data.date, 12);
+      allow update, delete: if isAuth();
+    }
+
+    match /leads/{id} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth();
+    }
+
+    match /chat_logs/{id} {
+      allow read: if isAuth();
+      allow create: if true
+        && request.resource.data.keys().hasAll(['sessionId','deviceId','event','timestamp'])
+        && request.resource.data.event is string
+        && request.resource.data.event.size() < 80;
+      allow update, delete: if isAuth();
+    }
+
+    match /tempo_permanencia/{id} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth();
+    }
+
+    match /tempo_imovel/{id} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth();
+    }
+
+    match /eventos/{id} {
+      allow read: if isAuth();
+      allow create: if true;
+      allow update, delete: if isAuth();
+    }
+
+    match /login_historico/{id} {
+      allow read, write: if isAuth();
+    }
+  }
+}
