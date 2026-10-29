@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  ADMIN.JS v3.1 — Leandro Imóveis
 // ============================================================
 
@@ -2162,7 +2162,27 @@ function setupFormListeners() {
         if (precoInput) precoInput.required = mode !== 'lancamento';
     }
     document.getElementById('imovel-preco-modo')?.addEventListener('change', e => _syncPrecoUI(e.target.value));
-    _syncPrecoUI(document.getElementById('imovel-preco-modo')?.value || 'normal');
+        _syncPrecoUI(document.getElementById('imovel-preco-modo')?.value || 'normal');
+
+    // ── Preview automático da imagem principal do imóvel ──
+    const imgInput = document.getElementById('imovel-imagem');
+    const imgPreview = document.getElementById('imovel-imagem-preview');
+    const imgPreviewEl = document.getElementById('imovel-imagem-preview-img');
+    window._updateImovelImgPreview = function () {
+        if (!imgInput || !imgPreview || !imgPreviewEl) return;
+        const url = (imgInput.value || '').trim();
+        if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image'))) {
+            imgPreviewEl.src = url;
+            imgPreview.style.display = 'block';
+            imgPreviewEl.onerror = () => { imgPreview.style.display = 'none'; };
+        } else {
+            imgPreview.style.display = 'none';
+        }
+    };
+    if (imgInput) {
+        imgInput.addEventListener('input', window._updateImovelImgPreview);
+        imgInput.addEventListener('change', window._updateImovelImgPreview);
+    }
 
     // ── Tipo → mostra/oculta campos de terreno ──
     document.getElementById('imovel-tipo')?.addEventListener('change', e => {
@@ -2296,7 +2316,8 @@ function resetForm() {
     const anuncioDuracaoWrap = document.getElementById('anuncio-duracao-wrap');
     if (anuncioDuracaoWrap) anuncioDuracaoWrap.style.display = 'none';
     const anuncioPreview = document.getElementById('anuncio-expiracao-preview');
-    if (anuncioPreview) anuncioPreview.textContent = '';
+        if (anuncioPreview) anuncioPreview.textContent = '';
+    if (window._updateImovelImgPreview) window._updateImovelImgPreview();
     // Reseta label do botão
     const t = document.getElementById('btn-submit-text');
     if (t) t.textContent = 'Salvar Imóvel';
