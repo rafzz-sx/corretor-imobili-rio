@@ -22,3 +22,4 @@ Site oficial e plataforma de catálogo para venda de imóveis de alto padrão na
 - `termos.html`: Termos e Condições de Uso da plataforma.
 - `admin.html`: Painel administrativo completo para gestão de imóveis, leads e telemetria.
 - `404.html`: Página amigável de erro para rotas não encontradas.
+

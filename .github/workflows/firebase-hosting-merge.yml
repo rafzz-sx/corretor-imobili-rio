@@ -18,3 +18,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CORRETOR_IMOVEIS_3DAB8 }}
           channelId: live
           projectId: corretor-imoveis-3dab8
+
